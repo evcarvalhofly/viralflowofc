@@ -166,14 +166,27 @@ const Dashboard = () => {
           })}
         </div>
 
-        {hasChanges && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+        {selectedNiches.length > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex gap-3">
+            {hasChanges && (
+              <Button
+                onClick={saveNiches}
+                disabled={saving}
+                variant="outline"
+                className="shadow-lg px-6 h-12 text-base font-display"
+              >
+                {saving ? "Salvando..." : `Salvar ${selectedNiches.length} nicho(s)`}
+              </Button>
+            )}
             <Button
-              onClick={saveNiches}
+              onClick={async () => {
+                if (hasChanges) await saveNiches();
+                navigate("/trends");
+              }}
               disabled={saving}
-              className="gradient-viral shadow-lg px-8 h-12 text-base font-display"
+              className="gradient-viral shadow-lg px-8 h-12 text-base font-display animate-pulse-glow"
             >
-              {saving ? "Salvando..." : `Salvar ${selectedNiches.length} nicho(s)`}
+              🚀 Ver Tendências Virais
             </Button>
           </div>
         )}
