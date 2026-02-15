@@ -1,0 +1,151 @@
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import {
+  Zap, MessageSquare, ClipboardList, TrendingUp,
+  FolderOpen, Users, LogOut, Menu, X, Trophy
+} from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+
+type NavItem = {
+  label: string;
+  icon: React.ReactNode;
+  path: string;
+  disabled?: boolean;
+};
+
+const navItems: NavItem[] = [
+  { label: "IA", icon: <MessageSquare className="h-5 w-5" />, path: "/chat" },
+  { label: "Planejamento", icon: <ClipboardList className="h-5 w-5" />, path: "/planning" },
+  { label: "Edição", icon: <FolderOpen className="h-5 w-5" />, path: "/assets", disabled: true },
+  { label: "GameOver", icon: <TrendingUp className="h-5 w-5" />, path: "/gameover", disabled: true },
+  { label: "Comunidade", icon: <Users className="h-5 w-5" />, path: "/community", disabled: true },
+];
+
+const AppLayout = ({ children }: { children: React.ReactNode }) => {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [displayName, setDisplayName] = useState("");
+  const [score, setScore] = useState(0);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data?.display_name) setDisplayName(data.display_name);
+
+      const { data: scoreData } = await supabase
+        .from("user_scores")
+        .select("total_score, streak_days")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (scoreData) setScore(scoreData.total_score);
+    };
+    fetchProfile();
+  }, [user]);
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setMobileOpen(false)} />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed md:sticky top-0 left-0 z-50 h-screen w-64
+        bg-sidebar-background text-sidebar-foreground
+        border-r border-sidebar-border flex flex-col
+        transition-transform duration-200
+        ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+      `}>
+        {/* Logo */}
+        <div className="flex items-center gap-2 p-5 border-b border-sidebar-border">
+          <Zap className="h-6 w-6 text-sidebar-primary" />
+          <span className="text-xl font-bold font-display text-gradient-viral">ViralFlow</span>
+        </div>
+
+        {/* User */}
+        <div className="px-4 py-3 border-b border-sidebar-border">
+          <p className="text-sm font-medium truncate">{displayName || user?.email}</p>
+          <div className="flex items-center gap-1 text-xs text-sidebar-accent-foreground/60 mt-1">
+            <Trophy className="h-3 w-3" />
+            <span>{score} pontos</span>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-1">
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <button
+                key={item.path}
+                onClick={() => {
+                  if (!item.disabled) {
+                    navigate(item.path);
+                    setMobileOpen(false);
+                  }
+                }}
+                disabled={item.disabled}
+                className={`
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                  ${isActive
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  }
+                  ${item.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
+                `}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                {item.disabled && (
+                  <span className="ml-auto text-[10px] uppercase tracking-wider opacity-60">Em breve</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Logout */}
+        <div className="p-3 border-t border-sidebar-border">
+          <button
+            onClick={signOut}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+          >
+            <LogOut className="h-5 w-5" />
+            <span>Sair</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <div className="flex-1 flex flex-col min-h-screen">
+        {/* Mobile header */}
+        <header className="md:hidden flex items-center justify-between h-14 px-4 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-30">
+          <button onClick={() => setMobileOpen(true)}>
+            <Menu className="h-6 w-6" />
+          </button>
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-primary" />
+            <span className="font-bold font-display text-gradient-viral">ViralFlow</span>
+          </div>
+          <div className="w-6" />
+        </header>
+
+        <main className="flex-1">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default AppLayout;

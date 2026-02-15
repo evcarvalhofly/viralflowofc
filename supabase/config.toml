@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.analyze-trends]
 verify_jwt = false
+
+[functions.chat-ai]
+verify_jwt = false
