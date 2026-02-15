@@ -15,7 +15,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 type Niche = { id: string; name: string; slug: string; icon: string | null };
-type SearchResult = { url: string; title: string; description: string; markdown?: string };
+type SearchResult = { url: string; title: string; description: string; markdown?: string; metadata?: any };
 
 const platformColors: Record<string, string> = {
   YouTube: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -202,7 +202,7 @@ const Trends = () => {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {searchResults.map((result, i) => {
-                    const thumbnail = extractThumbnail(result.url);
+                    const thumbnail = extractThumbnail(result.url, result.markdown);
                     const platform = getPlatform(result.url);
                     const colorClass = platformColors[platform] || "bg-muted text-muted-foreground";
 
