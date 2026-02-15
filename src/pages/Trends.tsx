@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { searchViralContent, streamAnalyzeTrends } from "@/lib/api/viral";
+import { searchViralContent } from "@/lib/api/viral";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -22,9 +22,7 @@ const Trends = () => {
   const [userNiches, setUserNiches] = useState<Niche[]>([]);
   const [selectedNiche, setSelectedNiche] = useState<Niche | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [aiAnalysis, setAiAnalysis] = useState("");
   const [searching, setSearching] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,24 +48,10 @@ const Trends = () => {
     if (!selectedNiche) return;
     setSearching(true);
     setSearchResults([]);
-    setAiAnalysis("");
 
     try {
       const results = await searchViralContent(selectedNiche.name);
       setSearchResults(results);
-
-      // Auto-start AI analysis
-      setAnalyzing(true);
-      let accumulated = "";
-      await streamAnalyzeTrends({
-        niche: selectedNiche.name,
-        searchResults: results,
-        onDelta: (chunk) => {
-          accumulated += chunk;
-          setAiAnalysis(accumulated);
-        },
-        onDone: () => setAnalyzing(false),
-      });
     } catch (error: any) {
       toast({
         title: "Erro na busca",
@@ -153,7 +137,6 @@ const Trends = () => {
                   onClick={() => {
                     setSelectedNiche(niche);
                     setSearchResults([]);
-                    setAiAnalysis("");
                   }}
                   className={selectedNiche?.id === niche.id ? "gradient-viral" : ""}
                 >
@@ -165,7 +148,7 @@ const Trends = () => {
             {/* Search button */}
             <Button
               onClick={handleSearch}
-              disabled={searching || analyzing}
+              disabled={searching}
               className="gradient-viral mb-8"
               size="lg"
             >
@@ -177,13 +160,13 @@ const Trends = () => {
             </Button>
 
             {/* Results */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
               {/* Search Results */}
               {searchResults.length > 0 && (
                 <div className="space-y-4">
                   <h2 className="text-xl font-bold font-display flex items-center gap-2">
                     <Search className="h-5 w-5 text-primary" />
-                    Resultados da Web
+                    Resultados da Web ({searchResults.length})
                   </h2>
                   <div className="space-y-3">
                     {searchResults.map((result, i) => (
@@ -210,24 +193,6 @@ const Trends = () => {
                       </Card>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {/* AI Analysis */}
-              {(aiAnalysis || analyzing) && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold font-display flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-accent" />
-                    Análise da IA
-                    {analyzing && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                  </h2>
-                  <Card className="border-primary/20">
-                    <CardContent className="p-5">
-                      <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap text-sm leading-relaxed">
-                        {aiAnalysis || "Analisando tendências..."}
-                      </div>
-                    </CardContent>
-                  </Card>
                 </div>
               )}
             </div>
