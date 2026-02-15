@@ -215,7 +215,7 @@ const Chat = () => {
     );
   }
 
-  const hasEnoughContext = messages.filter(m => m.role === "user").length >= 1 && messages.filter(m => m.role === "assistant").length >= 1;
+  const hasEnoughContext = messages.filter(m => m.role === "user").length >= 3 && messages.filter(m => m.role === "assistant").length >= 3;
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen">
