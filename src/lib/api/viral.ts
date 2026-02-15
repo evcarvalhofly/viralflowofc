@@ -7,6 +7,7 @@ type SearchResult = {
   title: string;
   description: string;
   markdown?: string;
+  metadata?: any;
 };
 
 export async function searchViralContent(niche: string): Promise<SearchResult[]> {

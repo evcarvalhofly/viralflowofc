@@ -1,15 +1,12 @@
 /**
- * Extract thumbnail URL from a video/social media URL.
- * Supports YouTube, TikTok (placeholder), Instagram (placeholder).
+ * Extract thumbnail URL from a video/social media URL or markdown content.
  */
-export function extractThumbnail(url: string): string | null {
+export function extractThumbnail(url: string, markdown?: string): string | null {
   try {
     const u = new URL(url);
 
     // YouTube
-    const ytMatch =
-      u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be");
-    if (ytMatch) {
+    if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
       let videoId: string | null = null;
       if (u.hostname.includes("youtu.be")) {
         videoId = u.pathname.slice(1);
@@ -23,6 +20,23 @@ export function extractThumbnail(url: string): string | null {
       if (videoId) {
         return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
       }
+    }
+
+    // TikTok - no reliable thumbnail without API, try markdown
+    // Instagram - no reliable thumbnail without API, try markdown
+
+    // Try to extract image from markdown content
+    if (markdown) {
+      const imgMatch = markdown.match(/!\[.*?\]\((https?:\/\/[^\s)]+\.(jpg|jpeg|png|webp|gif)[^\s)]*)\)/i);
+      if (imgMatch) return imgMatch[1];
+
+      // Also try raw image URLs in markdown
+      const rawImgMatch = markdown.match(/(https?:\/\/[^\s"'<>]+\.(jpg|jpeg|png|webp|gif)(\?[^\s"'<>]*)?)/i);
+      if (rawImgMatch) return rawImgMatch[1];
+
+      // Try og:image patterns sometimes present in markdown
+      const ogMatch = markdown.match(/og:image[^"]*"(https?:\/\/[^"]+)"/i);
+      if (ogMatch) return ogMatch[1];
     }
 
     return null;
