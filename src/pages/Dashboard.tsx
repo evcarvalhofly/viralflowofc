@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Check, Zap, LogOut, StickyNote, MessageSquare, ClipboardList } from "lucide-react";
+import { Check, Zap, LogOut, StickyNote, MessageSquare, ClipboardList, TrendingUp } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 type Niche = {
   id: string;
@@ -17,6 +18,7 @@ type Niche = {
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [niches, setNiches] = useState<Niche[]>([]);
   const [selectedNiches, setSelectedNiches] = useState<string[]>([]);
   const [userNicheIds, setUserNicheIds] = useState<string[]>([]);
@@ -99,6 +101,10 @@ const Dashboard = () => {
             <span className="text-xl font-bold font-display text-gradient-viral">ViralFlow</span>
           </div>
           <nav className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/trends")}>
+              <TrendingUp className="h-4 w-4 mr-1" />
+              Tendências
+            </Button>
             <Button variant="ghost" size="sm" disabled>
               <MessageSquare className="h-4 w-4 mr-1" />
               Chat IA
