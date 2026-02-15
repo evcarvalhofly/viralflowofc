@@ -4,11 +4,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Loader2, Bot, User, Sparkles } from "lucide-react";
+import { Send, Loader2, Bot, User, Sparkles, ClipboardList } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
 const FUNCTIONS_URL = "https://dzgotqyikomtapcgdgff.supabase.co/functions/v1";
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6Z290cXlpa29tdGFwY2dkZ2ZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNzUxNDMsImV4cCI6MjA4Njc1MTE0M30.cTBDE0bCC6j4j2Pw0QRac220oqgQkAcYbMaJ3zyrmbY";
 
 async function streamChat({
   messages,
@@ -23,7 +25,7 @@ async function streamChat({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6Z290cXlpa29tdGFwY2dkZ2ZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNzUxNDMsImV4cCI6MjA4Njc1MTE0M30.cTBDE0bCC6j4j2Pw0QRac220oqgQkAcYbMaJ3zyrmbY`,
+      Authorization: `Bearer ${ANON_KEY}`,
     },
     body: JSON.stringify({ messages }),
   });
@@ -84,13 +86,14 @@ async function streamChat({
 const Chat = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Load chat history
   useEffect(() => {
     if (!user) return;
     const load = async () => {
@@ -119,7 +122,6 @@ const Chat = () => {
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
 
-    // Save user message
     await supabase.from("chat_messages").insert({ user_id: user.id, role: "user", content: text });
 
     let assistantSoFar = "";
@@ -140,7 +142,6 @@ const Chat = () => {
         onDelta: upsertAssistant,
         onDone: async () => {
           setIsLoading(false);
-          // Save assistant message
           if (assistantSoFar) {
             await supabase.from("chat_messages").insert({
               user_id: user!.id,
@@ -153,6 +154,49 @@ const Chat = () => {
     } catch (e: any) {
       setIsLoading(false);
       toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const generatePlan = async () => {
+    if (!user || messages.length < 2) return;
+    setIsGeneratingPlan(true);
+
+    try {
+      const resp = await fetch(`${FUNCTIONS_URL}/generate-plan`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ANON_KEY}`,
+        },
+        body: JSON.stringify({ messages, user_id: user.id }),
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || "Erro ao gerar plano");
+      }
+
+      toast({
+        title: "📋 Plano criado!",
+        description: `"${data.plan.title}" com ${data.plan.items_count} itens foi adicionado ao seu Planejamento.`,
+      });
+
+      // Add system message about the plan
+      const planMsg: Msg = {
+        role: "assistant",
+        content: `✅ Plano criado com sucesso!\n\n📋 **${data.plan.title}** com ${data.plan.items_count} tarefas foi adicionado ao seu Planejamento.\n\nAcesse a aba "Planejamento" para ver e gerenciar seu checklist!`,
+      };
+      setMessages(prev => [...prev, planMsg]);
+      await supabase.from("chat_messages").insert({
+        user_id: user.id,
+        role: "assistant",
+        content: planMsg.content,
+      });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setIsGeneratingPlan(false);
     }
   };
 
@@ -171,6 +215,8 @@ const Chat = () => {
     );
   }
 
+  const hasEnoughContext = messages.filter(m => m.role === "user").length >= 1 && messages.filter(m => m.role === "assistant").length >= 1;
+
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen">
       {/* Messages */}
@@ -181,7 +227,7 @@ const Chat = () => {
             <div>
               <h2 className="text-xl font-bold font-display text-foreground mb-1">ViralFlow IA</h2>
               <p className="text-sm max-w-md">
-                Converse comigo sobre seus objetivos como criador. Vou te ajudar a criar um plano de conteúdo diário e dar dicas de viralização! 🚀
+                Me conte sobre seu nicho e objetivos como criador. Com base na nossa conversa, vou gerar um plano de criação personalizado! 🚀
               </p>
             </div>
           </div>
@@ -223,6 +269,24 @@ const Chat = () => {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Generate Plan Button */}
+      {hasEnoughContext && !isLoading && (
+        <div className="px-4 pb-2 flex justify-center">
+          <Button
+            onClick={generatePlan}
+            disabled={isGeneratingPlan}
+            variant="outline"
+            className="border-primary/30 text-primary hover:bg-primary/10"
+          >
+            {isGeneratingPlan ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando plano...</>
+            ) : (
+              <><ClipboardList className="h-4 w-4 mr-2" />Gerar Plano de Criação</>
+            )}
+          </Button>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t border-border bg-card/50 backdrop-blur-sm p-4">
