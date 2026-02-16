@@ -222,7 +222,7 @@ const Chat = () => {
     );
   }
 
-  const hasEnoughContext = messages.filter(m => m.role === "user").length >= 4 && messages.filter(m => m.role === "assistant").length >= 4;
+  const hasEnoughContext = messages.some(m => m.role === "assistant" && m.content.includes("[PLAN_READY]"));
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen">
@@ -263,7 +263,7 @@ const Chat = () => {
                   : "bg-card border border-border rounded-bl-md"
               }`}
             >
-              {msg.content}
+              {msg.content.replace("[PLAN_READY]", "").trim()}
             </div>
             {msg.role === "user" && (
               <div className="shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
