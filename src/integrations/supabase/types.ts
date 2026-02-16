@@ -101,6 +101,30 @@ export type Database = {
         }
         Relationships: []
       }
+      followed_channels: {
+        Row: {
+          channel_name: string
+          created_at: string
+          id: string
+          platform: string
+          user_id: string
+        }
+        Insert: {
+          channel_name: string
+          created_at?: string
+          id?: string
+          platform?: string
+          user_id: string
+        }
+        Update: {
+          channel_name?: string
+          created_at?: string
+          id?: string
+          platform?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       niches: {
         Row: {
           created_at: string
