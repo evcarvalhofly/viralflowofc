@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Loader2, Bot, User, Sparkles, ClipboardList } from "lucide-react";
+import { Send, Loader2, Bot, User, Sparkles, ClipboardList, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Msg = { role: "user" | "assistant"; content: string };
@@ -200,6 +200,13 @@ const Chat = () => {
     }
   };
 
+  const clearChat = async () => {
+    if (!user) return;
+    await supabase.from("chat_messages").delete().eq("user_id", user.id);
+    setMessages([]);
+    toast({ title: "Chat limpo", description: "Conversa reiniciada com sucesso!" });
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -219,6 +226,15 @@ const Chat = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen">
+      {/* Header */}
+      {messages.length > 0 && (
+        <div className="flex justify-end p-2 border-b border-border">
+          <Button variant="ghost" size="sm" onClick={clearChat} className="text-muted-foreground hover:text-destructive">
+            <Trash2 className="h-4 w-4 mr-1" />
+            Limpar chat
+          </Button>
+        </div>
+      )}
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
