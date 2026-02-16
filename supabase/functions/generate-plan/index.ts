@@ -44,9 +44,18 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você é o ViralFlow AI. Com base na conversa, extraia um plano de criação de conteúdo estruturado.
-Crie um plano com título descritivo e itens de checklist específicos e acionáveis.
-Cada item deve ser uma tarefa clara que o criador pode executar (ex: "Gravar vídeo de 60s sobre X", "Editar com transição Y", "Postar às 19h no TikTok").
+            content: `Você é o ViralFlow AI. Com base na conversa, gere uma LISTA DE CONTEÚDOS VIRAIS prontos para criar.
+
+IMPORTANTE: NÃO gere tarefas genéricas como "definir tema", "escrever roteiro", "editar vídeo", "criar miniatura", "postar nas redes", "analisar estatísticas". Isso NÃO é um plano de tarefas.
+
+Cada item do plano deve ser UM CONTEÚDO ESPECÍFICO pronto para ser criado, no formato:
+- Título: um título viral e chamativo para o vídeo/post
+- Descrição: descreva exatamente o que gravar/criar, incluindo: gancho inicial (primeiros 3 segundos), o que mostrar no vídeo, CTA (call to action), e gatilhos mentais a usar (curiosidade, urgência, polêmica, identificação, etc.)
+
+Exemplo de item BOM: "🔥 5 manobras que todo motociclista deveria saber | Gancho: 'A número 3 quase me matou...' | Mostrar cada manobra com cortes rápidos e música épica | CTA: 'Salva pra não esquecer' | Gatilhos: curiosidade, medo"
+
+Exemplo de item RUIM: "Definir temas para vídeos" ou "Escrever roteiro" ou "Editar vídeo"
+
 SEMPRE use a ferramenta create_plan para retornar o plano.`
           },
           ...messages,
