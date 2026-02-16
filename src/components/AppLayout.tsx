@@ -19,7 +19,7 @@ const navItems: NavItem[] = [
   { label: "IA", icon: <MessageSquare className="h-5 w-5" />, path: "/chat" },
   { label: "Planejamento", icon: <ClipboardList className="h-5 w-5" />, path: "/planning" },
   { label: "Edição", icon: <FolderOpen className="h-5 w-5" />, path: "/assets", disabled: true },
-  { label: "GameOver", icon: <TrendingUp className="h-5 w-5" />, path: "/gameover", disabled: true },
+  { label: "GameOver", icon: <TrendingUp className="h-5 w-5" />, path: "/gameover" },
   { label: "Comunidade", icon: <Users className="h-5 w-5" />, path: "/community", disabled: true },
 ];
 
