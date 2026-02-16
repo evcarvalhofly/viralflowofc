@@ -6,14 +6,23 @@ import { extractThumbnail, getPlatform } from "@/lib/utils/thumbnail";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   TrendingUp, Search, ExternalLink, Loader2,
-  Play, Sparkles, Video, RefreshCw,
+  Play, Sparkles, Video, RefreshCw, Plus, X, User,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Niche = { id: string; name: string; slug: string; icon: string | null };
 type SearchResult = { url: string; title: string; description: string; markdown?: string; metadata?: any };
+type FollowedChannel = { id: string; channel_name: string; platform: string };
 
 const platformColors: Record<string, string> = {
   YouTube: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -23,6 +32,8 @@ const platformColors: Record<string, string> = {
   Facebook: "bg-blue-500/10 text-blue-500 border-blue-500/20",
   Kwai: "bg-orange-500/10 text-orange-500 border-orange-500/20",
 };
+
+const PLATFORMS = ["YouTube", "TikTok", "Instagram", "X/Twitter", "Facebook", "Kwai"];
 
 /* ── Result Card ── */
 const ResultCard = ({ result }: { result: SearchResult }) => {
@@ -112,21 +123,61 @@ const GameOver = () => {
   const [analysisText, setAnalysisText] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
 
+  // Followed channels
+  const [channels, setChannels] = useState<FollowedChannel[]>([]);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelPlatform, setNewChannelPlatform] = useState("YouTube");
+  const [addingChannel, setAddingChannel] = useState(false);
+
   useEffect(() => {
-    const fetchNiches = async () => {
-      const { data } = await supabase
-        .from("user_niches")
-        .select("niche_id, niches(id, name, slug, icon)")
-        .order("created_at");
-      if (data) {
-        const niches = data.map((un: any) => un.niches).filter(Boolean) as Niche[];
+    const fetchData = async () => {
+      const [nichesRes, channelsRes] = await Promise.all([
+        supabase
+          .from("user_niches")
+          .select("niche_id, niches(id, name, slug, icon)")
+          .order("created_at"),
+        supabase
+          .from("followed_channels")
+          .select("id, channel_name, platform")
+          .order("created_at"),
+      ]);
+
+      if (nichesRes.data) {
+        const niches = nichesRes.data.map((un: any) => un.niches).filter(Boolean) as Niche[];
         setUserNiches(niches);
         if (niches.length > 0) setSelectedNiche(niches[0]);
       }
+      if (channelsRes.data) {
+        setChannels(channelsRes.data);
+      }
       setLoading(false);
     };
-    fetchNiches();
+    fetchData();
   }, []);
+
+  const addChannel = async () => {
+    if (!user || !newChannelName.trim()) return;
+    setAddingChannel(true);
+    const { data, error } = await supabase
+      .from("followed_channels")
+      .insert({ user_id: user.id, channel_name: newChannelName.trim(), platform: newChannelPlatform })
+      .select("id, channel_name, platform")
+      .single();
+
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else if (data) {
+      setChannels((prev) => [...prev, data]);
+      setNewChannelName("");
+      toast({ title: "Canal adicionado!" });
+    }
+    setAddingChannel(false);
+  };
+
+  const removeChannel = async (id: string) => {
+    await supabase.from("followed_channels").delete().eq("id", id);
+    setChannels((prev) => prev.filter((c) => c.id !== id));
+  };
 
   const handleSearch = useCallback(async () => {
     if (!selectedNiche) return;
@@ -139,7 +190,6 @@ const GameOver = () => {
       const results = await searchViralContent(selectedNiche.name);
       setSearchResults(results);
 
-      // Automatically start AI analysis
       if (results.length > 0) {
         setAnalyzing(true);
         await streamAnalyzeTrends({
@@ -178,6 +228,99 @@ const GameOver = () => {
           </p>
         </div>
 
+        {/* Seus Nichos & Canais */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Nichos selecionados */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <h2 className="text-sm font-bold font-display flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Seus Nichos
+              </h2>
+              {userNiches.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhum nicho selecionado. Vá ao Dashboard para escolher.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {userNiches.map((niche) => (
+                    <Badge
+                      key={niche.id}
+                      variant={selectedNiche?.id === niche.id ? "default" : "outline"}
+                      className={`cursor-pointer transition-all ${
+                        selectedNiche?.id === niche.id ? "gradient-viral text-primary-foreground" : "hover:bg-accent"
+                      }`}
+                      onClick={() => {
+                        setSelectedNiche(niche);
+                        setSearchResults([]);
+                        setAnalysisText("");
+                      }}
+                    >
+                      {niche.icon} {niche.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Canais seguidos */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <h2 className="text-sm font-bold font-display flex items-center gap-2">
+                <User className="h-4 w-4 text-primary" />
+                Canais que você segue
+              </h2>
+
+              {/* Lista de canais */}
+              {channels.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {channels.map((ch) => (
+                    <Badge key={ch.id} variant="secondary" className="gap-1 pr-1">
+                      <span className="text-xs opacity-60">{ch.platform}</span>
+                      <span className="font-medium">{ch.channel_name}</span>
+                      <button
+                        onClick={() => removeChannel(ch.id)}
+                        className="ml-1 p-0.5 rounded-full hover:bg-destructive/20 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Adicionar canal */}
+              <div className="flex gap-2 items-center">
+                <Select value={newChannelPlatform} onValueChange={setNewChannelPlatform}>
+                  <SelectTrigger className="w-[120px] h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PLATFORMS.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Nome do canal..."
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  className="h-8 text-sm flex-1"
+                  onKeyDown={(e) => e.key === "Enter" && addChannel()}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={addChannel}
+                  disabled={!newChannelName.trim() || addingChannel}
+                  className="h-8"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {userNiches.length === 0 ? (
           <div className="text-center py-20 space-y-4">
             <p className="text-muted-foreground">Você ainda não selecionou nenhum nicho.</p>
@@ -185,25 +328,6 @@ const GameOver = () => {
           </div>
         ) : (
           <>
-            {/* Niche tabs */}
-            <div className="flex gap-2 flex-wrap">
-              {userNiches.map((niche) => (
-                <Button
-                  key={niche.id}
-                  variant={selectedNiche?.id === niche.id ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setSelectedNiche(niche);
-                    setSearchResults([]);
-                    setAnalysisText("");
-                  }}
-                  className={selectedNiche?.id === niche.id ? "gradient-viral" : ""}
-                >
-                  {niche.icon} {niche.name}
-                </Button>
-              ))}
-            </div>
-
             {/* Search button */}
             <Button
               onClick={handleSearch}
