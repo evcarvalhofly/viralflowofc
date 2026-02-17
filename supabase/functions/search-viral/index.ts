@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const searchQuery = query || `${niche} viral vídeo tendência 2025 TikTok YouTube Shorts Instagram Reels Brasil`;
+    const searchQuery = query || `"${niche}" conteúdo viral vídeo curto 2025`;
 
     console.log('Searching viral content for:', searchQuery);
 
