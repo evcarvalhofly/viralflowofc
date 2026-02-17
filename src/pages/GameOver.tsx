@@ -189,16 +189,6 @@ const GameOver = () => {
     try {
       const results = await searchViralContent(selectedNiche.name);
       setSearchResults(results);
-
-      if (results.length > 0) {
-        setAnalyzing(true);
-        await streamAnalyzeTrends({
-          niche: selectedNiche.name,
-          searchResults: results,
-          onDelta: (chunk) => setAnalysisText((prev) => prev + chunk),
-          onDone: () => setAnalyzing(false),
-        });
-      }
     } catch (error: any) {
       toast({ title: "Erro na busca", description: error.message, variant: "destructive" });
     } finally {
@@ -346,8 +336,8 @@ const GameOver = () => {
               )}
             </Button>
 
-            {/* AI Analysis */}
-            <AnalysisPanel text={analysisText} loading={analyzing} />
+            {/* AI Analysis - temporarily disabled */}
+            {/* <AnalysisPanel text={analysisText} loading={analyzing} /> */}
 
             {/* Search Results Grid */}
             {searchResults.length > 0 && (
