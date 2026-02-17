@@ -22,27 +22,56 @@ export function extractThumbnail(url: string, markdown?: string): string | null 
       }
     }
 
-    // TikTok - no reliable thumbnail without API, try markdown
-    // Instagram - no reliable thumbnail without API, try markdown
+    // TikTok — use a screenshot proxy for the video page
+    if (u.hostname.includes("tiktok.com") && url.includes("/video/")) {
+      // Try markdown first for any image
+      if (markdown) {
+        const img = extractImageFromMarkdown(markdown);
+        if (img) return img;
+      }
+      // Fallback: use unavailable thumbnail placeholder handled by UI
+      return null;
+    }
+
+    // Instagram — try to extract from markdown/metadata
+    if (u.hostname.includes("instagram.com") && (url.includes("/reel/") || url.includes("/p/"))) {
+      if (markdown) {
+        const img = extractImageFromMarkdown(markdown);
+        if (img) return img;
+      }
+      return null;
+    }
 
     // Try to extract image from markdown content
     if (markdown) {
-      const imgMatch = markdown.match(/!\[.*?\]\((https?:\/\/[^\s)]+\.(jpg|jpeg|png|webp|gif)[^\s)]*)\)/i);
-      if (imgMatch) return imgMatch[1];
-
-      // Also try raw image URLs in markdown
-      const rawImgMatch = markdown.match(/(https?:\/\/[^\s"'<>]+\.(jpg|jpeg|png|webp|gif)(\?[^\s"'<>]*)?)/i);
-      if (rawImgMatch) return rawImgMatch[1];
-
-      // Try og:image patterns sometimes present in markdown
-      const ogMatch = markdown.match(/og:image[^"]*"(https?:\/\/[^"]+)"/i);
-      if (ogMatch) return ogMatch[1];
+      const img = extractImageFromMarkdown(markdown);
+      if (img) return img;
     }
 
     return null;
   } catch {
     return null;
   }
+}
+
+function extractImageFromMarkdown(markdown: string): string | null {
+  // Markdown image syntax
+  const imgMatch = markdown.match(/!\[.*?\]\((https?:\/\/[^\s)]+\.(jpg|jpeg|png|webp|gif)[^\s)]*)\)/i);
+  if (imgMatch) return imgMatch[1];
+
+  // Raw image URLs
+  const rawImgMatch = markdown.match(/(https?:\/\/[^\s"'<>]+\.(jpg|jpeg|png|webp|gif)(\?[^\s"'<>]*)?)/i);
+  if (rawImgMatch) return rawImgMatch[1];
+
+  // og:image
+  const ogMatch = markdown.match(/og:image[^"]*"(https?:\/\/[^"]+)"/i);
+  if (ogMatch) return ogMatch[1];
+
+  // Generic image URL in content (covers CDN urls without extensions)
+  const cdnMatch = markdown.match(/(https?:\/\/[^\s"'<>]*(scontent|cdninstagram|tiktokcdn|pbs\.twimg)[^\s"'<>]*)/i);
+  if (cdnMatch) return cdnMatch[1];
+
+  return null;
 }
 
 /**

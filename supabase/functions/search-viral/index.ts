@@ -61,11 +61,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Search each platform in parallel for viral content in this niche
+    // Search each platform in parallel for VIDEOS in this niche
     const searches = [
-      searchFirecrawl(apiKey, `site:youtube.com ${niche} viral mais vistos Brasil 2025`, 5),
-      searchFirecrawl(apiKey, `site:tiktok.com ${niche} viral tendência Brasil 2025`, 5),
-      searchFirecrawl(apiKey, `site:instagram.com ${niche} reels viral Brasil 2025`, 5),
+      searchFirecrawl(apiKey, `site:youtube.com/watch ${niche} viral mais vistos Brasil 2025`, 5),
+      searchFirecrawl(apiKey, `site:tiktok.com/@*/video ${niche} viral Brasil 2025`, 5),
+      searchFirecrawl(apiKey, `site:instagram.com/reel ${niche} reels viral Brasil 2025`, 5),
     ];
 
     console.log('Searching viral content for niche:', niche);
