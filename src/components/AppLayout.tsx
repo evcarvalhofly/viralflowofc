@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Zap, MessageSquare, ClipboardList, TrendingUp,
-  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon
+  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,8 +18,9 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "IA", icon: <MessageSquare className="h-5 w-5" />, path: "/chat" },
   { label: "Planejamento", icon: <ClipboardList className="h-5 w-5" />, path: "/planning" },
-  { label: "Edição", icon: <FolderOpen className="h-5 w-5" />, path: "/assets", disabled: true },
   { label: "GameOver", icon: <TrendingUp className="h-5 w-5" />, path: "/gameover" },
+  { label: "Vídeos Virais", icon: <Film className="h-5 w-5" />, path: "/viral-videos" },
+  { label: "Edição", icon: <FolderOpen className="h-5 w-5" />, path: "/assets", disabled: true },
   { label: "Comunidade", icon: <Users className="h-5 w-5" />, path: "/community", disabled: true },
 ];
 
