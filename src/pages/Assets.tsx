@@ -86,14 +86,16 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col">
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[70vw] sm:w-auto shrink-0 sm:shrink">
       {/* Preview area — portrait 9:16 */}
-      <div className="relative w-full" style={{ aspectRatio: "9/16" }}>
+      <div className="relative w-full overflow-hidden" style={{ aspectRatio: "9/16" }}>
         {playing ? (
           <>
+            {/* Oversized iframe centered to crop edges and center the video */}
             <iframe
               src={previewUrl}
-              className="absolute inset-0 w-full h-full"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{ width: "180%", height: "180%" }}
               allow="autoplay"
               title={asset.label}
             />
