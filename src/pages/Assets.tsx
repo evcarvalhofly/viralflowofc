@@ -372,7 +372,7 @@ const Assets = () => {
               {filtered.length > 0 ? (
                 <>
                   {/* Mobile: horizontal carousel */}
-                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 snap-x snap-mandatory scrollbar-none sm:hidden">
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none sm:hidden">
                     {filtered.map((asset) => (
                       <div key={asset.id} className="snap-start shrink-0 flex items-start pt-1">
                         <AssetCard asset={asset} />
