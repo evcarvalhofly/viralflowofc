@@ -162,7 +162,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
     <>
       {/* ── Mobile card (9:16) ── */}
       <div className="sm:hidden rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] shrink-0">
-        <PreviewMobile />
+        <Preview mobile />
         <div className="p-3 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-1">
             <p className="text-xs font-semibold truncate">{asset.label}</p>
@@ -176,7 +176,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
 
       {/* ── Desktop card (16:9) ── */}
       <div className="hidden sm:block rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200">
-        <PreviewDesktop />
+        <Preview />
         <div className="p-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <p className="text-sm font-semibold truncate">{asset.label}</p>
