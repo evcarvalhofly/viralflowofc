@@ -145,7 +145,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
 
   const PreviewDesktop = () => (
     <div
-      className="relative w-full overflow-hidden bg-muted cursor-pointer group"
+      className="relative w-full overflow-hidden bg-black cursor-pointer group"
       style={{ aspectRatio: "16/9" }}
       onClick={() => !playing && setPlaying(true)}
     >
@@ -161,7 +161,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
           <img
             src={thumbnail}
             alt={asset.label}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
           />
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
             <div className="rounded-full bg-background/90 p-4 shadow-lg">
