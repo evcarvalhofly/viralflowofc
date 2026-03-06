@@ -148,16 +148,6 @@ const ViralVideos = () => {
           </CardContent>
         </Card>
 
-        {/* Botão acesso geral */}
-        <div className="flex justify-end">
-          <a href={DRIVE_ROOT_URL} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm" className="gap-2 text-xs">
-              <ExternalLink className="h-3.5 w-3.5" />
-              Ver todas as pastas no Drive
-            </Button>
-          </a>
-        </div>
-
         {/* Categorias */}
         <div className="space-y-3">
           {categories.map((cat) => (
