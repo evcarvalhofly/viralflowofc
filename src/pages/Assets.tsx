@@ -183,7 +183,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
       </div>
 
       {/* ── Desktop card (16:9) ── */}
-      <div className="hidden sm:flex rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex-col">
+      <div className="hidden sm:block rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200">
         <PreviewDesktop />
         <div className="p-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
