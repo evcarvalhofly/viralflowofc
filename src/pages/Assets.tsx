@@ -113,7 +113,12 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
   const thumbnail   = thumbUrl(asset.driveId);
 
-  /* ── Preview unificado — mesmo comportamento para mobile e desktop ── */
+  /* bg-001 a bg-015 são portrait — escala menor no mobile (130%×125%)
+     bg-016+ são landscape — zoom grande no mobile (320%×320%) para preencher 9:16 */
+  const mobileIframeStyle = asset.landscape
+    ? { width: "320%", height: "320%" }
+    : { width: "130%", height: "125%" };
+
   const Preview = ({ mobile }: { mobile?: boolean }) => (
     <div
       className="relative w-full overflow-hidden bg-black cursor-pointer group"
@@ -124,11 +129,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
         <iframe
           src={previewUrl}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={
-            mobile
-              ? { width: "320%", height: "320%" }
-              : { width: "130%", height: "125%" }
-          }
+          style={mobile ? mobileIframeStyle : { width: "130%", height: "125%" }}
           allow="autoplay"
           title={asset.label}
         />
