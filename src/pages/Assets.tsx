@@ -171,55 +171,63 @@ const backgrounds: Asset[] = [
   { id: "bg-101", label: "Background 101", emoji: "🎬", category: "Background", driveId: "1e8MGJgaRXlWH_i8HqYr40mOObK4xNvtV", tags: ["background", "fundo"], landscape: true },
 ];
 
-/* ── Asset Card ── */
-/* Thumbnail URL do Google Drive — imagem estática, carrega instantâneo */
+/* ── Thumbnail helper ── */
 const thumbUrl = (id: string) =>
   `https://drive.google.com/thumbnail?id=${id}&sz=w640`;
 
-const AssetCard = ({ asset }: { asset: Asset }) => {
-  const [playing, setPlaying] = useState(false);
+/* ── Unified Video Frame (9:16, crop-center para landscape) ── */
+const VideoDriveFrame = ({
+  driveId,
+  title,
+  playing,
+  onPlay,
+}: {
+  driveId: string;
+  title: string;
+  playing: boolean;
+  onPlay: () => void;
+}) => {
+  const previewUrl = `https://drive.google.com/file/d/${driveId}/preview`;
+  const thumbnail  = thumbUrl(driveId);
 
-  const previewUrl  = `https://drive.google.com/file/d/${asset.driveId}/preview`;
-  const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
-  const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
-  const thumbnail   = thumbUrl(asset.driveId);
-
-  /* bg-001 a bg-015 são portrait — zoom 300% no mobile para preencher 9:16 sem bordas pretas
-     bg-016+ são landscape — zoom 320% no mobile */
-  const mobileIframeStyle = asset.landscape
-    ? { width: "320%", height: "320%" }
-    : { width: "300%", height: "300%" };
-
-  const Preview = ({ mobile }: { mobile?: boolean }) => (
+  return (
     <div
-      className="relative w-full overflow-hidden bg-black cursor-pointer group"
-      style={{ aspectRatio: mobile ? "9/16" : "16/9" }}
-      onClick={(e) => { e.stopPropagation(); if (!playing) setPlaying(true); }}
+      className="relative w-full overflow-hidden bg-black cursor-pointer group rounded-t-xl"
+      style={{ aspectRatio: "9/16" }}
+      onClick={(e) => { e.stopPropagation(); if (!playing) onPlay(); }}
     >
       {playing ? (
         <iframe
           src={previewUrl}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={mobile ? mobileIframeStyle : { width: "130%", height: "125%" }}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-0"
+          style={{ width: "177.78%", height: "100%" }}
           allow="autoplay"
-          title={asset.label}
+          title={title}
         />
       ) : (
         <>
           <img
             src={thumbnail}
-            alt={asset.label}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full object-cover"
+            alt={title}
+            className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
-            <div className={`rounded-full bg-background/90 shadow-lg ${mobile ? "p-3" : "p-4"}`}>
-              <Play className={`text-primary fill-primary ${mobile ? "h-5 w-5" : "h-6 w-6"}`} />
+            <div className="rounded-full bg-background/90 shadow-lg p-3">
+              <Play className="text-primary fill-primary h-5 w-5" />
             </div>
           </div>
         </>
       )}
     </div>
   );
+};
+
+/* ── Asset Card ── */
+const AssetCard = ({ asset }: { asset: Asset }) => {
+  const [playing, setPlaying] = useState(false);
+
+  const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
+  const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
   const Actions = ({ compact }: { compact?: boolean }) => (
     <div className={cn("flex gap-1.5", compact ? "" : "flex-col")}>
@@ -237,33 +245,23 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
   );
 
   return (
-    <>
-      {/* ── Mobile card (9:16) ── */}
-      <div className="sm:hidden rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[44vw] shrink-0">
-        <Preview mobile />
-        <div className="p-3 flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-1">
-            <p className="text-xs font-semibold truncate">{asset.label}</p>
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <Actions />
-          </div>
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[44vw] sm:w-full shrink-0">
+      <VideoDriveFrame
+        driveId={asset.driveId}
+        title={asset.label}
+        playing={playing}
+        onPlay={() => setPlaying(true)}
+      />
+      <div className="p-2 sm:p-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-1">
+          <p className="text-xs font-semibold truncate">{asset.label}</p>
+          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <Actions />
         </div>
       </div>
-
-      {/* ── Desktop card (16:9) ── */}
-      <div className="hidden sm:block rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200">
-        <Preview />
-        <div className="p-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <p className="text-sm font-semibold truncate">{asset.label}</p>
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
-          </div>
-          <Actions compact />
-        </div>
-      </div>
-    </>
+    </div>
   );
 };
 
