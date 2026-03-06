@@ -139,30 +139,29 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
     </div>
   );
 
-  /* ── Desktop card (16:9 landscape, layout em linha) ── */
+  /* ── Desktop card — iframe em tamanho natural, sem corte ── */
   const desktopCard = (
-    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col">
-      {/* Preview 16:9 */}
-      <div ref={containerRef} className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: "16/9" }}>
-        {!loaded && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted">
-            <div className="rounded-full bg-background/80 p-3 shadow">
-              <Play className="h-6 w-6 text-primary fill-primary" />
-            </div>
-            <p className="text-[11px] text-muted-foreground">{asset.label}</p>
+    <div ref={containerRef} className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col">
+      {/* Placeholder */}
+      {!loaded && (
+        <div className="flex flex-col items-center justify-center gap-2 bg-muted" style={{ aspectRatio: "16/9" }}>
+          <div className="rounded-full bg-background/80 p-3 shadow">
+            <Play className="h-6 w-6 text-primary fill-primary" />
           </div>
-        )}
-        {inView && (
-          <iframe
-            src={previewUrl}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{ width: "120%", height: "120%", opacity: loaded ? 1 : 0, transition: "opacity 0.3s" }}
-            allow="autoplay"
-            title={asset.label}
-            onLoad={() => setLoaded(true)}
-          />
-        )}
-      </div>
+          <p className="text-[11px] text-muted-foreground">{asset.label}</p>
+        </div>
+      )}
+      {/* Iframe full — tamanho original sem crop */}
+      {inView && (
+        <iframe
+          src={previewUrl}
+          className="w-full"
+          style={{ aspectRatio: "16/9", display: loaded ? "block" : "none" }}
+          allow="autoplay"
+          title={asset.label}
+          onLoad={() => setLoaded(true)}
+        />
+      )}
       {/* Info + actions */}
       <div className="p-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
