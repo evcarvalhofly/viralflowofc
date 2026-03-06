@@ -177,8 +177,10 @@ const Assets = () => {
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen overflow-y-auto">
-      <div className="p-3 md:p-6 max-w-6xl mx-auto w-full space-y-4">
+    /* Outer: full height, NO scroll */
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen overflow-hidden">
+      {/* Fixed top section — header + tabs + search */}
+      <div className="flex-shrink-0 px-3 pt-3 pb-2 md:px-6 md:pt-6 max-w-6xl mx-auto w-full space-y-3">
 
         {/* Header */}
         <div>
@@ -191,7 +193,7 @@ const Assets = () => {
           </p>
         </div>
 
-        {/* Tabs — horizontal scroll on mobile */}
+        {/* Tabs — horizontal scroll */}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none">
           {tabs.map((tab) => (
             <button
@@ -221,12 +223,9 @@ const Assets = () => {
           ))}
         </div>
 
-        {/* Content */}
-        {currentTab.comingSoon ? (
-          <ComingSoon tab={currentTab} />
-        ) : activeTab === "backgrounds" ? (
-          <div className="space-y-3">
-            {/* Search */}
+        {/* Search (only backgrounds tab) */}
+        {!currentTab.comingSoon && activeTab === "backgrounds" && (
+          <div className="space-y-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -236,38 +235,43 @@ const Assets = () => {
                 className="pl-9"
               />
             </div>
-
-            {/* Count */}
             <p className="text-xs text-muted-foreground">
               {filtered.length} fundo{filtered.length !== 1 ? "s" : ""} disponíve{filtered.length !== 1 ? "is" : "l"}
             </p>
+          </div>
+        )}
+      </div>
 
-            {/* Horizontal carousel on mobile, grid on desktop */}
+      {/* Scrollable content area */}
+      <div className="flex-1 min-h-0 max-w-6xl mx-auto w-full px-3 md:px-6 pb-3 md:pb-6">
+        {currentTab.comingSoon ? (
+          <ComingSoon tab={currentTab} />
+        ) : activeTab === "backgrounds" ? (
+          <>
             {filtered.length > 0 ? (
               <>
-                {/* Mobile: horizontal scroll */}
-                <div className="flex gap-3 overflow-x-auto pb-3 -mx-3 px-3 snap-x snap-mandatory scrollbar-none sm:hidden">
+                {/* Mobile: horizontal carousel — ONLY this scrolls */}
+                <div className="flex gap-3 overflow-x-auto h-full pb-2 -mx-3 px-3 snap-x snap-mandatory scrollbar-none sm:hidden">
                   {filtered.map((asset) => (
-                    <div key={asset.id} className="snap-start">
+                    <div key={asset.id} className="snap-start h-full flex items-start pt-1">
                       <AssetCard asset={asset} />
                     </div>
                   ))}
                 </div>
-                {/* Desktop: grid */}
-                <div className="hidden sm:grid sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                {/* Desktop: vertical scrollable grid */}
+                <div className="hidden sm:grid sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 overflow-y-auto h-full pb-2">
                   {filtered.map((asset) => (
                     <AssetCard key={asset.id} asset={asset} />
                   ))}
                 </div>
               </>
             ) : (
-              <div className="text-center py-16 text-muted-foreground text-sm">
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 Nenhum fundo encontrado para "{search}"
               </div>
             )}
-          </div>
+          </>
         ) : null}
-
       </div>
     </div>
   );
