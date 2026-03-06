@@ -10,6 +10,7 @@ import Chat from "./pages/Chat";
 import Planning from "./pages/Planning";
 import GameOver from "./pages/GameOver";
 import ViralVideos from "./pages/ViralVideos";
+import Assets from "./pages/Assets";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
