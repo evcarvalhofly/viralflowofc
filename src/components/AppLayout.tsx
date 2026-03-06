@@ -20,7 +20,7 @@ const navItems: NavItem[] = [
   { label: "Planejamento", icon: <ClipboardList className="h-5 w-5" />, path: "/planning" },
   { label: "GameOver", icon: <TrendingUp className="h-5 w-5" />, path: "/gameover" },
   { label: "Vídeos Virais", icon: <Film className="h-5 w-5" />, path: "/viral-videos" },
-  { label: "Edição", icon: <FolderOpen className="h-5 w-5" />, path: "/assets", disabled: true },
+  { label: "Edição", icon: <FolderOpen className="h-5 w-5" />, path: "/assets" },
   { label: "Comunidade", icon: <Users className="h-5 w-5" />, path: "/community", disabled: true },
 ];
 
