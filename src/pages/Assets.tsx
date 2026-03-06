@@ -377,8 +377,8 @@ const Assets = () => {
                       </div>
                     ))}
                   </div>
-                  {/* Desktop: scrollable grid */}
-                  <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+                  {/* Desktop: 9:16 grid */}
+                  <div className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pt-1">
                     {filtered.map((asset) => (
                       <AssetCard key={asset.id} asset={asset} />
                     ))}
