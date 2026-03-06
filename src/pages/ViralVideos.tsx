@@ -1,102 +1,63 @@
-import { Download, Play, AlertTriangle, Sparkles, Film, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Sparkles, Film, FolderOpen, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-/* ── Tipos ── */
+/* ── ID da pasta raiz no Google Drive ── */
+const DRIVE_ROOT_FOLDER_ID = "15jgrlRxxHg2pEMA3DVDlmvqyBdPZfGmR";
+const DRIVE_ROOT_URL = `https://drive.google.com/drive/folders/${DRIVE_ROOT_FOLDER_ID}`;
+
+/* ── Categorias ── */
 type VideoCategory = {
   id: string;
   label: string;
   emoji: string;
   color: string;
-  videos: VideoItem[];
+  driveId?: string; // ID da subpasta no Drive (preencher depois)
 };
 
-type VideoItem = {
-  id: string;
-  title: string;
-  platform: string;
-  url: string;
-  thumbnail?: string;
-};
-
-/* ── Dados (placeholder - o usuário vai enviar capas e links) ── */
 const categories: VideoCategory[] = [
-  { id: "cortes-youtube", label: "Cortes (YouTube)", emoji: "✂️", color: "bg-red-500/10 text-red-500 border-red-500/20", videos: [] },
-  { id: "animes", label: "Animes", emoji: "⛩️", color: "bg-purple-500/10 text-purple-500 border-purple-500/20", videos: [] },
-  { id: "desenhos", label: "Desenhos", emoji: "🎨", color: "bg-pink-500/10 text-pink-500 border-pink-500/20", videos: [] },
-  { id: "cortes-arma-pesada", label: "Cortes Arma Pesada", emoji: "🔫", color: "bg-gray-500/10 text-gray-400 border-gray-500/20", videos: [] },
-  { id: "master-chef", label: "Master Chef", emoji: "👨‍🍳", color: "bg-orange-500/10 text-orange-500 border-orange-500/20", videos: [] },
-  { id: "consertos", label: "Consertos e Manutenção", emoji: "🔧", color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20", videos: [] },
-  { id: "cortes-guerra", label: "Cortes Guerra e Tática", emoji: "🪖", color: "bg-green-800/10 text-green-600 border-green-800/20", videos: [] },
-  { id: "asmr", label: "ASMR", emoji: "🎧", color: "bg-violet-500/10 text-violet-400 border-violet-500/20", videos: [] },
-  { id: "ladrao", label: "Ladrão (Se deu mal)", emoji: "🚔", color: "bg-red-800/10 text-red-400 border-red-800/20", videos: [] },
-  { id: "cortes-filme-serie", label: "Cortes Filme e Série", emoji: "🎬", color: "bg-blue-500/10 text-blue-500 border-blue-500/20", videos: [] },
-  { id: "espinhas", label: "Espinhas", emoji: "😬", color: "bg-yellow-800/10 text-yellow-600 border-yellow-800/20", videos: [] },
-  { id: "failed", label: "Failed (Erros Engraçados)", emoji: "😂", color: "bg-amber-500/10 text-amber-500 border-amber-500/20", videos: [] },
-  { id: "limpeza", label: "Limpeza", emoji: "🧹", color: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20", videos: [] },
-  { id: "ia", label: "IA (Criado com IA)", emoji: "🤖", color: "bg-blue-600/10 text-blue-400 border-blue-600/20", videos: [] },
-  { id: "insetos", label: "Insetos", emoji: "🐛", color: "bg-lime-500/10 text-lime-500 border-lime-500/20", videos: [] },
-  { id: "casas-luxo", label: "Casas de Luxo", emoji: "🏰", color: "bg-yellow-400/10 text-yellow-400 border-yellow-400/20", videos: [] },
-  { id: "old-money", label: "Old Money", emoji: "💎", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20", videos: [] },
-  { id: "saude", label: "Saúde", emoji: "❤️‍🩹", color: "bg-rose-500/10 text-rose-500 border-rose-500/20", videos: [] },
-  { id: "cortes-desenhos", label: "Cortes de Desenhos", emoji: "🖼️", color: "bg-pink-600/10 text-pink-400 border-pink-600/20", videos: [] },
-  { id: "cortes-talk-show", label: "Cortes Talk Show / Entrevistas", emoji: "🎙️", color: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20", videos: [] },
-  { id: "family-guy", label: "Cortes de Family Guy", emoji: "🐶", color: "bg-yellow-600/10 text-yellow-500 border-yellow-600/20", videos: [] },
-  { id: "rick-morty", label: "Cortes de Rick and Morty", emoji: "🛸", color: "bg-green-500/10 text-green-400 border-green-500/20", videos: [] },
-  { id: "lifestyle", label: "Lifestyle", emoji: "✨", color: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20", videos: [] },
-  { id: "gringos", label: "Gringos", emoji: "🌎", color: "bg-blue-400/10 text-blue-400 border-blue-400/20", videos: [] },
-  { id: "aviacao", label: "Aviação", emoji: "✈️", color: "bg-sky-500/10 text-sky-500 border-sky-500/20", videos: [] },
-  { id: "motivacional", label: "Motivacional", emoji: "🔥", color: "bg-orange-600/10 text-orange-400 border-orange-600/20", videos: [] },
-  { id: "futebol", label: "Futebol", emoji: "⚽", color: "bg-green-600/10 text-green-500 border-green-600/20", videos: [] },
-  { id: "pablo-marcal", label: "Pablo Marçal", emoji: "🎤", color: "bg-purple-600/10 text-purple-400 border-purple-600/20", videos: [] },
-  { id: "ruyter", label: "Ruyter", emoji: "🎯", color: "bg-red-600/10 text-red-400 border-red-600/20", videos: [] },
-  { id: "satisfatorios", label: "Satisfatórios", emoji: "😌", color: "bg-teal-500/10 text-teal-400 border-teal-500/20", videos: [] },
-  { id: "memes", label: "Memes", emoji: "💀", color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", videos: [] },
-  { id: "comedia", label: "Comédia", emoji: "🤣", color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20", videos: [] },
-  { id: "achadinhos", label: "Achadinhos (Produtos / Shopee)", emoji: "🛍️", color: "bg-orange-400/10 text-orange-400 border-orange-400/20", videos: [] },
-  { id: "academia-fitness", label: "Academia / Fitness", emoji: "💪", color: "bg-green-500/10 text-green-500 border-green-500/20", videos: [] },
-  { id: "animais-selvagens", label: "Animais Selvagens", emoji: "🦁", color: "bg-amber-600/10 text-amber-500 border-amber-600/20", videos: [] },
-  { id: "travel-vibes", label: "Travel Vibes (Viagens)", emoji: "🌴", color: "bg-cyan-600/10 text-cyan-400 border-cyan-600/20", videos: [] },
-  { id: "parkour", label: "Parkour", emoji: "🏃", color: "bg-slate-500/10 text-slate-400 border-slate-500/20", videos: [] },
-  { id: "religioso", label: "Religioso", emoji: "🙏", color: "bg-blue-300/10 text-blue-300 border-blue-300/20", videos: [] },
-  { id: "diy", label: "Faça Você Mesmo (DIY)", emoji: "🔨", color: "bg-brown-500/10 text-amber-700 border-amber-700/20", videos: [] },
+  { id: "cortes-youtube",     label: "Cortes (YouTube)",                emoji: "✂️",  color: "bg-red-500/10 text-red-500 border-red-500/20" },
+  { id: "animes",             label: "Animes",                          emoji: "⛩️",  color: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
+  { id: "desenhos",           label: "Desenhos",                        emoji: "🎨",  color: "bg-pink-500/10 text-pink-500 border-pink-500/20" },
+  { id: "cortes-arma-pesada", label: "Cortes Arma Pesada",              emoji: "🔫",  color: "bg-gray-500/10 text-gray-400 border-gray-500/20" },
+  { id: "master-chef",        label: "Master Chef",                     emoji: "👨‍🍳",  color: "bg-orange-500/10 text-orange-500 border-orange-500/20" },
+  { id: "consertos",          label: "Consertos e Manutenção",          emoji: "🔧",  color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" },
+  { id: "cortes-guerra",      label: "Cortes Guerra e Tática",          emoji: "🪖",  color: "bg-green-800/10 text-green-600 border-green-800/20" },
+  { id: "asmr",               label: "ASMR",                            emoji: "🎧",  color: "bg-violet-500/10 text-violet-400 border-violet-500/20" },
+  { id: "ladrao",             label: "Ladrão (Se deu mal)",             emoji: "🚔",  color: "bg-red-800/10 text-red-400 border-red-800/20" },
+  { id: "cortes-filme-serie", label: "Cortes Filme e Série",            emoji: "🎬",  color: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
+  { id: "espinhas",           label: "Espinhas",                        emoji: "😬",  color: "bg-yellow-800/10 text-yellow-600 border-yellow-800/20" },
+  { id: "failed",             label: "Failed (Erros Engraçados)",       emoji: "😂",  color: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+  { id: "limpeza",            label: "Limpeza",                         emoji: "🧹",  color: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" },
+  { id: "ia",                 label: "IA (Criado com IA)",              emoji: "🤖",  color: "bg-blue-600/10 text-blue-400 border-blue-600/20" },
+  { id: "insetos",            label: "Insetos",                         emoji: "🐛",  color: "bg-lime-500/10 text-lime-500 border-lime-500/20" },
+  { id: "casas-luxo",         label: "Casas de Luxo",                   emoji: "🏰",  color: "bg-yellow-400/10 text-yellow-400 border-yellow-400/20" },
+  { id: "old-money",          label: "Old Money",                       emoji: "💎",  color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
+  { id: "saude",              label: "Saúde",                           emoji: "❤️‍🩹",  color: "bg-rose-500/10 text-rose-500 border-rose-500/20" },
+  { id: "cortes-desenhos",    label: "Cortes de Desenhos",              emoji: "🖼️",  color: "bg-pink-600/10 text-pink-400 border-pink-600/20" },
+  { id: "cortes-talk-show",   label: "Cortes Talk Show / Entrevistas",  emoji: "🎙️",  color: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" },
+  { id: "family-guy",         label: "Cortes de Family Guy",            emoji: "🐶",  color: "bg-yellow-600/10 text-yellow-500 border-yellow-600/20" },
+  { id: "rick-morty",         label: "Cortes de Rick and Morty",        emoji: "🛸",  color: "bg-green-500/10 text-green-400 border-green-500/20" },
+  { id: "lifestyle",          label: "Lifestyle",                       emoji: "✨",  color: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20" },
+  { id: "gringos",            label: "Gringos",                         emoji: "🌎",  color: "bg-blue-400/10 text-blue-400 border-blue-400/20" },
+  { id: "aviacao",            label: "Aviação",                         emoji: "✈️",  color: "bg-sky-500/10 text-sky-500 border-sky-500/20" },
+  { id: "motivacional",       label: "Motivacional",                    emoji: "🔥",  color: "bg-orange-600/10 text-orange-400 border-orange-600/20" },
+  { id: "futebol",            label: "Futebol",                         emoji: "⚽",  color: "bg-green-600/10 text-green-500 border-green-600/20" },
+  { id: "pablo-marcal",       label: "Pablo Marçal",                    emoji: "🎤",  color: "bg-purple-600/10 text-purple-400 border-purple-600/20" },
+  { id: "ruyter",             label: "Ruyter",                          emoji: "🎯",  color: "bg-red-600/10 text-red-400 border-red-600/20" },
+  { id: "satisfatorios",      label: "Satisfatórios",                   emoji: "😌",  color: "bg-teal-500/10 text-teal-400 border-teal-500/20" },
+  { id: "memes",              label: "Memes",                           emoji: "💀",  color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20" },
+  { id: "comedia",            label: "Comédia",                         emoji: "🤣",  color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" },
+  { id: "achadinhos",         label: "Achadinhos (Produtos / Shopee)",  emoji: "🛍️",  color: "bg-orange-400/10 text-orange-400 border-orange-400/20" },
+  { id: "academia-fitness",   label: "Academia / Fitness",              emoji: "💪",  color: "bg-green-500/10 text-green-500 border-green-500/20" },
+  { id: "animais-selvagens",  label: "Animais Selvagens",               emoji: "🦁",  color: "bg-amber-600/10 text-amber-500 border-amber-600/20" },
+  { id: "travel-vibes",       label: "Travel Vibes (Viagens)",          emoji: "🌴",  color: "bg-cyan-600/10 text-cyan-400 border-cyan-600/20" },
+  { id: "parkour",            label: "Parkour",                         emoji: "🏃",  color: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
+  { id: "religioso",          label: "Religioso",                       emoji: "🙏",  color: "bg-blue-300/10 text-blue-300 border-blue-300/20" },
+  { id: "diy",                label: "Faça Você Mesmo (DIY)",           emoji: "🔨",  color: "bg-amber-700/10 text-amber-700 border-amber-700/20" },
 ];
-
-/* ── Card de vídeo ── */
-const VideoCard = ({ video }: { video: VideoItem }) => (
-  <Card className="overflow-hidden group hover:shadow-lg transition-all duration-300 border-border/60">
-    <div className="aspect-video bg-muted relative overflow-hidden">
-      {video.thumbnail ? (
-        <img
-          src={video.thumbnail}
-          alt={video.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          loading="lazy"
-        />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-accent/20">
-          <Play className="h-10 w-10 text-primary/40" />
-        </div>
-      )}
-      <Badge
-        variant="outline"
-        className="absolute top-2 left-2 text-xs backdrop-blur-sm bg-black/40 border-white/20 text-white"
-      >
-        {video.platform}
-      </Badge>
-    </div>
-    <CardContent className="p-4 space-y-3">
-      <p className="text-sm font-semibold line-clamp-2">{video.title}</p>
-      <a href={video.url} target="_blank" rel="noopener noreferrer">
-        <Button size="sm" className="w-full gradient-viral gap-2">
-          <Download className="h-4 w-4" />
-          Baixar & Remodelar
-        </Button>
-      </a>
-    </CardContent>
-  </Card>
-);
 
 /* ── Aviso de uso ── */
 const UsageWarning = () => (
@@ -105,8 +66,9 @@ const UsageWarning = () => (
     <div className="space-y-1.5">
       <p className="text-sm font-bold text-yellow-500">⚠️ Importante — Leia antes de usar</p>
       <p className="text-sm text-muted-foreground leading-relaxed">
-        Os vídeos disponibilizados aqui são de uso exclusivo para <strong className="text-foreground">remodelação criativa</strong>.
-        <strong className="text-foreground"> NÃO copie e cole o conteúdo diretamente</strong> em suas redes sociais.
+        Os vídeos disponibilizados aqui são de uso exclusivo para{" "}
+        <strong className="text-foreground">remodelação criativa</strong>.{" "}
+        <strong className="text-foreground">NÃO copie e cole o conteúdo diretamente</strong> em suas redes sociais.
         Faça uma versão própria: mude o contexto, adicione sua voz, estilo e edição pessoal.
         Plagiar conteúdo pode resultar em remoção de vídeos, penalizações de conta e problemas de direitos autorais.
         <br />
@@ -116,19 +78,72 @@ const UsageWarning = () => (
   </div>
 );
 
-/* ── Placeholder de categoria vazia ── */
-const EmptyCategoryPlaceholder = () => (
-  <div className="col-span-full flex flex-col items-center justify-center py-10 text-center space-y-2">
-    <RefreshCw className="h-8 w-8 text-muted-foreground/30" />
-    <p className="text-sm text-muted-foreground">Vídeos desta categoria em breve!</p>
-  </div>
-);
+/* ── Card de categoria com embed do Drive ── */
+const CategoryCard = ({ cat }: { cat: VideoCategory }) => {
+  const [open, setOpen] = useState(false);
+
+  const folderId = cat.driveId ?? DRIVE_ROOT_FOLDER_ID;
+  const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
+  const embedUrl = `https://drive.google.com/embeddedfolderview?id=${folderId}#list`;
+
+  return (
+    <Card className="border-border/60 overflow-hidden">
+      {/* Cabeçalho clicável */}
+      <button
+        className="w-full flex items-center justify-between p-4 hover:bg-muted/40 transition-colors text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-xl">{cat.emoji}</span>
+          <span className="font-semibold text-sm">{cat.label}</span>
+          <Badge variant="outline" className={`text-xs ${cat.color}`}>
+            {cat.driveId ? "Disponível" : "Em breve"}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href={folderUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-muted-foreground hover:text-primary transition-colors"
+            title="Abrir no Drive"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+          {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </button>
+
+      {/* Embed expansível */}
+      {open && (
+        <div className="border-t border-border/40">
+          <iframe
+            src={embedUrl}
+            className="w-full h-80 border-0"
+            title={`Drive — ${cat.label}`}
+            allow="autoplay"
+            loading="lazy"
+          />
+          <div className="p-3 flex justify-end border-t border-border/40">
+            <a href={folderUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="outline" className="gap-2 text-xs">
+                <FolderOpen className="h-3.5 w-3.5" />
+                Abrir pasta completa no Drive
+              </Button>
+            </a>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+};
 
 /* ── Página principal ── */
 const ViralVideos = () => {
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen overflow-y-auto">
-      <div className="p-4 md:p-6 max-w-6xl mx-auto w-full space-y-8">
+      <div className="p-4 md:p-6 max-w-5xl mx-auto w-full space-y-6">
 
         {/* Header */}
         <div className="space-y-1">
@@ -137,11 +152,11 @@ const ViralVideos = () => {
             Vídeos Virais Prontos 🎬
           </h1>
           <p className="text-sm text-muted-foreground">
-            Vídeos virais prontos para você baixar, remodelar e postar — engaje mais e monetize.
+            Baixe, remodelar e poste — engaje mais e monetize com conteúdo viral.
           </p>
         </div>
 
-        {/* Aviso de uso */}
+        {/* Aviso */}
         <UsageWarning />
 
         {/* Como usar */}
@@ -151,32 +166,31 @@ const ViralVideos = () => {
               <Sparkles className="h-4 w-4 text-primary" />
               Como usar para monetizar
             </h2>
-            <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-              <li><strong className="text-foreground">Baixe</strong> o vídeo da categoria do seu nicho.</li>
-              <li><strong className="text-foreground">Remodelar</strong> — edite, adicione sua voz, legendas, contexto e identidade visual.</li>
-              <li><strong className="text-foreground">Poste</strong> nas suas redes com uma descrição própria e hashtags relevantes.</li>
-              <li><strong className="text-foreground">Monitore</strong> o engajamento e repita o processo com os que performam melhor.</li>
+            <ol className="space-y-1.5 text-sm text-muted-foreground list-decimal list-inside">
+              <li><strong className="text-foreground">Escolha</strong> a categoria do seu nicho e clique para expandir.</li>
+              <li><strong className="text-foreground">Baixe</strong> o vídeo direto pelo Google Drive.</li>
+              <li><strong className="text-foreground">Remodelar</strong> — edite, adicione sua voz, legendas e identidade visual.</li>
+              <li><strong className="text-foreground">Poste</strong> nas suas redes com descrição própria e hashtags relevantes.</li>
             </ol>
           </CardContent>
         </Card>
 
-        {/* Categorias de vídeos */}
-        {categories.map((cat) => (
-          <section key={cat.id} className="space-y-4">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-bold font-display">{cat.emoji} {cat.label}</h2>
-              <Badge variant="outline" className={`text-xs ${cat.color}`}>
-                {cat.videos.length} vídeo{cat.videos.length !== 1 ? "s" : ""}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {cat.videos.length > 0
-                ? cat.videos.map((v) => <VideoCard key={v.id} video={v} />)
-                : <EmptyCategoryPlaceholder />
-              }
-            </div>
-          </section>
-        ))}
+        {/* Botão acesso geral */}
+        <div className="flex justify-end">
+          <a href={DRIVE_ROOT_URL} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" className="gap-2 text-xs">
+              <FolderOpen className="h-3.5 w-3.5" />
+              Ver todas as pastas no Drive
+            </Button>
+          </a>
+        </div>
+
+        {/* Categorias */}
+        <div className="space-y-3">
+          {categories.map((cat) => (
+            <CategoryCard key={cat.id} cat={cat} />
+          ))}
+        </div>
 
       </div>
     </div>
