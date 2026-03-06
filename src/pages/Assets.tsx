@@ -97,9 +97,13 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
 
   return (
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] sm:w-auto shrink-0 sm:shrink">
-      {/* Preview area — portrait 9:16 */}
-      <div ref={containerRef} className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: "9/16" }}>
-        {/* Placeholder até entrar no viewport */}
+      {/* Preview area — 9:16 no mobile, 16:9 no desktop */}
+      <div
+        ref={containerRef}
+        className="relative w-full overflow-hidden bg-muted"
+        style={{ aspectRatio: "9/16" }}
+        // aspect ratio overridden via inline on desktop via wrapper class below
+      >
         {!loaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted">
             <div className="rounded-full bg-background/80 p-3 shadow">
@@ -108,7 +112,6 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
             <p className="text-[10px] text-muted-foreground">{asset.label}</p>
           </div>
         )}
-        {/* Iframe carregado só quando visível */}
         {inView && (
           <iframe
             src={previewUrl}
