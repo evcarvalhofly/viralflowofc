@@ -23,7 +23,7 @@ const categories: VideoCategory[] = [
   { id: "cortes-arma-pesada", label: "Ação Policial",                   emoji: "🔫",  color: "bg-gray-500/10 text-gray-400 border-gray-500/20",          driveId: "1lG0FrZoYfTCXTIyb-nQ6KBUhzXGHElVh" },
   { id: "master-chef",        label: "Master Chef",                     emoji: "👨‍🍳",  color: "bg-orange-500/10 text-orange-500 border-orange-500/20",    driveId: "1Rg78f4lGB1T6-y27A5aXfWYfUKxebx4-" },
   { id: "consertos",          label: "Consertos e Marcenaria",          emoji: "🔧",  color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",    driveId: "11bbQ6te8hcGnlvjzafLVpNUv2PmdvtLJ" },
-  { id: "cortes-guerra",      label: "Operação Fronteira",              emoji: "🪖",  color: "bg-green-800/10 text-green-600 border-green-800/20",       driveId: "1Kbl0iW86J3iFZUI_ONX6rL8dYml4KCnB" },
+  { id: "cortes-guerra",      label: "Operação Fronteira",              emoji: "⚔️",  color: "bg-green-800/10 text-green-600 border-green-800/20",       driveId: "1Kbl0iW86J3iFZUI_ONX6rL8dYml4KCnB" },
   { id: "asmr",               label: "ASMR",                            emoji: "🎧",  color: "bg-violet-500/10 text-violet-400 border-violet-500/20",    driveId: "14-TnFOShvnJrRrp5K_5YSfvHgRduEwe9" },
   { id: "ladrao",             label: "Ladrão (Se deu mal)",             emoji: "🚔",  color: "bg-red-800/10 text-red-400 border-red-800/20",             driveId: "1fCGlNqimDsEl9RrkyjGn95gHyss8xXkY" },
   { id: "cortes-filme-serie", label: "Filmes e Séries",                 emoji: "🎬",  color: "bg-blue-500/10 text-blue-500 border-blue-500/20",          driveId: "1BlfLs0zwTPUZnmNbvARdBycLcO0VP0sW" },
