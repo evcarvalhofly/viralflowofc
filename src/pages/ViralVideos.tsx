@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { AlertTriangle, Sparkles, Film, FolderOpen, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertTriangle, Sparkles, Film, FolderOpen, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,11 +13,11 @@ type VideoCategory = {
   label: string;
   emoji: string;
   color: string;
-  driveId?: string; // ID da subpasta no Drive (preencher depois)
+  driveId?: string;
 };
 
 const categories: VideoCategory[] = [
-  { id: "cortes-youtube",     label: "Cortes (YouTube)",                emoji: "✂️",  color: "bg-red-500/10 text-red-500 border-red-500/20" },
+  { id: "cortes-youtube",     label: "Cortes (YouTube)",                emoji: "✂️",  color: "bg-red-500/10 text-red-500 border-red-500/20",       driveId: "1z8a_WKgtnEUzMRx-u0xghakxLPVOqYND" },
   { id: "animes",             label: "Animes",                          emoji: "⛩️",  color: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
   { id: "desenhos",           label: "Desenhos",                        emoji: "🎨",  color: "bg-pink-500/10 text-pink-500 border-pink-500/20" },
   { id: "cortes-arma-pesada", label: "Cortes Arma Pesada",              emoji: "🔫",  color: "bg-gray-500/10 text-gray-400 border-gray-500/20" },
@@ -78,21 +77,15 @@ const UsageWarning = () => (
   </div>
 );
 
-/* ── Card de categoria com embed do Drive ── */
+/* ── Card de categoria ── */
 const CategoryCard = ({ cat }: { cat: VideoCategory }) => {
-  const [open, setOpen] = useState(false);
-
-  const folderId = cat.driveId ?? DRIVE_ROOT_FOLDER_ID;
-  const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
-  const embedUrl = `https://drive.google.com/embeddedfolderview?id=${folderId}#list`;
+  const folderUrl = cat.driveId
+    ? `https://drive.google.com/drive/folders/${cat.driveId}`
+    : null;
 
   return (
     <Card className="border-border/60 overflow-hidden">
-      {/* Cabeçalho clicável */}
-      <button
-        className="w-full flex items-center justify-between p-4 hover:bg-muted/40 transition-colors text-left"
-        onClick={() => setOpen((v) => !v)}
-      >
+      <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
           <span className="text-xl">{cat.emoji}</span>
           <span className="font-semibold text-sm">{cat.label}</span>
@@ -100,41 +93,21 @@ const CategoryCard = ({ cat }: { cat: VideoCategory }) => {
             {cat.driveId ? "Disponível" : "Em breve"}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={folderUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-muted-foreground hover:text-primary transition-colors"
-            title="Abrir no Drive"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-          {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-        </div>
-      </button>
 
-      {/* Embed expansível */}
-      {open && (
-        <div className="border-t border-border/40">
-          <iframe
-            src={embedUrl}
-            className="w-full h-80 border-0"
-            title={`Drive — ${cat.label}`}
-            allow="autoplay"
-            loading="lazy"
-          />
-          <div className="p-3 flex justify-end border-t border-border/40">
-            <a href={folderUrl} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" variant="outline" className="gap-2 text-xs">
-                <FolderOpen className="h-3.5 w-3.5" />
-                Abrir pasta completa no Drive
-              </Button>
-            </a>
-          </div>
-        </div>
-      )}
+        {folderUrl ? (
+          <a href={folderUrl} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-2 text-xs">
+              <FolderOpen className="h-3.5 w-3.5" />
+              Ver vídeos
+            </Button>
+          </a>
+        ) : (
+          <Button size="sm" variant="outline" className="gap-2 text-xs" disabled>
+            <FolderOpen className="h-3.5 w-3.5" />
+            Em breve
+          </Button>
+        )}
+      </div>
     </Card>
   );
 };
@@ -167,7 +140,7 @@ const ViralVideos = () => {
               Como usar para monetizar
             </h2>
             <ol className="space-y-1.5 text-sm text-muted-foreground list-decimal list-inside">
-              <li><strong className="text-foreground">Escolha</strong> a categoria do seu nicho e clique para expandir.</li>
+              <li><strong className="text-foreground">Escolha</strong> a categoria do seu nicho e clique em "Ver vídeos".</li>
               <li><strong className="text-foreground">Baixe</strong> o vídeo direto pelo Google Drive.</li>
               <li><strong className="text-foreground">Remodelar</strong> — edite, adicione sua voz, legendas e identidade visual.</li>
               <li><strong className="text-foreground">Poste</strong> nas suas redes com descrição própria e hashtags relevantes.</li>
@@ -179,7 +152,7 @@ const ViralVideos = () => {
         <div className="flex justify-end">
           <a href={DRIVE_ROOT_URL} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="sm" className="gap-2 text-xs">
-              <FolderOpen className="h-3.5 w-3.5" />
+              <ExternalLink className="h-3.5 w-3.5" />
               Ver todas as pastas no Drive
             </Button>
           </a>
