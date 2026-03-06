@@ -184,17 +184,17 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
   const thumbnail   = thumbUrl(asset.driveId);
 
-  /* bg-001 a bg-015 são portrait — escala menor no mobile (130%×125%)
-     bg-016+ são landscape — zoom grande no mobile (320%×320%) para preencher 9:16 */
+  /* bg-001 a bg-015 são portrait — zoom 300% no mobile para preencher 9:16 sem bordas pretas
+     bg-016+ são landscape — zoom 320% no mobile */
   const mobileIframeStyle = asset.landscape
     ? { width: "320%", height: "320%" }
-    : { width: "130%", height: "125%" };
+    : { width: "300%", height: "300%" };
 
   const Preview = ({ mobile }: { mobile?: boolean }) => (
     <div
       className="relative w-full overflow-hidden bg-black cursor-pointer group"
       style={{ aspectRatio: mobile ? "9/16" : "16/9" }}
-      onClick={() => !playing && setPlaying(true)}
+      onClick={(e) => { e.stopPropagation(); if (!playing) setPlaying(true); }}
     >
       {playing ? (
         <iframe
@@ -372,9 +372,9 @@ const Assets = () => {
               {filtered.length > 0 ? (
                 <>
                   {/* Mobile: horizontal carousel */}
-                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 snap-x snap-mandatory scrollbar-none sm:hidden">
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none sm:hidden">
                     {filtered.map((asset) => (
-                      <div key={asset.id} className="snap-start shrink-0 flex items-start pt-1">
+                      <div key={asset.id} className="shrink-0 flex items-start pt-1">
                         <AssetCard asset={asset} />
                       </div>
                     ))}
