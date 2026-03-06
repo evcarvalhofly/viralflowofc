@@ -89,8 +89,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
       <div className="relative w-full overflow-hidden" style={{ aspectRatio: "9/16" }}>
         <iframe
           src={previewUrl}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{ width: "180%", height: "180%" }}
+          className="absolute inset-0 w-full h-full"
           allow="autoplay"
           title={asset.label}
         />
