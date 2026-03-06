@@ -87,11 +87,11 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[52vw] sm:w-auto shrink-0 sm:shrink">
       {/* Preview area — portrait 9:16, iframe always loaded */}
       <div className="relative w-full overflow-hidden" style={{ aspectRatio: "9/16" }}>
-        {/* Iframe maior em todas as direções para cortar bordas pretas e centralizar */}
+        {/* Iframe maior para cortar bordas pretas do player do Drive em todos os lados */}
         <iframe
           src={previewUrl}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{ width: "112%", height: "112%" }}
+          style={{ width: "130%", height: "125%" }}
           allow="autoplay"
           title={asset.label}
         />
