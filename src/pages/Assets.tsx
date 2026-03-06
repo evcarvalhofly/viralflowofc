@@ -84,7 +84,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[52vw] sm:w-auto shrink-0 sm:shrink">
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] sm:w-auto shrink-0 sm:shrink">
       {/* Preview area — portrait 9:16, iframe always loaded */}
       <div className="relative w-full overflow-hidden" style={{ aspectRatio: "9/16" }}>
         {/* Iframe maior para cortar bordas pretas do player do Drive em todos os lados */}
