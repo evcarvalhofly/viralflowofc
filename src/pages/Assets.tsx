@@ -242,13 +242,24 @@ const Assets = () => {
               {filtered.length} fundo{filtered.length !== 1 ? "s" : ""} disponíve{filtered.length !== 1 ? "is" : "l"}
             </p>
 
-            {/* Grid — 2 cols mobile, 3 tablet, 4 desktop, 5 xl */}
+            {/* Horizontal carousel on mobile, grid on desktop */}
             {filtered.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
-                {filtered.map((asset) => (
-                  <AssetCard key={asset.id} asset={asset} />
-                ))}
-              </div>
+              <>
+                {/* Mobile: horizontal scroll */}
+                <div className="flex gap-3 overflow-x-auto pb-3 -mx-3 px-3 snap-x snap-mandatory scrollbar-none sm:hidden">
+                  {filtered.map((asset) => (
+                    <div key={asset.id} className="snap-start">
+                      <AssetCard asset={asset} />
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop: grid */}
+                <div className="hidden sm:grid sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {filtered.map((asset) => (
+                    <AssetCard key={asset.id} asset={asset} />
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="text-center py-16 text-muted-foreground text-sm">
                 Nenhum fundo encontrado para "{search}"
