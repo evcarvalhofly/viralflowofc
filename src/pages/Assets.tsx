@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Film, Music, Sparkles, Layers, Download,
-  ExternalLink, Search
+  ExternalLink, Search, Play
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,22 +78,47 @@ const backgrounds: Asset[] = [
 
 /* ── Asset Card ── */
 const AssetCard = ({ asset }: { asset: Asset }) => {
+  const [loaded, setLoaded] = useState(false);
+  const [inView, setInView] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const previewUrl  = `https://drive.google.com/file/d/${asset.driveId}/preview`;
   const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setInView(true); },
+      { rootMargin: "100px", threshold: 0.1 }
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] sm:w-auto shrink-0 sm:shrink">
-      {/* Preview area — portrait 9:16, iframe always loaded */}
-      <div className="relative w-full overflow-hidden" style={{ aspectRatio: "9/16" }}>
-        {/* Iframe maior para cortar bordas pretas do player do Drive em todos os lados */}
-        <iframe
-          src={previewUrl}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{ width: "130%", height: "125%" }}
-          allow="autoplay"
-          title={asset.label}
-        />
+      {/* Preview area — portrait 9:16 */}
+      <div ref={containerRef} className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: "9/16" }}>
+        {/* Placeholder até entrar no viewport */}
+        {!loaded && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted">
+            <div className="rounded-full bg-background/80 p-3 shadow">
+              <Play className="h-5 w-5 text-primary fill-primary" />
+            </div>
+            <p className="text-[10px] text-muted-foreground">{asset.label}</p>
+          </div>
+        )}
+        {/* Iframe carregado só quando visível */}
+        {inView && (
+          <iframe
+            src={previewUrl}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ width: "130%", height: "125%", opacity: loaded ? 1 : 0, transition: "opacity 0.3s" }}
+            allow="autoplay"
+            title={asset.label}
+            onLoad={() => setLoaded(true)}
+          />
+        )}
       </div>
 
       {/* Info + actions */}
