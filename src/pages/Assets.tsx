@@ -87,9 +87,11 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[70vw] sm:w-auto shrink-0 sm:shrink">
       {/* Preview area — portrait 9:16, iframe always loaded */}
       <div className="relative w-full overflow-hidden" style={{ aspectRatio: "9/16" }}>
+        {/* Iframe ligeiramente maior para cortar as bordas pretas do player e centralizar o vídeo */}
         <iframe
           src={previewUrl}
-          className="absolute inset-0 w-full h-full"
+          className="absolute left-1/2 -translate-x-1/2"
+          style={{ width: "100%", height: "115%", top: "-7.5%" }}
           allow="autoplay"
           title={asset.label}
         />
