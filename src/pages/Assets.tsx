@@ -178,7 +178,7 @@ const Assets = () => {
 
   return (
     /* Outer: full height, NO scroll */
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Fixed top section — header + tabs + search */}
       <div className="flex-shrink-0 px-3 pt-3 pb-2 md:px-6 md:pt-6 max-w-6xl mx-auto w-full space-y-3">
 
