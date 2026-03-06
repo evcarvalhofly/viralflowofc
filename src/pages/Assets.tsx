@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import {
   Film, Music, Sparkles, Layers, Download,
   ExternalLink, Search, Play
@@ -77,117 +77,122 @@ const backgrounds: Asset[] = [
 ];
 
 /* ── Asset Card ── */
+/* Thumbnail URL do Google Drive — imagem estática, carrega instantâneo */
+const thumbUrl = (id: string) =>
+  `https://drive.google.com/thumbnail?id=${id}&sz=w640`;
+
 const AssetCard = ({ asset }: { asset: Asset }) => {
-  const [loaded, setLoaded] = useState(false);
-  const [inView, setInView] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [playing, setPlaying] = useState(false);
 
   const previewUrl  = `https://drive.google.com/file/d/${asset.driveId}/preview`;
   const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
+  const thumbnail   = thumbUrl(asset.driveId);
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setInView(true); },
-      { rootMargin: "100px", threshold: 0.1 }
-    );
-    if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  /* ── Mobile card (9:16 portrait) ── */
-  const mobileCard = (
-    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] shrink-0">
-      <div ref={containerRef} className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: "9/16" }}>
-        {!loaded && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted">
-            <div className="rounded-full bg-background/80 p-3 shadow">
+  /* ── Preview area reutilizável ── */
+  const PreviewMobile = () => (
+    <div
+      className="relative w-full overflow-hidden bg-muted cursor-pointer group"
+      style={{ aspectRatio: "9/16" }}
+      onClick={() => !playing && setPlaying(true)}
+    >
+      {playing ? (
+        <iframe
+          src={previewUrl}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{ width: "130%", height: "125%" }}
+          allow="autoplay"
+          title={asset.label}
+        />
+      ) : (
+        <>
+          <img
+            src={thumbnail}
+            alt={asset.label}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+            <div className="rounded-full bg-background/90 p-3 shadow-lg">
               <Play className="h-5 w-5 text-primary fill-primary" />
             </div>
-            <p className="text-[10px] text-muted-foreground">{asset.label}</p>
           </div>
-        )}
-        {inView && (
-          <iframe
-            src={previewUrl}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{ width: "130%", height: "125%", opacity: loaded ? 1 : 0, transition: "opacity 0.3s" }}
-            allow="autoplay"
-            title={asset.label}
-            onLoad={() => setLoaded(true)}
-          />
-        )}
-      </div>
-      <div className="p-3 flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-1">
-          <p className="text-xs font-semibold truncate">{asset.label}</p>
-          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
-        </div>
-        <div className="grid grid-cols-2 gap-1.5">
-          <a href={viewUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="outline" className="w-full gap-1 text-[11px] h-8 px-2">
-              <ExternalLink className="h-3 w-3" />Abrir
-            </Button>
-          </a>
-          <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" className="w-full gap-1 text-[11px] h-8 px-2">
-              <Download className="h-3 w-3" />Baixar
-            </Button>
-          </a>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 
-  /* ── Desktop card — iframe em tamanho natural, sem corte ── */
-  const desktopCard = (
-    <div ref={containerRef} className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col">
-      {/* Placeholder */}
-      {!loaded && (
-        <div className="flex flex-col items-center justify-center gap-2 bg-muted" style={{ aspectRatio: "16/9" }}>
-          <div className="rounded-full bg-background/80 p-3 shadow">
-            <Play className="h-6 w-6 text-primary fill-primary" />
-          </div>
-          <p className="text-[11px] text-muted-foreground">{asset.label}</p>
-        </div>
-      )}
-      {/* Iframe full — tamanho original sem crop */}
-      {inView && (
+  const PreviewDesktop = () => (
+    <div
+      className="relative w-full overflow-hidden bg-muted cursor-pointer group"
+      style={{ aspectRatio: "16/9" }}
+      onClick={() => !playing && setPlaying(true)}
+    >
+      {playing ? (
         <iframe
           src={previewUrl}
-          className="w-full"
-          style={{ aspectRatio: "16/9", display: loaded ? "block" : "none" }}
+          className="w-full h-full"
           allow="autoplay"
           title={asset.label}
-          onLoad={() => setLoaded(true)}
         />
+      ) : (
+        <>
+          <img
+            src={thumbnail}
+            alt={asset.label}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+            <div className="rounded-full bg-background/90 p-4 shadow-lg">
+              <Play className="h-6 w-6 text-primary fill-primary" />
+            </div>
+          </div>
+        </>
       )}
-      {/* Info + actions */}
-      <div className="p-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <p className="text-sm font-semibold truncate">{asset.label}</p>
-          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
-        </div>
-        <div className="flex gap-1.5 shrink-0">
-          <a href={viewUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="outline" className="gap-1 text-[11px] h-8 px-3">
-              <ExternalLink className="h-3 w-3" />Abrir
-            </Button>
-          </a>
-          <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" className="gap-1 text-[11px] h-8 px-3">
-              <Download className="h-3 w-3" />Baixar
-            </Button>
-          </a>
-        </div>
-      </div>
+    </div>
+  );
+
+  const Actions = ({ compact }: { compact?: boolean }) => (
+    <div className={cn("flex gap-1.5", compact ? "" : "flex-col")}>
+      <a href={viewUrl} target="_blank" rel="noopener noreferrer" className={compact ? "" : "w-full"}>
+        <Button size="sm" variant="outline" className={cn("gap-1 text-[11px] h-8 px-2", compact ? "" : "w-full")}>
+          <ExternalLink className="h-3 w-3" />Abrir
+        </Button>
+      </a>
+      <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className={compact ? "" : "w-full"}>
+        <Button size="sm" className={cn("gap-1 text-[11px] h-8 px-2", compact ? "" : "w-full")}>
+          <Download className="h-3 w-3" />Baixar
+        </Button>
+      </a>
     </div>
   );
 
   return (
     <>
-      <div className="sm:hidden">{mobileCard}</div>
-      <div className="hidden sm:block">{desktopCard}</div>
+      {/* ── Mobile card (9:16) ── */}
+      <div className="sm:hidden rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] shrink-0">
+        <PreviewMobile />
+        <div className="p-3 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-xs font-semibold truncate">{asset.label}</p>
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Actions />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Desktop card (16:9) ── */}
+      <div className="hidden sm:flex rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex-col">
+        <PreviewDesktop />
+        <div className="p-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-sm font-semibold truncate">{asset.label}</p>
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
+          </div>
+          <Actions compact />
+        </div>
+      </div>
     </>
   );
 };
