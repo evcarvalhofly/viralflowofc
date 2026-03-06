@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
-  Film, Music, Sparkles, Layers, Play, Download,
-  Pause, ExternalLink, Search
+  Film, Music, Sparkles, Layers, Download,
+  ExternalLink, Search
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,46 +79,21 @@ const backgrounds: Asset[] = [
 
 /* ── Asset Card ── */
 const AssetCard = ({ asset }: { asset: Asset }) => {
-  const [playing, setPlaying] = useState(false);
-
-  const previewUrl = `https://drive.google.com/file/d/${asset.driveId}/preview`;
-  const viewUrl    = `https://drive.google.com/file/d/${asset.driveId}/view`;
+  const previewUrl  = `https://drive.google.com/file/d/${asset.driveId}/preview`;
+  const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
   return (
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[70vw] sm:w-auto shrink-0 sm:shrink">
-      {/* Preview area — portrait 9:16 */}
+      {/* Preview area — portrait 9:16, iframe always loaded */}
       <div className="relative w-full overflow-hidden" style={{ aspectRatio: "9/16" }}>
-        {playing ? (
-          <>
-            {/* Oversized iframe centered to crop edges and center the video */}
-            <iframe
-              src={previewUrl}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-              style={{ width: "180%", height: "180%" }}
-              allow="autoplay"
-              title={asset.label}
-            />
-            <button
-              onClick={() => setPlaying(false)}
-              className="absolute top-2 right-2 z-10 bg-black/60 hover:bg-black/80 rounded-full p-1.5 text-white transition-colors"
-            >
-              <Pause className="h-3.5 w-3.5" />
-            </button>
-          </>
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-muted/20">
-            <span className="text-4xl">{asset.emoji}</span>
-            <p className="text-xs text-muted-foreground font-medium px-2 text-center">{asset.label}</p>
-            <button
-              onClick={() => setPlaying(true)}
-              className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-4 py-2 text-xs font-semibold transition-colors shadow-md"
-            >
-              <Play className="h-3 w-3 fill-primary-foreground" />
-              Preview
-            </button>
-          </div>
-        )}
+        <iframe
+          src={previewUrl}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{ width: "180%", height: "180%" }}
+          allow="autoplay"
+          title={asset.label}
+        />
       </div>
 
       {/* Info + actions */}
