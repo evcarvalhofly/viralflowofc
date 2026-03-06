@@ -293,35 +293,37 @@ const Assets = () => {
       </div>
 
       {/* Scrollable content area */}
-      <div className="flex-1 min-h-0 max-w-6xl mx-auto w-full px-3 md:px-6 pb-3 md:pb-6">
-        {currentTab.comingSoon ? (
-          <ComingSoon tab={currentTab} />
-        ) : activeTab === "backgrounds" ? (
-          <>
-            {filtered.length > 0 ? (
-              <>
-                {/* Mobile: horizontal carousel — ONLY this scrolls */}
-                <div className="flex gap-3 overflow-x-auto h-full pb-2 -mx-3 px-3 snap-x snap-mandatory scrollbar-none sm:hidden">
-                  {filtered.map((asset) => (
-                    <div key={asset.id} className="snap-start h-full flex items-start pt-1">
-                      <AssetCard asset={asset} />
-                    </div>
-                  ))}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-6xl mx-auto w-full px-3 md:px-6 pb-6">
+          {currentTab.comingSoon ? (
+            <ComingSoon tab={currentTab} />
+          ) : activeTab === "backgrounds" ? (
+            <>
+              {filtered.length > 0 ? (
+                <>
+                  {/* Mobile: horizontal carousel */}
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 snap-x snap-mandatory scrollbar-none sm:hidden">
+                    {filtered.map((asset) => (
+                      <div key={asset.id} className="snap-start shrink-0 flex items-start pt-1">
+                        <AssetCard asset={asset} />
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop: scrollable grid */}
+                  <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+                    {filtered.map((asset) => (
+                      <AssetCard key={asset.id} asset={asset} />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+                  Nenhum fundo encontrado para "{search}"
                 </div>
-                {/* Desktop: vertical scrollable grid — 2 colunas com preview 16:9 */}
-                <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto h-full pb-4">
-                  {filtered.map((asset) => (
-                    <AssetCard key={asset.id} asset={asset} />
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                Nenhum fundo encontrado para "{search}"
-              </div>
-            )}
-          </>
-        ) : null}
+              )}
+            </>
+          ) : null}
+        </div>
       </div>
     </div>
   );
