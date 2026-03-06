@@ -200,7 +200,7 @@ const VideoDriveFrame = ({
         <iframe
           src={previewUrl}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-0"
-          style={{ width: "177.78%", height: "100%" }}
+          style={{ width: "190%", height: "100%" }}
           allow="autoplay"
           title={title}
         />
