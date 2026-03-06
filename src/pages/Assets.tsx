@@ -95,15 +95,10 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
     return () => observer.disconnect();
   }, []);
 
-  return (
-    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] sm:w-auto shrink-0 sm:shrink">
-      {/* Preview area — 9:16 no mobile, 16:9 no desktop */}
-      <div
-        ref={containerRef}
-        className="relative w-full overflow-hidden bg-muted"
-        style={{ aspectRatio: "9/16" }}
-        // aspect ratio overridden via inline on desktop via wrapper class below
-      >
+  /* ── Mobile card (9:16 portrait) ── */
+  const mobileCard = (
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] shrink-0">
+      <div ref={containerRef} className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: "9/16" }}>
         {!loaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted">
             <div className="rounded-full bg-background/80 p-3 shadow">
@@ -123,30 +118,78 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
           />
         )}
       </div>
-
-      {/* Info + actions */}
-      <div className="p-3 flex flex-col gap-2 flex-1">
+      <div className="p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-1">
           <p className="text-xs font-semibold truncate">{asset.label}</p>
           <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
         </div>
-
         <div className="grid grid-cols-2 gap-1.5">
           <a href={viewUrl} target="_blank" rel="noopener noreferrer">
             <Button size="sm" variant="outline" className="w-full gap-1 text-[11px] h-8 px-2">
-              <ExternalLink className="h-3 w-3" />
-              Abrir
+              <ExternalLink className="h-3 w-3" />Abrir
             </Button>
           </a>
           <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
             <Button size="sm" className="w-full gap-1 text-[11px] h-8 px-2">
-              <Download className="h-3 w-3" />
-              Baixar
+              <Download className="h-3 w-3" />Baixar
             </Button>
           </a>
         </div>
       </div>
     </div>
+  );
+
+  /* ── Desktop card (16:9 landscape, layout em linha) ── */
+  const desktopCard = (
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col">
+      {/* Preview 16:9 */}
+      <div ref={containerRef} className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: "16/9" }}>
+        {!loaded && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted">
+            <div className="rounded-full bg-background/80 p-3 shadow">
+              <Play className="h-6 w-6 text-primary fill-primary" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">{asset.label}</p>
+          </div>
+        )}
+        {inView && (
+          <iframe
+            src={previewUrl}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ width: "120%", height: "120%", opacity: loaded ? 1 : 0, transition: "opacity 0.3s" }}
+            allow="autoplay"
+            title={asset.label}
+            onLoad={() => setLoaded(true)}
+          />
+        )}
+      </div>
+      {/* Info + actions */}
+      <div className="p-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="text-sm font-semibold truncate">{asset.label}</p>
+          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
+        </div>
+        <div className="flex gap-1.5 shrink-0">
+          <a href={viewUrl} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-1 text-[11px] h-8 px-3">
+              <ExternalLink className="h-3 w-3" />Abrir
+            </Button>
+          </a>
+          <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" className="gap-1 text-[11px] h-8 px-3">
+              <Download className="h-3 w-3" />Baixar
+            </Button>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <div className="sm:hidden">{mobileCard}</div>
+      <div className="hidden sm:block">{desktopCard}</div>
+    </>
   );
 };
 
