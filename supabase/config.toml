@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.generate-plan]
 verify_jwt = false
+
+[functions.analyze-viral-video]
+verify_jwt = false
