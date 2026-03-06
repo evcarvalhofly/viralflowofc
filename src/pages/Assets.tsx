@@ -239,7 +239,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
   return (
     <>
       {/* ── Mobile card (9:16) ── */}
-      <div className="sm:hidden rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] shrink-0">
+      <div className="sm:hidden rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[44vw] shrink-0">
         <Preview mobile />
         <div className="p-3 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-1">
