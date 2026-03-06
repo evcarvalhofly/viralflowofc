@@ -374,7 +374,7 @@ const Assets = () => {
                   {/* Mobile: horizontal carousel */}
                   <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none sm:hidden">
                     {filtered.map((asset) => (
-                      <div key={asset.id} className="snap-start shrink-0 flex items-start pt-1">
+                      <div key={asset.id} className="shrink-0 flex items-start pt-1">
                         <AssetCard asset={asset} />
                       </div>
                     ))}
