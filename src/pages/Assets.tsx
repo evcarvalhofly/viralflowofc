@@ -122,7 +122,11 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
         <iframe
           src={previewUrl}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{ width: "130%", height: "125%" }}
+          style={
+            mobile
+              ? { width: "130%", height: "125%" }
+              : { height: "130%", aspectRatio: "9/16" }
+          }
           allow="autoplay"
           title={asset.label}
         />
