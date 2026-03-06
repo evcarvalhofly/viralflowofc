@@ -16,6 +16,8 @@ type Asset = {
   category: string;
   driveId: string;
   tags?: string[];
+  /** true = vídeo landscape (bg-016+): usa zoom 320% no mobile para preencher o card 9:16 */
+  landscape?: boolean;
 };
 
 /* ── Tabs ── */
