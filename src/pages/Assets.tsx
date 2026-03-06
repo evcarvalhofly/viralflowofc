@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import {
   Film, Music, Sparkles, Layers, Download,
   ExternalLink, Search, Play
