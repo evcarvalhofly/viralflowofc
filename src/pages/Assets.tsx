@@ -111,11 +111,11 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
   const thumbnail   = thumbUrl(asset.driveId);
 
-  /* ── Preview area reutilizável ── */
-  const PreviewMobile = () => (
+  /* ── Preview unificado — mesmo comportamento para mobile e desktop ── */
+  const Preview = ({ mobile }: { mobile?: boolean }) => (
     <div
-      className="relative w-full overflow-hidden bg-muted cursor-pointer group"
-      style={{ aspectRatio: "9/16" }}
+      className="relative w-full overflow-hidden bg-black cursor-pointer group"
+      style={{ aspectRatio: mobile ? "9/16" : "16/9" }}
       onClick={() => !playing && setPlaying(true)}
     >
       {playing ? (
@@ -131,41 +131,11 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
           <img
             src={thumbnail}
             alt={asset.label}
-            className="w-full h-full object-cover"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full object-cover"
           />
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
-            <div className="rounded-full bg-background/90 p-3 shadow-lg">
-              <Play className="h-5 w-5 text-primary fill-primary" />
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-
-  const PreviewDesktop = () => (
-    <div
-      className="relative w-full overflow-hidden bg-black cursor-pointer group"
-      style={{ aspectRatio: "16/9" }}
-      onClick={() => !playing && setPlaying(true)}
-    >
-      {playing ? (
-        <iframe
-          src={previewUrl}
-          className="w-full h-full"
-          allow="autoplay"
-          title={asset.label}
-        />
-      ) : (
-        <>
-          <img
-            src={thumbnail}
-            alt={asset.label}
-            className="w-full h-full object-contain"
-          />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
-            <div className="rounded-full bg-background/90 p-4 shadow-lg">
-              <Play className="h-6 w-6 text-primary fill-primary" />
+            <div className={`rounded-full bg-background/90 shadow-lg ${mobile ? "p-3" : "p-4"}`}>
+              <Play className={`text-primary fill-primary ${mobile ? "h-5 w-5" : "h-6 w-6"}`} />
             </div>
           </div>
         </>
@@ -192,7 +162,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
     <>
       {/* ── Mobile card (9:16) ── */}
       <div className="sm:hidden rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[62vw] shrink-0">
-        <PreviewMobile />
+        <Preview mobile />
         <div className="p-3 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-1">
             <p className="text-xs font-semibold truncate">{asset.label}</p>
@@ -206,7 +176,7 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
 
       {/* ── Desktop card (16:9) ── */}
       <div className="hidden sm:block rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200">
-        <PreviewDesktop />
+        <Preview />
         <div className="p-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <p className="text-sm font-semibold truncate">{asset.label}</p>
