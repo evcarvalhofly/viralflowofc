@@ -621,7 +621,7 @@ const Assets = () => {
               <span className="hidden sm:inline">{tab.label}</span>
               <span className="sm:hidden">{mobileLabel[tab.id] ?? tab.label}</span>
               {tab.id === "favorites" && favorites.size > 0 && activeTab !== "favorites" && (
-                <span className="bg-red-500 text-white text-[9px] rounded-full px-1.5 py-0 min-w-4 text-center leading-4 font-bold">
+                <span className="bg-destructive text-destructive-foreground text-[9px] rounded-full px-1.5 py-0 min-w-4 text-center leading-4 font-bold">
                   {favorites.size}
                 </span>
               )}
