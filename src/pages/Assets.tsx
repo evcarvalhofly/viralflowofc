@@ -1503,6 +1503,11 @@ const Assets = () => {
           </p>
         </div>
 
+        {/* Tip notice */}
+        <p className="text-xs text-muted-foreground bg-muted/40 border border-border/50 rounded-lg px-3 py-2">
+          💡 Para visualizar melhor o arquivo clique em <span className="font-semibold text-foreground">"Abrir"</span>
+        </p>
+
         {/* Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none">
           {tabs.map((tab) => (
