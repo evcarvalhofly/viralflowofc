@@ -66,6 +66,12 @@ const tabs: Tab[] = [
     description: "Overlays e efeitos visuais para turbinar seus vídeos",
   },
   {
+    id: "emojis-animados",
+    label: "Emojis Animados",
+    icon: <span className="text-sm leading-none">😜</span>,
+    description: "Emojis animados para turbinar seus vídeos",
+  },
+  {
     id: "favorites",
     label: "Favoritos",
     icon: <Heart className="h-4 w-4" />,
@@ -245,64 +251,61 @@ const backgrounds: Asset[] = [
 /* ── Overlay groups ── */
 type OverlayGroup = { id: string; label: string; emoji: string; assets: Asset[] };
 
+/* ── Emojis Animados ── */
+const emojiAssets: Asset[] = [
+  { id: "ov-emj-001", label: "Emoji Animado 1",  emoji: "😜", category: "Emoji", driveId: "1sq9ZQ72B5rXXSKCcFW5_RwYzB9hIQSwV", tags: ["emoji", "animado"] },
+  { id: "ov-emj-002", label: "Emoji Animado 2",  emoji: "😜", category: "Emoji", driveId: "1FPvMRn8Ikq8j7ygArAeGaNASJ7dHpWel", tags: ["emoji", "animado"] },
+  { id: "ov-emj-003", label: "Emoji Animado 3",  emoji: "😜", category: "Emoji", driveId: "1AROtxBX7DV09DPITFufTpv9eF2eCzKSX", tags: ["emoji", "animado"] },
+  { id: "ov-emj-004", label: "Emoji Animado 4",  emoji: "😜", category: "Emoji", driveId: "1vcCuoq1VFiS8kBE4-IEB9U1EzBPMyh_F", tags: ["emoji", "animado"] },
+  { id: "ov-emj-005", label: "Emoji Animado 5",  emoji: "😜", category: "Emoji", driveId: "1xh-fpVsLNgQmEU0V5Ae9mrtDEZmibwJI", tags: ["emoji", "animado"] },
+  { id: "ov-emj-006", label: "Emoji Animado 6",  emoji: "😜", category: "Emoji", driveId: "1ck-3qH2ZpUWd9Dd5Dg0E5u8OtACasEb_", tags: ["emoji", "animado"] },
+  { id: "ov-emj-007", label: "Emoji Animado 7",  emoji: "😜", category: "Emoji", driveId: "1Aj6EpApLGJ7plgwqnw9sU0nRLfVyWoL3", tags: ["emoji", "animado"] },
+  { id: "ov-emj-008", label: "Emoji Animado 8",  emoji: "😜", category: "Emoji", driveId: "1tyOfDAYr7CpJGM709rVOhLvuCwcuDzub", tags: ["emoji", "animado"] },
+  { id: "ov-emj-009", label: "Emoji Animado 9",  emoji: "😜", category: "Emoji", driveId: "10ufAfHzRxY2YW4jw5Bc6B1inWiJVQfpx", tags: ["emoji", "animado"] },
+  { id: "ov-emj-010", label: "Emoji Animado 10", emoji: "😜", category: "Emoji", driveId: "134I5Ts8T6e4zHXch1B3rlkJbe8t3Vlep", tags: ["emoji", "animado"] },
+  { id: "ov-emj-011", label: "Emoji Animado 11", emoji: "😜", category: "Emoji", driveId: "1fExW5bLBXTwa6DcnOD9qK2_kAd2b_zHV", tags: ["emoji", "animado"] },
+  { id: "ov-emj-012", label: "Emoji Animado 12", emoji: "😜", category: "Emoji", driveId: "1e6IMqROIW-gSXvMt0SR0QawTxwX7Hn0a", tags: ["emoji", "animado"] },
+  { id: "ov-emj-013", label: "Emoji Animado 13", emoji: "😜", category: "Emoji", driveId: "1R7UVimOiQDJhvY_BvqEJ_O10ZQDGQN7v", tags: ["emoji", "animado"] },
+  { id: "ov-emj-014", label: "Emoji Animado 14", emoji: "😜", category: "Emoji", driveId: "1ytWZVUCoM7FJ2kg4VoN7h1JnBhPc1Pf4", tags: ["emoji", "animado"] },
+  { id: "ov-emj-015", label: "Emoji Animado 15", emoji: "😜", category: "Emoji", driveId: "194V-X895xYwCb_uKNEjL2m3RBLXPufNN", tags: ["emoji", "animado"] },
+  { id: "ov-emj-016", label: "Emoji Animado 16", emoji: "😜", category: "Emoji", driveId: "1JJYv56fk4HYiyfsiThI4HeKC6zg8IiUA", tags: ["emoji", "animado"] },
+  { id: "ov-emj-017", label: "Emoji Animado 17", emoji: "😜", category: "Emoji", driveId: "1NbYLHkA0zTMnREUkt-MWTvgTLirI9bVy", tags: ["emoji", "animado"] },
+  { id: "ov-emj-018", label: "Emoji Animado 18", emoji: "😜", category: "Emoji", driveId: "1i2Vg0wNdLBoTO3LHxFF2D5RLb81GgsRw", tags: ["emoji", "animado"] },
+  { id: "ov-emj-019", label: "Emoji Animado 19", emoji: "😜", category: "Emoji", driveId: "1YKfNgM2hoMtFpS76M1CwyjupqlRNK9bX", tags: ["emoji", "animado"] },
+  { id: "ov-emj-020", label: "Emoji Animado 20", emoji: "😜", category: "Emoji", driveId: "14XqhobNcFKhpIXbqYzIr8PRa4Tks4l1t", tags: ["emoji", "animado"] },
+  { id: "ov-emj-021", label: "Emoji Animado 21", emoji: "😜", category: "Emoji", driveId: "1YavcXYIQ_z7d67CJ5psglZc2JnhoXjLq", tags: ["emoji", "animado"] },
+  { id: "ov-emj-022", label: "Emoji Animado 22", emoji: "😜", category: "Emoji", driveId: "1ebbHzW_Q5XjOVXb6NlJH6g-xADWpb6Ca", tags: ["emoji", "animado"] },
+  { id: "ov-emj-023", label: "Emoji Animado 23", emoji: "😜", category: "Emoji", driveId: "1Ed2CocFmKDCMLjF-uHJgU0Pp1ruxk42m", tags: ["emoji", "animado"] },
+  { id: "ov-emj-024", label: "Emoji Animado 24", emoji: "😜", category: "Emoji", driveId: "132BvE3WprnHDcEN4K47rsOIEES8pmykD", tags: ["emoji", "animado"] },
+  { id: "ov-emj-025", label: "Emoji Animado 25", emoji: "😜", category: "Emoji", driveId: "1sU-vdRlODPtSY3BJU6zXuvQYMzgNr0o7", tags: ["emoji", "animado"] },
+  { id: "ov-emj-026", label: "Emoji Animado 26", emoji: "😜", category: "Emoji", driveId: "18KRlfDJtyXXFspheR8j8cVRFTwRYjMd8", tags: ["emoji", "animado"] },
+  { id: "ov-emj-027", label: "Emoji Animado 27", emoji: "😜", category: "Emoji", driveId: "1D0lZLR7lERHUROTMXHWLKMogwVczWHfw", tags: ["emoji", "animado"] },
+  { id: "ov-emj-028", label: "Emoji Animado 28", emoji: "😜", category: "Emoji", driveId: "1jAjQKa0WPvJCWK7_TILjNVfACLDGSK5e", tags: ["emoji", "animado"] },
+  { id: "ov-emj-029", label: "Emoji Animado 29", emoji: "😜", category: "Emoji", driveId: "1auJYBi0-2OvlLU0dfvetsC4LC53sgbxD", tags: ["emoji", "animado"] },
+  { id: "ov-emj-030", label: "Emoji Animado 30", emoji: "😜", category: "Emoji", driveId: "1Vw-4CHHyUxMCt0hBivQceTOAAbw3T_k-", tags: ["emoji", "animado"] },
+  { id: "ov-emj-031", label: "Emoji Animado 31", emoji: "😜", category: "Emoji", driveId: "1MX-ac_GsWij2_ERY4YAqdEyJisuRz8Bi", tags: ["emoji", "animado"] },
+  { id: "ov-emj-032", label: "Emoji Animado 32", emoji: "😜", category: "Emoji", driveId: "1it0r-ImmB3Y_FCkZKc82vNJ1bIFczIjl", tags: ["emoji", "animado"] },
+  { id: "ov-emj-033", label: "Emoji Animado 33", emoji: "😜", category: "Emoji", driveId: "1PsFMuwFXKnrgK3EqxZfeGe9gYZDbkxlf", tags: ["emoji", "animado"] },
+  { id: "ov-emj-034", label: "Emoji Animado 34", emoji: "😜", category: "Emoji", driveId: "1dNgyQW-qUlG2xF06z7XargkW2Cfkz1PH", tags: ["emoji", "animado"] },
+  { id: "ov-emj-035", label: "Emoji Animado 35", emoji: "😜", category: "Emoji", driveId: "128GxDSKYUQS1tG8M3lOJk7JrNVptp2Kd", tags: ["emoji", "animado"] },
+  { id: "ov-emj-036", label: "Emoji Animado 36", emoji: "😜", category: "Emoji", driveId: "1JDKeGvJs4Wyz8bwe-9Nfo3Y10gZGTD_L", tags: ["emoji", "animado"] },
+  { id: "ov-emj-037", label: "Emoji Animado 37", emoji: "😜", category: "Emoji", driveId: "1k4YJpQUYt2x7CPMk7rC0tdtfAKYRgqPP", tags: ["emoji", "animado"] },
+  { id: "ov-emj-038", label: "Emoji Animado 38", emoji: "😜", category: "Emoji", driveId: "1r5FQR6FxtxiMjIm9UBQNMnd0_Hqzk1ec", tags: ["emoji", "animado"] },
+  { id: "ov-emj-039", label: "Emoji Animado 39", emoji: "😜", category: "Emoji", driveId: "1uxt_5FwzayuST1QYtPbiX_t4XuozxVZ6", tags: ["emoji", "animado"] },
+  { id: "ov-emj-040", label: "Emoji Animado 40", emoji: "😜", category: "Emoji", driveId: "1ysWVsSDEDIlCKmTvHTWnx-y9ZJL7CpAo", tags: ["emoji", "animado"] },
+  { id: "ov-emj-041", label: "Emoji Animado 41", emoji: "😜", category: "Emoji", driveId: "1e29ZczVnxIW5pjxw6Xkf08v5mhDjuuuh", tags: ["emoji", "animado"] },
+  { id: "ov-emj-042", label: "Emoji Animado 42", emoji: "😜", category: "Emoji", driveId: "1aWyq3f42HVvuPKg5HsAh4rzjOyC19Gry", tags: ["emoji", "animado"] },
+  { id: "ov-emj-043", label: "Emoji Animado 43", emoji: "😜", category: "Emoji", driveId: "1D2sl-tJtTQEHscTB3FXmpmCVg_dJhU_i", tags: ["emoji", "animado"] },
+  { id: "ov-emj-044", label: "Emoji Animado 44", emoji: "😜", category: "Emoji", driveId: "1V3xjhckEJGpZZCQNe79aoLife4e6A_8G", tags: ["emoji", "animado"] },
+  { id: "ov-emj-045", label: "Emoji Animado 45", emoji: "😜", category: "Emoji", driveId: "1TWmxwhCKkPjkxCSBQXNUlUfWFhfZNv2O", tags: ["emoji", "animado"] },
+  { id: "ov-emj-046", label: "Emoji Animado 46", emoji: "😜", category: "Emoji", driveId: "1af2qebTp54p1RMf2O6RUJekvKWv8ROMe", tags: ["emoji", "animado"] },
+  { id: "ov-emj-047", label: "Emoji Animado 47", emoji: "😜", category: "Emoji", driveId: "1BtCiVm96-l9nNld9UBnYjtyfBt9UMGKj", tags: ["emoji", "animado"] },
+  { id: "ov-emj-048", label: "Emoji Animado 48", emoji: "😜", category: "Emoji", driveId: "1YGdiu_wzuq0bjIqY_8bLq5jBBX70O5zz", tags: ["emoji", "animado"] },
+  { id: "ov-emj-049", label: "Emoji Animado 49", emoji: "😜", category: "Emoji", driveId: "1U9LouwdUS9L0SJ_ZTRqR1eUw7P8GBSmq", tags: ["emoji", "animado"] },
+  { id: "ov-emj-050", label: "Emoji Animado 50", emoji: "😜", category: "Emoji", driveId: "1Z5sK81YkbCdWxSgObfvfPk4epzeHxL6v", tags: ["emoji", "animado"] },
+];
+
 const overlayGroups: OverlayGroup[] = [
-  {
-    id: "emojis-animados",
-    label: "Emojis Animados",
-    emoji: "😜",
-    assets: [
-      { id: "ov-emj-001", label: "Emoji Animado 1",  emoji: "😜", category: "Overlay", driveId: "1sq9ZQ72B5rXXSKCcFW5_RwYzB9hIQSwV", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-002", label: "Emoji Animado 2",  emoji: "😜", category: "Overlay", driveId: "1FPvMRn8Ikq8j7ygArAeGaNASJ7dHpWel", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-003", label: "Emoji Animado 3",  emoji: "😜", category: "Overlay", driveId: "1AROtxBX7DV09DPITFufTpv9eF2eCzKSX", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-004", label: "Emoji Animado 4",  emoji: "😜", category: "Overlay", driveId: "1vcCuoq1VFiS8kBE4-IEB9U1EzBPMyh_F", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-005", label: "Emoji Animado 5",  emoji: "😜", category: "Overlay", driveId: "1xh-fpVsLNgQmEU0V5Ae9mrtDEZmibwJI", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-006", label: "Emoji Animado 6",  emoji: "😜", category: "Overlay", driveId: "1ck-3qH2ZpUWd9Dd5Dg0E5u8OtACasEb_", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-007", label: "Emoji Animado 7",  emoji: "😜", category: "Overlay", driveId: "1Aj6EpApLGJ7plgwqnw9sU0nRLfVyWoL3", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-008", label: "Emoji Animado 8",  emoji: "😜", category: "Overlay", driveId: "1tyOfDAYr7CpJGM709rVOhLvuCwcuDzub", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-009", label: "Emoji Animado 9",  emoji: "😜", category: "Overlay", driveId: "10ufAfHzRxY2YW4jw5Bc6B1inWiJVQfpx", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-010", label: "Emoji Animado 10", emoji: "😜", category: "Overlay", driveId: "134I5Ts8T6e4zHXch1B3rlkJbe8t3Vlep", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-011", label: "Emoji Animado 11", emoji: "😜", category: "Overlay", driveId: "1fExW5bLBXTwa6DcnOD9qK2_kAd2b_zHV", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-012", label: "Emoji Animado 12", emoji: "😜", category: "Overlay", driveId: "1e6IMqROIW-gSXvMt0SR0QawTxwX7Hn0a", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-013", label: "Emoji Animado 13", emoji: "😜", category: "Overlay", driveId: "1R7UVimOiQDJhvY_BvqEJ_O10ZQDGQN7v", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-014", label: "Emoji Animado 14", emoji: "😜", category: "Overlay", driveId: "1ytWZVUCoM7FJ2kg4VoN7h1JnBhPc1Pf4", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-015", label: "Emoji Animado 15", emoji: "😜", category: "Overlay", driveId: "194V-X895xYwCb_uKNEjL2m3RBLXPufNN", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-016", label: "Emoji Animado 16", emoji: "😜", category: "Overlay", driveId: "1JJYv56fk4HYiyfsiThI4HeKC6zg8IiUA", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-017", label: "Emoji Animado 17", emoji: "😜", category: "Overlay", driveId: "1NbYLHkA0zTMnREUkt-MWTvgTLirI9bVy", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-018", label: "Emoji Animado 18", emoji: "😜", category: "Overlay", driveId: "1i2Vg0wNdLBoTO3LHxFF2D5RLb81GgsRw", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-019", label: "Emoji Animado 19", emoji: "😜", category: "Overlay", driveId: "1YKfNgM2hoMtFpS76M1CwyjupqlRNK9bX", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-020", label: "Emoji Animado 20", emoji: "😜", category: "Overlay", driveId: "14XqhobNcFKhpIXbqYzIr8PRa4Tks4l1t", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-021", label: "Emoji Animado 21", emoji: "😜", category: "Overlay", driveId: "1YavcXYIQ_z7d67CJ5psglZc2JnhoXjLq", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-022", label: "Emoji Animado 22", emoji: "😜", category: "Overlay", driveId: "1ebbHzW_Q5XjOVXb6NlJH6g-xADWpb6Ca", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-023", label: "Emoji Animado 23", emoji: "😜", category: "Overlay", driveId: "1Ed2CocFmKDCMLjF-uHJgU0Pp1ruxk42m", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-024", label: "Emoji Animado 24", emoji: "😜", category: "Overlay", driveId: "132BvE3WprnHDcEN4K47rsOIEES8pmykD", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-025", label: "Emoji Animado 25", emoji: "😜", category: "Overlay", driveId: "1sU-vdRlODPtSY3BJU6zXuvQYMzgNr0o7", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-026", label: "Emoji Animado 26", emoji: "😜", category: "Overlay", driveId: "18KRlfDJtyXXFspheR8j8cVRFTwRYjMd8", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-027", label: "Emoji Animado 27", emoji: "😜", category: "Overlay", driveId: "1D0lZLR7lERHUROTMXHWLKMogwVczWHfw", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-028", label: "Emoji Animado 28", emoji: "😜", category: "Overlay", driveId: "1jAjQKa0WPvJCWK7_TILjNVfACLDGSK5e", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-029", label: "Emoji Animado 29", emoji: "😜", category: "Overlay", driveId: "1auJYBi0-2OvlLU0dfvetsC4LC53sgbxD", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-030", label: "Emoji Animado 30", emoji: "😜", category: "Overlay", driveId: "1Vw-4CHHyUxMCt0hBivQceTOAAbw3T_k-", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-031", label: "Emoji Animado 31", emoji: "😜", category: "Overlay", driveId: "1MX-ac_GsWij2_ERY4YAqdEyJisuRz8Bi", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-032", label: "Emoji Animado 32", emoji: "😜", category: "Overlay", driveId: "1it0r-ImmB3Y_FCkZKc82vNJ1bIFczIjl", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-033", label: "Emoji Animado 33", emoji: "😜", category: "Overlay", driveId: "1PsFMuwFXKnrgK3EqxZfeGe9gYZDbkxlf", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-034", label: "Emoji Animado 34", emoji: "😜", category: "Overlay", driveId: "1dNgyQW-qUlG2xF06z7XargkW2Cfkz1PH", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-035", label: "Emoji Animado 35", emoji: "😜", category: "Overlay", driveId: "128GxDSKYUQS1tG8M3lOJk7JrNVptp2Kd", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-036", label: "Emoji Animado 36", emoji: "😜", category: "Overlay", driveId: "1JDKeGvJs4Wyz8bwe-9Nfo3Y10gZGTD_L", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-037", label: "Emoji Animado 37", emoji: "😜", category: "Overlay", driveId: "1k4YJpQUYt2x7CPMk7rC0tdtfAKYRgqPP", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-038", label: "Emoji Animado 38", emoji: "😜", category: "Overlay", driveId: "1r5FQR6FxtxiMjIm9UBQNMnd0_Hqzk1ec", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-039", label: "Emoji Animado 39", emoji: "😜", category: "Overlay", driveId: "1uxt_5FwzayuST1QYtPbiX_t4XuozxVZ6", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-040", label: "Emoji Animado 40", emoji: "😜", category: "Overlay", driveId: "1ysWVsSDEDIlCKmTvHTWnx-y9ZJL7CpAo", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-041", label: "Emoji Animado 41", emoji: "😜", category: "Overlay", driveId: "1e29ZczVnxIW5pjxw6Xkf08v5mhDjuuuh", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-042", label: "Emoji Animado 42", emoji: "😜", category: "Overlay", driveId: "1aWyq3f42HVvuPKg5HsAh4rzjOyC19Gry", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-043", label: "Emoji Animado 43", emoji: "😜", category: "Overlay", driveId: "1D2sl-tJtTQEHscTB3FXmpmCVg_dJhU_i", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-044", label: "Emoji Animado 44", emoji: "😜", category: "Overlay", driveId: "1V3xjhckEJGpZZCQNe79aoLife4e6A_8G", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-045", label: "Emoji Animado 45", emoji: "😜", category: "Overlay", driveId: "1TWmxwhCKkPjkxCSBQXNUlUfWFhfZNv2O", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-046", label: "Emoji Animado 46", emoji: "😜", category: "Overlay", driveId: "1af2qebTp54p1RMf2O6RUJekvKWv8ROMe", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-047", label: "Emoji Animado 47", emoji: "😜", category: "Overlay", driveId: "1BtCiVm96-l9nNld9UBnYjtyfBt9UMGKj", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-048", label: "Emoji Animado 48", emoji: "😜", category: "Overlay", driveId: "1YGdiu_wzuq0bjIqY_8bLq5jBBX70O5zz", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-049", label: "Emoji Animado 49", emoji: "😜", category: "Overlay", driveId: "1U9LouwdUS9L0SJ_ZTRqR1eUw7P8GBSmq", tags: ["overlay", "emoji", "animado"] },
-      { id: "ov-emj-050", label: "Emoji Animado 50", emoji: "😜", category: "Overlay", driveId: "1Z5sK81YkbCdWxSgObfvfPk4epzeHxL6v", tags: ["overlay", "emoji", "animado"] },
-    ],
-  },
   {
     id: "cinema",
     label: "Cinema",
@@ -707,12 +710,13 @@ const Assets = () => {
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
   const allGroups = [...overlayGroups, ...effectGroups];
-  const allAssets = [...backgrounds, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
+  const allAssets = [...backgrounds, ...emojiAssets, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
   const favoriteAssets = allAssets.filter((a) => favorites.has(a.id));
 
   const mobileLabel: Record<string, string> = {
     backgrounds: "Fundos",
     "overlays-effects": "Overlays",
+    "emojis-animados": "Emojis",
     favorites: "Favs",
     sfx: "Sons",
   };
@@ -781,6 +785,13 @@ const Assets = () => {
             />
           ) : activeTab === "overlays-effects" ? (
             allGroups.map((g) => <GroupCarousel key={g.id} group={g} favorites={favorites} onToggleFav={toggleFav} />)
+          ) : activeTab === "emojis-animados" ? (
+            <AssetGrid
+              assets={emojiAssets}
+              favorites={favorites}
+              onToggleFav={toggleFav}
+              emptyMsg="Nenhum emoji disponível"
+            />
           ) : activeTab === "favorites" ? (
             favoriteAssets.length > 0 ? (
               <AssetGrid
