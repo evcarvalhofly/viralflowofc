@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Film, Music, Sparkles, Layers, Download,
-  ExternalLink, Play, Heart
+  ExternalLink, Play, Heart, Square
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,7 +82,6 @@ const tabs: Tab[] = [
     label: "Efeitos Sonoros",
     icon: <Music className="h-4 w-4" />,
     description: "Sons e efeitos para turbinar seus vídeos",
-    comingSoon: true,
   },
 ];
 
@@ -1405,6 +1404,90 @@ const AssetCard = ({
   );
 };
 
+/* ── SFX Assets ── */
+type SfxAsset = {
+  id: string;
+  label: string;
+  driveId: string;
+};
+
+const sfxAssets: SfxAsset[] = [
+  { id: "sfx-001", label: "Cinematic 05", driveId: "1Avz8n7TXbm8zShrNoYidX9pyAeMYPdpU" },
+];
+
+/* ── Sound Card ── */
+const SoundCard = ({
+  asset,
+  isFav,
+  onToggleFav,
+}: {
+  asset: SfxAsset;
+  isFav: boolean;
+  onToggleFav: (id: string) => void;
+}) => {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const streamUrl  = `https://drive.google.com/uc?export=open&id=${asset.driveId}`;
+  const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
+
+  const togglePlay = () => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio(streamUrl);
+      audioRef.current.onended = () => setPlaying(false);
+    }
+    if (playing) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setPlaying(false);
+    } else {
+      audioRef.current.play();
+      setPlaying(true);
+    }
+  };
+
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card hover:border-primary/50 transition-all duration-200 flex flex-col items-center gap-3 p-4 w-[44vw] sm:w-40 md:w-44 shrink-0 relative">
+      {/* Fav button */}
+      <button
+        onClick={() => onToggleFav(asset.id)}
+        className="absolute top-2 right-2 z-10 rounded-full bg-background/80 backdrop-blur-sm p-1.5 shadow transition-all hover:scale-110"
+        aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+      >
+        <Heart className={cn("h-3.5 w-3.5 transition-colors", isFav ? "fill-destructive text-destructive" : "text-muted-foreground")} />
+      </button>
+
+      {/* Play button */}
+      <button
+        onClick={togglePlay}
+        className={cn(
+          "w-14 h-14 rounded-full flex items-center justify-center shadow-md transition-all duration-200",
+          playing
+            ? "bg-destructive text-destructive-foreground scale-95"
+            : "bg-primary text-primary-foreground hover:scale-110"
+        )}
+        aria-label={playing ? "Parar" : "Reproduzir"}
+      >
+        {playing ? <Square className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
+      </button>
+
+      {/* Label */}
+      <p className="text-xs font-semibold text-center leading-tight line-clamp-2">{asset.label}</p>
+
+      {/* Badge */}
+      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">SFX</Badge>
+
+      {/* Download */}
+      <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="w-full">
+        <Button size="sm" className="gap-1 text-[11px] h-8 px-2 w-full">
+          <Download className="h-3 w-3" />Baixar
+        </Button>
+      </a>
+    </div>
+  );
+};
+
 /* ── Coming Soon panel ── */
 const ComingSoon = ({ tab }: { tab: Tab }) => (
   <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -1575,6 +1658,19 @@ const Assets = () => {
                 <p className="text-xs text-muted-foreground/60">Toque no ❤️ em qualquer asset para salvar aqui.</p>
               </div>
             )
+          ) : activeTab === "sfx" ? (
+            <div>
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none sm:hidden">
+                {sfxAssets.map((asset) => (
+                  <SoundCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={toggleFav} />
+                ))}
+              </div>
+              <div className="hidden sm:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {sfxAssets.map((asset) => (
+                  <SoundCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={toggleFav} />
+                ))}
+              </div>
+            </div>
           ) : null}
         </div>
       </div>
