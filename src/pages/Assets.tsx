@@ -1,12 +1,35 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Film, Music, Sparkles, Layers, Download,
-  ExternalLink, Search, Play
+  ExternalLink, Play, Heart
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+const FAVORITES_KEY = "viralflow_asset_favorites";
+
+function useFavorites() {
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(FAVORITES_KEY);
+      return new Set(stored ? JSON.parse(stored) : []);
+    } catch { return new Set(); }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+  }, [favorites]);
+
+  const toggle = (id: string) =>
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  return { favorites, toggle };
+}
 
 /* ── Types ── */
 type Asset = {
@@ -41,6 +64,12 @@ const tabs: Tab[] = [
     label: "Overlays + Efeitos",
     icon: <Sparkles className="h-4 w-4" />,
     description: "Overlays e efeitos visuais para turbinar seus vídeos",
+  },
+  {
+    id: "favorites",
+    label: "Favoritos",
+    icon: <Heart className="h-4 w-4" />,
+    description: "Seus assets favoritos salvos",
   },
   {
     id: "sfx",
@@ -423,42 +452,55 @@ const VideoDriveFrame = ({
 };
 
 /* ── Asset Card ── */
-const AssetCard = ({ asset }: { asset: Asset }) => {
+const AssetCard = ({
+  asset,
+  isFav,
+  onToggleFav,
+}: {
+  asset: Asset;
+  isFav: boolean;
+  onToggleFav: (id: string) => void;
+}) => {
   const [playing, setPlaying] = useState(false);
-
   const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
-  const Actions = ({ compact }: { compact?: boolean }) => (
-    <div className={cn("flex gap-1.5", compact ? "" : "flex-col")}>
-      <a href={viewUrl} target="_blank" rel="noopener noreferrer" className={compact ? "" : "w-full"}>
-        <Button size="sm" variant="outline" className={cn("gap-1 text-[11px] h-8 px-2", compact ? "" : "w-full")}>
-          <ExternalLink className="h-3 w-3" />Abrir
-        </Button>
-      </a>
-      <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className={compact ? "" : "w-full"}>
-        <Button size="sm" className={cn("gap-1 text-[11px] h-8 px-2", compact ? "" : "w-full")}>
-          <Download className="h-3 w-3" />Baixar
-        </Button>
-      </a>
-    </div>
-  );
-
   return (
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[44vw] sm:w-full shrink-0">
-      <VideoDriveFrame
-        driveId={asset.driveId}
-        title={asset.label}
-        playing={playing}
-        onPlay={() => setPlaying(true)}
-      />
+      {/* Video frame with fav button overlay */}
+      <div className="relative">
+        <VideoDriveFrame
+          driveId={asset.driveId}
+          title={asset.label}
+          playing={playing}
+          onPlay={() => setPlaying(true)}
+        />
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFav(asset.id); }}
+          className="absolute top-2 right-2 z-10 rounded-full bg-background/80 backdrop-blur-sm p-1.5 shadow transition-all hover:scale-110"
+          aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+        >
+          <Heart
+            className={cn("h-3.5 w-3.5 transition-colors", isFav ? "fill-destructive text-destructive" : "text-muted-foreground")}
+          />
+        </button>
+      </div>
       <div className="p-2 sm:p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-1">
           <p className="text-xs font-semibold truncate">{asset.label}</p>
           <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
         </div>
-        <div className="grid grid-cols-2 gap-1.5">
-          <Actions />
+        <div className="flex gap-1.5">
+          <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button size="sm" variant="outline" className="gap-1 text-[11px] h-8 px-2 w-full">
+              <ExternalLink className="h-3 w-3" />Abrir
+            </Button>
+          </a>
+          <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button size="sm" className="gap-1 text-[11px] h-8 px-2 w-full">
+              <Download className="h-3 w-3" />Baixar
+            </Button>
+          </a>
         </div>
       </div>
     </div>
@@ -478,44 +520,47 @@ const ComingSoon = ({ tab }: { tab: Tab }) => (
 );
 
 /* ── Asset Grid ── */
-const AssetGrid = ({ assets, emptyMsg }: { assets: Asset[]; emptyMsg: string }) => (
+const AssetGrid = ({
+  assets, emptyMsg, favorites, onToggleFav,
+}: {
+  assets: Asset[]; emptyMsg: string; favorites: Set<string>; onToggleFav: (id: string) => void;
+}) => (
   assets.length > 0 ? (
     <>
-      {/* Mobile: horizontal carousel */}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none sm:hidden">
         {assets.map((asset) => (
           <div key={asset.id} className="shrink-0 flex items-start pt-1">
-            <AssetCard asset={asset} />
+            <AssetCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
           </div>
         ))}
       </div>
-      {/* Desktop: 9:16 grid */}
       <div className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pt-1">
         {assets.map((asset) => (
-          <AssetCard key={asset.id} asset={asset} />
+          <AssetCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
         ))}
       </div>
     </>
   ) : (
-    <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
-      {emptyMsg}
-    </div>
+    <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">{emptyMsg}</div>
   )
 );
 
 /* ── Grouped Carousel Section ── */
-const GroupCarousel = ({ group }: { group: OverlayGroup | EffectGroup }) => (
+const GroupCarousel = ({
+  group, favorites, onToggleFav,
+}: {
+  group: OverlayGroup | EffectGroup; favorites: Set<string>; onToggleFav: (id: string) => void;
+}) => (
   <div className="mb-6">
     <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
       <span>{group.emoji}</span>
       <span>{group.label}</span>
       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 ml-1">{group.assets.length}</Badge>
     </h2>
-    {/* Mobile + Desktop: horizontal scroll carousel */}
     <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-6 md:px-6 scrollbar-none">
       {group.assets.map((asset) => (
         <div key={asset.id} className="shrink-0 w-[44vw] sm:w-40 md:w-44">
-          <AssetCard asset={asset} />
+          <AssetCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
         </div>
       ))}
     </div>
@@ -525,29 +570,18 @@ const GroupCarousel = ({ group }: { group: OverlayGroup | EffectGroup }) => (
 /* ── Main page ── */
 const Assets = () => {
   const [activeTab, setActiveTab] = useState("backgrounds");
-  const [search, setSearch] = useState("");
+  const { favorites, toggle: toggleFav } = useFavorites();
 
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
-  const q = search.toLowerCase();
-
-  const filteredBackgrounds = backgrounds.filter((b) =>
-    !q || b.label.toLowerCase().includes(q) || (b.tags || []).some((t) => t.includes(q))
-  );
-
   const allGroups = [...overlayGroups, ...effectGroups];
-  const filteredAllGroups = allGroups
-    .map((g) => ({
-      ...g,
-      assets: g.assets.filter((a) =>
-        !q || a.label.toLowerCase().includes(q) || (a.tags || []).some((t) => t.includes(q))
-      ),
-    }))
-    .filter((g) => g.assets.length > 0);
+  const allAssets = [...backgrounds, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
+  const favoriteAssets = allAssets.filter((a) => favorites.has(a.id));
 
   const mobileLabel: Record<string, string> = {
     backgrounds: "Fundos",
     "overlays-effects": "Overlays",
+    favorites: "Favs",
     sfx: "Sons",
   };
 
@@ -572,11 +606,13 @@ const Assets = () => {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setSearch(""); }}
+              onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all border shrink-0",
                 activeTab === tab.id
-                  ? "bg-primary text-primary-foreground border-primary"
+                  ? tab.id === "favorites"
+                    ? "bg-destructive text-destructive-foreground border-destructive"
+                    : "bg-primary text-primary-foreground border-primary"
                   : "bg-card text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground",
                 tab.comingSoon && activeTab !== tab.id && "opacity-60"
               )}
@@ -584,6 +620,11 @@ const Assets = () => {
               {tab.icon}
               <span className="hidden sm:inline">{tab.label}</span>
               <span className="sm:hidden">{mobileLabel[tab.id] ?? tab.label}</span>
+              {tab.id === "favorites" && favorites.size > 0 && activeTab !== "favorites" && (
+                <span className="bg-destructive text-destructive-foreground text-[9px] rounded-full px-1.5 py-0 min-w-4 text-center leading-4 font-bold">
+                  {favorites.size}
+                </span>
+              )}
               {tab.comingSoon && (
                 <span className="hidden sm:inline text-[9px] bg-muted rounded px-1 py-0.5 uppercase tracking-wide">
                   Em breve
@@ -592,19 +633,6 @@ const Assets = () => {
             </button>
           ))}
         </div>
-
-        {/* Search */}
-        {!currentTab.comingSoon && (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder={activeTab === "backgrounds" ? "Buscar fundos..." : "Buscar overlays e efeitos..."}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        )}
       </div>
 
       {/* Scrollable content */}
@@ -614,15 +642,26 @@ const Assets = () => {
             <ComingSoon tab={currentTab} />
           ) : activeTab === "backgrounds" ? (
             <AssetGrid
-              assets={filteredBackgrounds}
-              emptyMsg={`Nenhum fundo encontrado para "${search}"`}
+              assets={backgrounds}
+              favorites={favorites}
+              onToggleFav={toggleFav}
+              emptyMsg="Nenhum fundo disponível"
             />
           ) : activeTab === "overlays-effects" ? (
-            filteredAllGroups.length > 0 ? (
-              filteredAllGroups.map((g) => <GroupCarousel key={g.id} group={g} />)
+            allGroups.map((g) => <GroupCarousel key={g.id} group={g} favorites={favorites} onToggleFav={toggleFav} />)
+          ) : activeTab === "favorites" ? (
+            favoriteAssets.length > 0 ? (
+              <AssetGrid
+                assets={favoriteAssets}
+                favorites={favorites}
+                onToggleFav={toggleFav}
+                emptyMsg=""
+              />
             ) : (
-              <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
-                Nenhum resultado encontrado para "{search}"
+              <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
+                <Heart className="h-10 w-10 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">Nenhum favorito ainda.</p>
+                <p className="text-xs text-muted-foreground/60">Toque no ❤️ em qualquer asset para salvar aqui.</p>
               </div>
             )
           ) : null}
