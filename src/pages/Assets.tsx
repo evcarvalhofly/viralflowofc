@@ -169,6 +169,16 @@ const backgrounds: Asset[] = [
   { id: "bg-101", label: "Background 101", emoji: "🎬", category: "Background", driveId: "1e8MGJgaRXlWH_i8HqYr40mOObK4xNvtV", tags: ["background", "fundo"], landscape: true },
 ];
 
+/* ── Overlay assets ── */
+const overlays: Asset[] = [
+  { id: "ov-001", label: "Overlay 1", emoji: "✨", category: "Overlay", driveId: "", tags: ["overlay"] },
+];
+
+/* ── Effect assets ── */
+const effects: Asset[] = [
+  { id: "ef-001", label: "Efeito 1", emoji: "🎆", category: "Efeito", driveId: "", tags: ["efeito"] },
+];
+
 /* ── Thumbnail helper ── */
 const thumbUrl = (id: string) =>
   `https://drive.google.com/thumbnail?id=${id}&sz=w640`;
