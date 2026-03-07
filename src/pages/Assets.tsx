@@ -82,7 +82,6 @@ const tabs: Tab[] = [
     label: "Efeitos Sonoros",
     icon: <Music className="h-4 w-4" />,
     description: "Sons e efeitos para turbinar seus vídeos",
-    comingSoon: true,
   },
 ];
 
