@@ -1,12 +1,35 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Film, Music, Sparkles, Layers, Download,
-  ExternalLink, Search, Play
+  ExternalLink, Play, Heart
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+const FAVORITES_KEY = "viralflow_asset_favorites";
+
+function useFavorites() {
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(FAVORITES_KEY);
+      return new Set(stored ? JSON.parse(stored) : []);
+    } catch { return new Set(); }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+  }, [favorites]);
+
+  const toggle = (id: string) =>
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  return { favorites, toggle };
+}
 
 /* ── Types ── */
 type Asset = {
