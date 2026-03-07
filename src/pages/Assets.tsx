@@ -534,8 +534,8 @@ const effectGroups: EffectGroup[] = [
     ],
   },
   {
-    id: "novo-pacote",
-    label: "Novo Pacote",
+    id: "pacote-1",
+    label: "Pacote 1",
     emoji: "🎁",
     assets: [
       { id: "np-001", label: "Novo 1",   emoji: "🎁", category: "Efeito", driveId: "1DMXMHXz7_0r0Y2yyyd3IhVNgHagtddXz", tags: ["efeito"] },
