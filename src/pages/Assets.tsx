@@ -1658,6 +1658,19 @@ const Assets = () => {
                 <p className="text-xs text-muted-foreground/60">Toque no ❤️ em qualquer asset para salvar aqui.</p>
               </div>
             )
+          ) : activeTab === "sfx" ? (
+            <div>
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none sm:hidden">
+                {sfxAssets.map((asset) => (
+                  <SoundCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={toggleFav} />
+                ))}
+              </div>
+              <div className="hidden sm:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {sfxAssets.map((asset) => (
+                  <SoundCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={toggleFav} />
+                ))}
+              </div>
+            </div>
           ) : null}
         </div>
       </div>
