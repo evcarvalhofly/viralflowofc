@@ -481,7 +481,7 @@ const AssetCard = ({
           aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
         >
           <Heart
-            className={cn("h-3.5 w-3.5 transition-colors", isFav ? "fill-red-500 text-red-500" : "text-muted-foreground")}
+            className={cn("h-3.5 w-3.5 transition-colors", isFav ? "fill-destructive text-destructive" : "text-muted-foreground")}
           />
         </button>
       </div>
