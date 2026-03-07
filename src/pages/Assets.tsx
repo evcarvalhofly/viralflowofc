@@ -710,12 +710,13 @@ const Assets = () => {
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
   const allGroups = [...overlayGroups, ...effectGroups];
-  const allAssets = [...backgrounds, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
+  const allAssets = [...backgrounds, ...emojiAssets, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
   const favoriteAssets = allAssets.filter((a) => favorites.has(a.id));
 
   const mobileLabel: Record<string, string> = {
     backgrounds: "Fundos",
     "overlays-effects": "Overlays",
+    "emojis-animados": "Emojis",
     favorites: "Favs",
     sfx: "Sons",
   };
