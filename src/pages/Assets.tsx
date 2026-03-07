@@ -520,44 +520,47 @@ const ComingSoon = ({ tab }: { tab: Tab }) => (
 );
 
 /* ── Asset Grid ── */
-const AssetGrid = ({ assets, emptyMsg }: { assets: Asset[]; emptyMsg: string }) => (
+const AssetGrid = ({
+  assets, emptyMsg, favorites, onToggleFav,
+}: {
+  assets: Asset[]; emptyMsg: string; favorites: Set<string>; onToggleFav: (id: string) => void;
+}) => (
   assets.length > 0 ? (
     <>
-      {/* Mobile: horizontal carousel */}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none sm:hidden">
         {assets.map((asset) => (
           <div key={asset.id} className="shrink-0 flex items-start pt-1">
-            <AssetCard asset={asset} />
+            <AssetCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
           </div>
         ))}
       </div>
-      {/* Desktop: 9:16 grid */}
       <div className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pt-1">
         {assets.map((asset) => (
-          <AssetCard key={asset.id} asset={asset} />
+          <AssetCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
         ))}
       </div>
     </>
   ) : (
-    <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
-      {emptyMsg}
-    </div>
+    <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">{emptyMsg}</div>
   )
 );
 
 /* ── Grouped Carousel Section ── */
-const GroupCarousel = ({ group }: { group: OverlayGroup | EffectGroup }) => (
+const GroupCarousel = ({
+  group, favorites, onToggleFav,
+}: {
+  group: OverlayGroup | EffectGroup; favorites: Set<string>; onToggleFav: (id: string) => void;
+}) => (
   <div className="mb-6">
     <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
       <span>{group.emoji}</span>
       <span>{group.label}</span>
       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 ml-1">{group.assets.length}</Badge>
     </h2>
-    {/* Mobile + Desktop: horizontal scroll carousel */}
     <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-6 md:px-6 scrollbar-none">
       {group.assets.map((asset) => (
         <div key={asset.id} className="shrink-0 w-[44vw] sm:w-40 md:w-44">
-          <AssetCard asset={asset} />
+          <AssetCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
         </div>
       ))}
     </div>
