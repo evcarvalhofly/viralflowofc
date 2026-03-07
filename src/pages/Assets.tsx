@@ -1388,9 +1388,6 @@ const AssetCard = ({
           <p className="text-xs font-semibold truncate">{asset.label}</p>
           <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
         </div>
-        <p className="text-[10px] text-muted-foreground leading-tight">
-          💡 Para visualizar melhor clique em <span className="font-semibold text-foreground">"Abrir"</span>
-        </p>
         <div className="flex gap-1.5">
           <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
             <Button size="sm" variant="outline" className="gap-1 text-[11px] h-8 px-2 w-full">
@@ -1502,6 +1499,11 @@ const Assets = () => {
             Assets prontos para turbinar seus vídeos — fundos, overlays, efeitos e muito mais.
           </p>
         </div>
+
+        {/* Tip notice */}
+        <p className="text-xs text-muted-foreground bg-muted/40 border border-border/50 rounded-lg px-3 py-2">
+          💡 Para visualizar melhor o arquivo clique em <span className="font-semibold text-foreground">"Abrir"</span>
+        </p>
 
         {/* Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none">
