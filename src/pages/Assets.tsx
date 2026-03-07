@@ -452,42 +452,55 @@ const VideoDriveFrame = ({
 };
 
 /* ── Asset Card ── */
-const AssetCard = ({ asset }: { asset: Asset }) => {
+const AssetCard = ({
+  asset,
+  isFav,
+  onToggleFav,
+}: {
+  asset: Asset;
+  isFav: boolean;
+  onToggleFav: (id: string) => void;
+}) => {
   const [playing, setPlaying] = useState(false);
-
   const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
-  const Actions = ({ compact }: { compact?: boolean }) => (
-    <div className={cn("flex gap-1.5", compact ? "" : "flex-col")}>
-      <a href={viewUrl} target="_blank" rel="noopener noreferrer" className={compact ? "" : "w-full"}>
-        <Button size="sm" variant="outline" className={cn("gap-1 text-[11px] h-8 px-2", compact ? "" : "w-full")}>
-          <ExternalLink className="h-3 w-3" />Abrir
-        </Button>
-      </a>
-      <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className={compact ? "" : "w-full"}>
-        <Button size="sm" className={cn("gap-1 text-[11px] h-8 px-2", compact ? "" : "w-full")}>
-          <Download className="h-3 w-3" />Baixar
-        </Button>
-      </a>
-    </div>
-  );
-
   return (
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden hover:border-primary/50 transition-all duration-200 flex flex-col w-[44vw] sm:w-full shrink-0">
-      <VideoDriveFrame
-        driveId={asset.driveId}
-        title={asset.label}
-        playing={playing}
-        onPlay={() => setPlaying(true)}
-      />
+      {/* Video frame with fav button overlay */}
+      <div className="relative">
+        <VideoDriveFrame
+          driveId={asset.driveId}
+          title={asset.label}
+          playing={playing}
+          onPlay={() => setPlaying(true)}
+        />
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFav(asset.id); }}
+          className="absolute top-2 right-2 z-10 rounded-full bg-background/80 backdrop-blur-sm p-1.5 shadow transition-all hover:scale-110"
+          aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+        >
+          <Heart
+            className={cn("h-3.5 w-3.5 transition-colors", isFav ? "fill-red-500 text-red-500" : "text-muted-foreground")}
+          />
+        </button>
+      </div>
       <div className="p-2 sm:p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-1">
           <p className="text-xs font-semibold truncate">{asset.label}</p>
           <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
         </div>
-        <div className="grid grid-cols-2 gap-1.5">
-          <Actions />
+        <div className="flex gap-1.5">
+          <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button size="sm" variant="outline" className="gap-1 text-[11px] h-8 px-2 w-full">
+              <ExternalLink className="h-3 w-3" />Abrir
+            </Button>
+          </a>
+          <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button size="sm" className="gap-1 text-[11px] h-8 px-2 w-full">
+              <Download className="h-3 w-3" />Baixar
+            </Button>
+          </a>
         </div>
       </div>
     </div>
