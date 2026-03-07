@@ -37,24 +37,22 @@ const tabs: Tab[] = [
     description: "Backgrounds prontos para usar em Shorts e Reels",
   },
   {
+    id: "overlays",
+    label: "Overlays",
+    icon: <Layers className="h-4 w-4" />,
+    description: "Overlays para sobrepor nos seus vídeos",
+  },
+  {
+    id: "effects",
+    label: "Efeitos",
+    icon: <Sparkles className="h-4 w-4" />,
+    description: "Efeitos visuais para turbinar seus vídeos",
+  },
+  {
     id: "sfx",
     label: "Efeitos Sonoros",
     icon: <Music className="h-4 w-4" />,
     description: "Sons e efeitos para turbinar seus vídeos",
-    comingSoon: true,
-  },
-  {
-    id: "vfx",
-    label: "Efeitos Visuais",
-    icon: <Sparkles className="h-4 w-4" />,
-    description: "Overlays, partículas e efeitos visuais",
-    comingSoon: true,
-  },
-  {
-    id: "transitions",
-    label: "Transições",
-    icon: <Layers className="h-4 w-4" />,
-    description: "Transições suaves e dinâmicas entre cenas",
     comingSoon: true,
   },
 ];
