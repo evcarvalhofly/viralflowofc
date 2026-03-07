@@ -66,6 +66,12 @@ const tabs: Tab[] = [
     description: "Overlays e efeitos visuais para turbinar seus vídeos",
   },
   {
+    id: "favorites",
+    label: "Favoritos",
+    icon: <Heart className="h-4 w-4" />,
+    description: "Seus assets favoritos salvos",
+  },
+  {
     id: "sfx",
     label: "Efeitos Sonoros",
     icon: <Music className="h-4 w-4" />,
