@@ -169,14 +169,162 @@ const backgrounds: Asset[] = [
   { id: "bg-101", label: "Background 101", emoji: "🎬", category: "Background", driveId: "1e8MGJgaRXlWH_i8HqYr40mOObK4xNvtV", tags: ["background", "fundo"], landscape: true },
 ];
 
-/* ── Overlay assets ── */
-const overlays: Asset[] = [
-  { id: "ov-001", label: "Overlay 1", emoji: "✨", category: "Overlay", driveId: "", tags: ["overlay"] },
+/* ── Overlay groups ── */
+type OverlayGroup = { id: string; label: string; emoji: string; assets: Asset[] };
+
+const overlayGroups: OverlayGroup[] = [
+  {
+    id: "mobile",
+    label: "#1 Mobile",
+    emoji: "📱",
+    assets: [
+      { id: "ov-mob-001", label: "Mobile 1", emoji: "📱", category: "Overlay", driveId: "1nM3YyQ3rVqWwILDFVTEc8lrhqF5Y0xoo", tags: ["overlay", "mobile"] },
+      { id: "ov-mob-002", label: "Mobile 2", emoji: "📱", category: "Overlay", driveId: "1yUUC0WDt5mX8sQPSlvy-4NAYJCioAKfS", tags: ["overlay", "mobile"] },
+      { id: "ov-mob-003", label: "Mobile 3", emoji: "📱", category: "Overlay", driveId: "1fOZ35M3MhPmHwm1bmyiA4o0J4Ol22V-c", tags: ["overlay", "mobile"] },
+      { id: "ov-mob-004", label: "Mobile 4", emoji: "📱", category: "Overlay", driveId: "1XEwQstrLyMAeSMIOijGhuE1NySve2E_A", tags: ["overlay", "mobile"] },
+      { id: "ov-mob-005", label: "Mobile 5", emoji: "📱", category: "Overlay", driveId: "1OK9S4B434rcZXGj-YLhPGdjaEA0wQi90", tags: ["overlay", "mobile"] },
+    ],
+  },
+  {
+    id: "diversos",
+    label: "Overlay Diversos (Geral)",
+    emoji: "✨",
+    assets: [
+      { id: "ov-div-001", label: "Diversos 1", emoji: "✨", category: "Overlay", driveId: "1t34TWTFvqfQZ8mcGwB7SmNL1W4jmB-p3", tags: ["overlay", "diversos"] },
+      { id: "ov-div-002", label: "Diversos 2", emoji: "✨", category: "Overlay", driveId: "1sOJyXGBoUTnvD-JssXvfG0ZkwKJIxgtd", tags: ["overlay", "diversos"] },
+      { id: "ov-div-003", label: "Diversos 3", emoji: "✨", category: "Overlay", driveId: "1LtTJ-pvQlReSwhqfgss5yn9X7W1rojCs", tags: ["overlay", "diversos"] },
+      { id: "ov-div-004", label: "Diversos 4", emoji: "✨", category: "Overlay", driveId: "13meb8W13SvEK-qOIGNyB_XuOVUbQgQcV", tags: ["overlay", "diversos"] },
+      { id: "ov-div-005", label: "Diversos 5", emoji: "✨", category: "Overlay", driveId: "12zEKC1bWmcsgW7wi-thE5iKZIBNll2eF", tags: ["overlay", "diversos"] },
+    ],
+  },
 ];
 
-/* ── Effect assets ── */
-const effects: Asset[] = [
-  { id: "ef-001", label: "Efeito 1", emoji: "🎆", category: "Efeito", driveId: "", tags: ["efeito"] },
+/* ── Effect groups ── */
+type EffectGroup = { id: string; label: string; emoji: string; assets: Asset[] };
+
+const effectGroups: EffectGroup[] = [
+  {
+    id: "efeitos-visuais",
+    label: "Efeitos Visuais",
+    emoji: "🎆",
+    assets: [
+      { id: "ef-vis-001", label: "Visual 1", emoji: "🎆", category: "Efeito", driveId: "1dODMc3wTNQxXthD8tvQqdWvRntN3fa4T", tags: ["efeito", "visual"] },
+      { id: "ef-vis-002", label: "Visual 2", emoji: "🎆", category: "Efeito", driveId: "1T3tbb7fui4f1c3ojkcteLsxE9Y5XjxgW", tags: ["efeito", "visual"] },
+      { id: "ef-vis-003", label: "Visual 3", emoji: "🎆", category: "Efeito", driveId: "1y3yTmGJZ0pJ_FEH34puE1tA3rx1zIkhb", tags: ["efeito", "visual"] },
+      { id: "ef-vis-004", label: "Visual 4", emoji: "🎆", category: "Efeito", driveId: "1uLHKT9S5emF9DrlWAxktjHpiEK7yeZJ0", tags: ["efeito", "visual"] },
+      { id: "ef-vis-005", label: "Visual 5", emoji: "🎆", category: "Efeito", driveId: "1rUe0wyPFZr5kplq8o-EhwYTFHY1tiYIY", tags: ["efeito", "visual"] },
+      { id: "ef-vis-006", label: "Visual 6", emoji: "🎆", category: "Efeito", driveId: "1AcsLVxcgdHRaOUY-vukdVb-HY_8OFOj2", tags: ["efeito", "visual"] },
+      { id: "ef-vis-007", label: "Visual 7", emoji: "🎆", category: "Efeito", driveId: "1OztPO7KTHAsp96GupIQtT5iL3kPQbKgV", tags: ["efeito", "visual"] },
+      { id: "ef-vis-008", label: "Visual 8", emoji: "🎆", category: "Efeito", driveId: "1einjKpB6aYIO9RAkHC6CcjghEzllG3CN", tags: ["efeito", "visual"] },
+    ],
+  },
+  {
+    id: "fogo",
+    label: "Fogo",
+    emoji: "🔥",
+    assets: [
+      { id: "ef-fog-001", label: "Fogo 1", emoji: "🔥", category: "Efeito", driveId: "1qQhWrMTTZmcrlkaceoTzXXKjpi65is3f", tags: ["efeito", "fogo"] },
+      { id: "ef-fog-002", label: "Fogo 2", emoji: "🔥", category: "Efeito", driveId: "1eqUEOB8U3vt2plnRSwmeN4py4b0zldkQ", tags: ["efeito", "fogo"] },
+      { id: "ef-fog-003", label: "Fogo 3", emoji: "🔥", category: "Efeito", driveId: "1vvt1vDzNAMNw1hJ3llO0ehIBE6-JKFRX", tags: ["efeito", "fogo"] },
+      { id: "ef-fog-004", label: "Fogo 4", emoji: "🔥", category: "Efeito", driveId: "1BavqC_EG50III6EwjPtjO5VVoAzlHhBU", tags: ["efeito", "fogo"] },
+      { id: "ef-fog-005", label: "Fogo 5", emoji: "🔥", category: "Efeito", driveId: "1VQjo8j3DImMwKX5x5MujxzQffRcXaWpU", tags: ["efeito", "fogo"] },
+    ],
+  },
+  {
+    id: "glitch",
+    label: "Glitch Overlay Transition",
+    emoji: "⚡",
+    assets: [
+      { id: "ef-gli-001", label: "Glitch 1", emoji: "⚡", category: "Efeito", driveId: "1fOPRw5ge42F70joveHhff36Syx8EFEiE", tags: ["efeito", "glitch"] },
+      { id: "ef-gli-002", label: "Glitch 2", emoji: "⚡", category: "Efeito", driveId: "184EsvMh-C8ope5PzYMfam8d8ZSN6OJ9V", tags: ["efeito", "glitch"] },
+      { id: "ef-gli-003", label: "Glitch 3", emoji: "⚡", category: "Efeito", driveId: "1upqbl63ErQPomH9KGWiVYWTVN5Gcad90", tags: ["efeito", "glitch"] },
+    ],
+  },
+  {
+    id: "grunge",
+    label: "Grunge",
+    emoji: "🎸",
+    assets: [
+      { id: "ef-gru-001", label: "Grunge 1", emoji: "🎸", category: "Efeito", driveId: "1K16ecWTGhpKlkhGyTqIcjlZScQZoSzti", tags: ["efeito", "grunge"] },
+      { id: "ef-gru-002", label: "Grunge 2", emoji: "🎸", category: "Efeito", driveId: "1Paa7EmGF9eW3IRHepkHyzcjfyM7wv4YW", tags: ["efeito", "grunge"] },
+      { id: "ef-gru-003", label: "Grunge 3", emoji: "🎸", category: "Efeito", driveId: "1z91lLCF5rT1NakEUcJGWow-NG8QjUs4F", tags: ["efeito", "grunge"] },
+      { id: "ef-gru-004", label: "Grunge 4", emoji: "🎸", category: "Efeito", driveId: "1YNMj-CoN1YJ4FYEeni0naqZf8cFCgpal", tags: ["efeito", "grunge"] },
+      { id: "ef-gru-005", label: "Grunge 5", emoji: "🎸", category: "Efeito", driveId: "19DbRXyM7yCvHTTZlTThRWeo4kif-uwHR", tags: ["efeito", "grunge"] },
+      { id: "ef-gru-006", label: "Grunge 6", emoji: "🎸", category: "Efeito", driveId: "1rVTpFRWHwAo-_mlRoXoSFX1i-7j9GnWm", tags: ["efeito", "grunge"] },
+      { id: "ef-gru-007", label: "Grunge 7", emoji: "🎸", category: "Efeito", driveId: "1A-_2ATWp-I39FbhQR0Pnuyjrbw96IloG", tags: ["efeito", "grunge"] },
+      { id: "ef-gru-008", label: "Grunge 8", emoji: "🎸", category: "Efeito", driveId: "1zD7zsFBMHOBTp20zVadnaP1MKeeOhepV", tags: ["efeito", "grunge"] },
+    ],
+  },
+  {
+    id: "light-leaks",
+    label: "Light Leaks",
+    emoji: "🌟",
+    assets: [
+      { id: "ef-ll-001", label: "Light Leak 1", emoji: "🌟", category: "Efeito", driveId: "19rWVI6wo4ZNXVW1nR-4gwJOn4rHKVXua", tags: ["efeito", "light leaks"] },
+      { id: "ef-ll-002", label: "Light Leak 2", emoji: "🌟", category: "Efeito", driveId: "1nNr5CpIcQFN39FL1Bhktz1-ieBJOyssy", tags: ["efeito", "light leaks"] },
+      { id: "ef-ll-003", label: "Light Leak 3", emoji: "🌟", category: "Efeito", driveId: "1FlUmmLHDfEcmvjlEW6b0MkmjY-cjewfz", tags: ["efeito", "light leaks"] },
+      { id: "ef-ll-004", label: "Light Leak 4", emoji: "🌟", category: "Efeito", driveId: "1r7hitegD7VY9kbDQv-NMBFRtRoCCkDR4", tags: ["efeito", "light leaks"] },
+      { id: "ef-ll-005", label: "Light Leak 5", emoji: "🌟", category: "Efeito", driveId: "1A8j1c0YxeINBL2H6lkmIEudKcgvxUg9m", tags: ["efeito", "light leaks"] },
+      { id: "ef-ll-006", label: "Light Leak 6", emoji: "🌟", category: "Efeito", driveId: "1K2vLodgpuZdQ6NE2JptJ2PKAO3saP1pM", tags: ["efeito", "light leaks"] },
+      { id: "ef-ll-007", label: "Light Leak 7", emoji: "🌟", category: "Efeito", driveId: "1BPjNPiedRIF0gak9mAPmEv7kvbTfFpha", tags: ["efeito", "light leaks"] },
+    ],
+  },
+  {
+    id: "particulas",
+    label: "Partículas",
+    emoji: "💫",
+    assets: [
+      { id: "ef-par-001", label: "Partícula 1", emoji: "💫", category: "Efeito", driveId: "1Zzhsn92FN4jDmJMiGjtBdL3umHeV6UAa", tags: ["efeito", "particulas"] },
+      { id: "ef-par-002", label: "Partícula 2", emoji: "💫", category: "Efeito", driveId: "1tAff83En6zI79_WwHCZ2uhTFpiXmRQYJ", tags: ["efeito", "particulas"] },
+      { id: "ef-par-003", label: "Partícula 3", emoji: "💫", category: "Efeito", driveId: "1UUi2yCdDMCGCp_edRRr2SasYNfeChZKs", tags: ["efeito", "particulas"] },
+      { id: "ef-par-004", label: "Partícula 4", emoji: "💫", category: "Efeito", driveId: "1go4sSZsRLF1SkYjTt5ZGwW2Xx2j7LlgB", tags: ["efeito", "particulas"] },
+    ],
+  },
+  {
+    id: "raios",
+    label: "Raios",
+    emoji: "⚡",
+    assets: [
+      { id: "ef-rai-001", label: "Raio 1", emoji: "⚡", category: "Efeito", driveId: "1ubBHyKdzm5J4wmV4FHpLtWU5-YYA7nv_", tags: ["efeito", "raios"] },
+      { id: "ef-rai-002", label: "Raio 2", emoji: "⚡", category: "Efeito", driveId: "1e5B66dtrOyTPRrT4pFJn0WFos99003ZS", tags: ["efeito", "raios"] },
+      { id: "ef-rai-003", label: "Raio 3", emoji: "⚡", category: "Efeito", driveId: "1PlzsbZGfq7VnkKVm1G2WdBJe-Tw8WvEj", tags: ["efeito", "raios"] },
+      { id: "ef-rai-004", label: "Raio 4", emoji: "⚡", category: "Efeito", driveId: "1DYLW7yH6K4kUJlmjOQsFtLHqJlbOf2BP", tags: ["efeito", "raios"] },
+      { id: "ef-rai-005", label: "Raio 5", emoji: "⚡", category: "Efeito", driveId: "1vjJnTAtCx-2wEt-B0BKGwh7hYn8FkloT", tags: ["efeito", "raios"] },
+      { id: "ef-rai-006", label: "Raio 6", emoji: "⚡", category: "Efeito", driveId: "1Z1pQXiIwvqf-n_pAbxfd0nWR_sKXjBNp", tags: ["efeito", "raios"] },
+    ],
+  },
+  {
+    id: "smoke",
+    label: "Smoke",
+    emoji: "💨",
+    assets: [
+      { id: "ef-smo-001", label: "Smoke 1", emoji: "💨", category: "Efeito", driveId: "1HLI31BcUK6cC0uY0XeFnGcKe4vNQ_V7f", tags: ["efeito", "smoke"] },
+      { id: "ef-smo-002", label: "Smoke 2", emoji: "💨", category: "Efeito", driveId: "1msac8YsSTMz1k8xnhOiIq2PZmbdXVMC7", tags: ["efeito", "smoke"] },
+      { id: "ef-smo-003", label: "Smoke 3", emoji: "💨", category: "Efeito", driveId: "1foL5oK6OpW_lMe4dF64nnWSm4YZK9Wht", tags: ["efeito", "smoke"] },
+      { id: "ef-smo-004", label: "Smoke 4", emoji: "💨", category: "Efeito", driveId: "18b-h1Bd7zXPsG2uLoOunE25psqTs-57g", tags: ["efeito", "smoke"] },
+      { id: "ef-smo-005", label: "Smoke 5", emoji: "💨", category: "Efeito", driveId: "1hds-fNvP-4kyumgyJ7on-U-ZD-ZBKs7B", tags: ["efeito", "smoke"] },
+      { id: "ef-smo-006", label: "Smoke 6", emoji: "💨", category: "Efeito", driveId: "16AozmY50x4fLDYZUXa48DiBHGGvYa0mX", tags: ["efeito", "smoke"] },
+      { id: "ef-smo-007", label: "Smoke 7", emoji: "💨", category: "Efeito", driveId: "1uvHfXP123XGt3XYzyp_igklu2SwA-4_c", tags: ["efeito", "smoke"] },
+    ],
+  },
+  {
+    id: "transicoes",
+    label: "Transições",
+    emoji: "🎞️",
+    assets: [
+      { id: "ef-tra-001", label: "Transição 1", emoji: "🎞️", category: "Efeito", driveId: "1Vf1DvDj6wAzkuUd01ydfDHSbuCMxuR_K", tags: ["efeito", "transição"] },
+      { id: "ef-tra-002", label: "Transição 2", emoji: "🎞️", category: "Efeito", driveId: "1_ZqZ_fZ2GhSTIgsioNN5WpJ6tt8WSKXm", tags: ["efeito", "transição"] },
+    ],
+  },
+  {
+    id: "vhs-retro",
+    label: "VHS Retro Bundle",
+    emoji: "📼",
+    assets: [
+      { id: "ef-vhs-001", label: "VHS 1", emoji: "📼", category: "Efeito", driveId: "1umFfeGf_hkECNt-55ZZBIuILM1IUrvnk", tags: ["efeito", "vhs", "retro"] },
+      { id: "ef-vhs-002", label: "VHS 2", emoji: "📼", category: "Efeito", driveId: "129RvOqbmlXN67qnjzMjolX3ubEYxIMFB", tags: ["efeito", "vhs", "retro"] },
+    ],
+  },
 ];
 
 /* ── Thumbnail helper ── */
@@ -311,41 +459,63 @@ const AssetGrid = ({ assets, emptyMsg }: { assets: Asset[]; emptyMsg: string }) 
   )
 );
 
+/* ── Grouped Carousel Section ── */
+const GroupCarousel = ({ group }: { group: OverlayGroup | EffectGroup }) => (
+  <div className="mb-6">
+    <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+      <span>{group.emoji}</span>
+      <span>{group.label}</span>
+      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 ml-1">{group.assets.length}</Badge>
+    </h2>
+    {/* Mobile + Desktop: horizontal scroll carousel */}
+    <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-6 md:px-6 scrollbar-none">
+      {group.assets.map((asset) => (
+        <div key={asset.id} className="shrink-0 w-[44vw] sm:w-40 md:w-44">
+          <AssetCard asset={asset} />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 /* ── Main page ── */
 const Assets = () => {
   const [activeTab, setActiveTab] = useState("backgrounds");
   const [search, setSearch] = useState("");
 
-  const sourceMap: Record<string, Asset[]> = {
-    backgrounds,
-    overlays,
-    effects,
-  };
+  const currentTab = tabs.find((t) => t.id === activeTab)!;
 
-  const activeAssets = sourceMap[activeTab] ?? [];
-
-  const filtered = activeAssets.filter((b) => {
+  /* filtered backgrounds */
+  const filteredBackgrounds = backgrounds.filter((b) => {
     const q = search.toLowerCase();
-    return (
-      !q ||
-      b.label.toLowerCase().includes(q) ||
-      b.category.toLowerCase().includes(q) ||
-      (b.tags || []).some((t) => t.includes(q))
-    );
+    return !q || b.label.toLowerCase().includes(q) || (b.tags || []).some((t) => t.includes(q));
   });
 
-  const currentTab = tabs.find((t) => t.id === activeTab)!;
+  /* filtered overlay groups */
+  const filteredOverlayGroups = overlayGroups
+    .map((g) => ({
+      ...g,
+      assets: g.assets.filter((a) => {
+        const q = search.toLowerCase();
+        return !q || a.label.toLowerCase().includes(q) || (a.tags || []).some((t) => t.includes(q));
+      }),
+    }))
+    .filter((g) => g.assets.length > 0);
+
+  /* filtered effect groups */
+  const filteredEffectGroups = effectGroups
+    .map((g) => ({
+      ...g,
+      assets: g.assets.filter((a) => {
+        const q = search.toLowerCase();
+        return !q || a.label.toLowerCase().includes(q) || (a.tags || []).some((t) => t.includes(q));
+      }),
+    }))
+    .filter((g) => g.assets.length > 0);
 
   const searchPlaceholder =
     activeTab === "backgrounds" ? "Buscar fundos..." :
     activeTab === "overlays" ? "Buscar overlays..." : "Buscar efeitos...";
-
-  const countLabel =
-    activeTab === "backgrounds"
-      ? `${filtered.length} fundo${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`
-      : activeTab === "overlays"
-      ? `${filtered.length} overlay${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`
-      : `${filtered.length} efeito${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`;
 
   const mobileLabel: Record<string, string> = {
     backgrounds: "Fundos",
@@ -396,19 +566,16 @@ const Assets = () => {
           ))}
         </div>
 
-        {/* Search (active content tabs only) */}
+        {/* Search */}
         {!currentTab.comingSoon && (
-          <div className="space-y-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={searchPlaceholder}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">{countLabel}</p>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
         )}
       </div>
@@ -418,12 +585,28 @@ const Assets = () => {
         <div className="max-w-6xl mx-auto w-full px-3 md:px-6 pb-6">
           {currentTab.comingSoon ? (
             <ComingSoon tab={currentTab} />
-          ) : (
+          ) : activeTab === "backgrounds" ? (
             <AssetGrid
-              assets={filtered}
-              emptyMsg={`Nenhum item encontrado para "${search}"`}
+              assets={filteredBackgrounds}
+              emptyMsg={`Nenhum fundo encontrado para "${search}"`}
             />
-          )}
+          ) : activeTab === "overlays" ? (
+            filteredOverlayGroups.length > 0 ? (
+              filteredOverlayGroups.map((g) => <GroupCarousel key={g.id} group={g} />)
+            ) : (
+              <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+                Nenhum overlay encontrado para "{search}"
+              </div>
+            )
+          ) : activeTab === "effects" ? (
+            filteredEffectGroups.length > 0 ? (
+              filteredEffectGroups.map((g) => <GroupCarousel key={g.id} group={g} />)
+            ) : (
+              <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+                Nenhum efeito encontrado para "{search}"
+              </div>
+            )
+          ) : null}
         </div>
       </div>
     </div>
