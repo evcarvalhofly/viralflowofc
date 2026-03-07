@@ -459,41 +459,63 @@ const AssetGrid = ({ assets, emptyMsg }: { assets: Asset[]; emptyMsg: string }) 
   )
 );
 
+/* ── Grouped Carousel Section ── */
+const GroupCarousel = ({ group }: { group: OverlayGroup | EffectGroup }) => (
+  <div className="mb-6">
+    <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+      <span>{group.emoji}</span>
+      <span>{group.label}</span>
+      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 ml-1">{group.assets.length}</Badge>
+    </h2>
+    {/* Mobile + Desktop: horizontal scroll carousel */}
+    <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-6 md:px-6 scrollbar-none">
+      {group.assets.map((asset) => (
+        <div key={asset.id} className="shrink-0 w-[44vw] sm:w-40 md:w-44">
+          <AssetCard asset={asset} />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 /* ── Main page ── */
 const Assets = () => {
   const [activeTab, setActiveTab] = useState("backgrounds");
   const [search, setSearch] = useState("");
 
-  const sourceMap: Record<string, Asset[]> = {
-    backgrounds,
-    overlays,
-    effects,
-  };
+  const currentTab = tabs.find((t) => t.id === activeTab)!;
 
-  const activeAssets = sourceMap[activeTab] ?? [];
-
-  const filtered = activeAssets.filter((b) => {
+  /* filtered backgrounds */
+  const filteredBackgrounds = backgrounds.filter((b) => {
     const q = search.toLowerCase();
-    return (
-      !q ||
-      b.label.toLowerCase().includes(q) ||
-      b.category.toLowerCase().includes(q) ||
-      (b.tags || []).some((t) => t.includes(q))
-    );
+    return !q || b.label.toLowerCase().includes(q) || (b.tags || []).some((t) => t.includes(q));
   });
 
-  const currentTab = tabs.find((t) => t.id === activeTab)!;
+  /* filtered overlay groups */
+  const filteredOverlayGroups = overlayGroups
+    .map((g) => ({
+      ...g,
+      assets: g.assets.filter((a) => {
+        const q = search.toLowerCase();
+        return !q || a.label.toLowerCase().includes(q) || (a.tags || []).some((t) => t.includes(q));
+      }),
+    }))
+    .filter((g) => g.assets.length > 0);
+
+  /* filtered effect groups */
+  const filteredEffectGroups = effectGroups
+    .map((g) => ({
+      ...g,
+      assets: g.assets.filter((a) => {
+        const q = search.toLowerCase();
+        return !q || a.label.toLowerCase().includes(q) || (a.tags || []).some((t) => t.includes(q));
+      }),
+    }))
+    .filter((g) => g.assets.length > 0);
 
   const searchPlaceholder =
     activeTab === "backgrounds" ? "Buscar fundos..." :
     activeTab === "overlays" ? "Buscar overlays..." : "Buscar efeitos...";
-
-  const countLabel =
-    activeTab === "backgrounds"
-      ? `${filtered.length} fundo${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`
-      : activeTab === "overlays"
-      ? `${filtered.length} overlay${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`
-      : `${filtered.length} efeito${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`;
 
   const mobileLabel: Record<string, string> = {
     backgrounds: "Fundos",
@@ -544,19 +566,16 @@ const Assets = () => {
           ))}
         </div>
 
-        {/* Search (active content tabs only) */}
+        {/* Search */}
         {!currentTab.comingSoon && (
-          <div className="space-y-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={searchPlaceholder}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">{countLabel}</p>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
         )}
       </div>
@@ -566,12 +585,28 @@ const Assets = () => {
         <div className="max-w-6xl mx-auto w-full px-3 md:px-6 pb-6">
           {currentTab.comingSoon ? (
             <ComingSoon tab={currentTab} />
-          ) : (
+          ) : activeTab === "backgrounds" ? (
             <AssetGrid
-              assets={filtered}
-              emptyMsg={`Nenhum item encontrado para "${search}"`}
+              assets={filteredBackgrounds}
+              emptyMsg={`Nenhum fundo encontrado para "${search}"`}
             />
-          )}
+          ) : activeTab === "overlays" ? (
+            filteredOverlayGroups.length > 0 ? (
+              filteredOverlayGroups.map((g) => <GroupCarousel key={g.id} group={g} />)
+            ) : (
+              <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+                Nenhum overlay encontrado para "{search}"
+              </div>
+            )
+          ) : activeTab === "effects" ? (
+            filteredEffectGroups.length > 0 ? (
+              filteredEffectGroups.map((g) => <GroupCarousel key={g.id} group={g} />)
+            ) : (
+              <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+                Nenhum efeito encontrado para "{search}"
+              </div>
+            )
+          ) : null}
         </div>
       </div>
     </div>
