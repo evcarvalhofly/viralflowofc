@@ -567,29 +567,18 @@ const GroupCarousel = ({ group }: { group: OverlayGroup | EffectGroup }) => (
 /* ── Main page ── */
 const Assets = () => {
   const [activeTab, setActiveTab] = useState("backgrounds");
-  const [search, setSearch] = useState("");
+  const { favorites, toggle: toggleFav } = useFavorites();
 
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
-  const q = search.toLowerCase();
-
-  const filteredBackgrounds = backgrounds.filter((b) =>
-    !q || b.label.toLowerCase().includes(q) || (b.tags || []).some((t) => t.includes(q))
-  );
-
   const allGroups = [...overlayGroups, ...effectGroups];
-  const filteredAllGroups = allGroups
-    .map((g) => ({
-      ...g,
-      assets: g.assets.filter((a) =>
-        !q || a.label.toLowerCase().includes(q) || (a.tags || []).some((t) => t.includes(q))
-      ),
-    }))
-    .filter((g) => g.assets.length > 0);
+  const allAssets = [...backgrounds, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
+  const favoriteAssets = allAssets.filter((a) => favorites.has(a.id));
 
   const mobileLabel: Record<string, string> = {
     backgrounds: "Fundos",
     "overlays-effects": "Overlays",
+    favorites: "Favs",
     sfx: "Sons",
   };
 
@@ -614,11 +603,13 @@ const Assets = () => {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setSearch(""); }}
+              onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all border shrink-0",
                 activeTab === tab.id
-                  ? "bg-primary text-primary-foreground border-primary"
+                  ? tab.id === "favorites"
+                    ? "bg-red-500 text-white border-red-500"
+                    : "bg-primary text-primary-foreground border-primary"
                   : "bg-card text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground",
                 tab.comingSoon && activeTab !== tab.id && "opacity-60"
               )}
@@ -626,6 +617,11 @@ const Assets = () => {
               {tab.icon}
               <span className="hidden sm:inline">{tab.label}</span>
               <span className="sm:hidden">{mobileLabel[tab.id] ?? tab.label}</span>
+              {tab.id === "favorites" && favorites.size > 0 && activeTab !== "favorites" && (
+                <span className="bg-red-500 text-white text-[9px] rounded-full px-1.5 py-0 min-w-4 text-center leading-4 font-bold">
+                  {favorites.size}
+                </span>
+              )}
               {tab.comingSoon && (
                 <span className="hidden sm:inline text-[9px] bg-muted rounded px-1 py-0.5 uppercase tracking-wide">
                   Em breve
@@ -634,19 +630,6 @@ const Assets = () => {
             </button>
           ))}
         </div>
-
-        {/* Search */}
-        {!currentTab.comingSoon && (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder={activeTab === "backgrounds" ? "Buscar fundos..." : "Buscar overlays e efeitos..."}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        )}
       </div>
 
       {/* Scrollable content */}
@@ -656,15 +639,26 @@ const Assets = () => {
             <ComingSoon tab={currentTab} />
           ) : activeTab === "backgrounds" ? (
             <AssetGrid
-              assets={filteredBackgrounds}
-              emptyMsg={`Nenhum fundo encontrado para "${search}"`}
+              assets={backgrounds}
+              favorites={favorites}
+              onToggleFav={toggleFav}
+              emptyMsg="Nenhum fundo disponível"
             />
           ) : activeTab === "overlays-effects" ? (
-            filteredAllGroups.length > 0 ? (
-              filteredAllGroups.map((g) => <GroupCarousel key={g.id} group={g} />)
+            allGroups.map((g) => <GroupCarousel key={g.id} group={g} favorites={favorites} onToggleFav={toggleFav} />)
+          ) : activeTab === "favorites" ? (
+            favoriteAssets.length > 0 ? (
+              <AssetGrid
+                assets={favoriteAssets}
+                favorites={favorites}
+                onToggleFav={toggleFav}
+                emptyMsg=""
+              />
             ) : (
-              <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
-                Nenhum resultado encontrado para "{search}"
+              <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
+                <Heart className="h-10 w-10 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">Nenhum favorito ainda.</p>
+                <p className="text-xs text-muted-foreground/60">Toque no ❤️ em qualquer asset para salvar aqui.</p>
               </div>
             )
           ) : null}
