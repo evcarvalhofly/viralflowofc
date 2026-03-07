@@ -785,6 +785,13 @@ const Assets = () => {
             />
           ) : activeTab === "overlays-effects" ? (
             allGroups.map((g) => <GroupCarousel key={g.id} group={g} favorites={favorites} onToggleFav={toggleFav} />)
+          ) : activeTab === "emojis-animados" ? (
+            <AssetGrid
+              assets={emojiAssets}
+              favorites={favorites}
+              onToggleFav={toggleFav}
+              emptyMsg="Nenhum emoji disponível"
+            />
           ) : activeTab === "favorites" ? (
             favoriteAssets.length > 0 ? (
               <AssetGrid
