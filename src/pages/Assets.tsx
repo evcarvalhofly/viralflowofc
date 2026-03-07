@@ -285,12 +285,46 @@ const ComingSoon = ({ tab }: { tab: Tab }) => (
   </div>
 );
 
+/* ── Asset Grid ── */
+const AssetGrid = ({ assets, emptyMsg }: { assets: Asset[]; emptyMsg: string }) => (
+  assets.length > 0 ? (
+    <>
+      {/* Mobile: horizontal carousel */}
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none sm:hidden">
+        {assets.map((asset) => (
+          <div key={asset.id} className="shrink-0 flex items-start pt-1">
+            <AssetCard asset={asset} />
+          </div>
+        ))}
+      </div>
+      {/* Desktop: 9:16 grid */}
+      <div className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pt-1">
+        {assets.map((asset) => (
+          <AssetCard key={asset.id} asset={asset} />
+        ))}
+      </div>
+    </>
+  ) : (
+    <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+      {emptyMsg}
+    </div>
+  )
+);
+
 /* ── Main page ── */
 const Assets = () => {
   const [activeTab, setActiveTab] = useState("backgrounds");
   const [search, setSearch] = useState("");
 
-  const filtered = backgrounds.filter((b) => {
+  const sourceMap: Record<string, Asset[]> = {
+    backgrounds,
+    overlays,
+    effects,
+  };
+
+  const activeAssets = sourceMap[activeTab] ?? [];
+
+  const filtered = activeAssets.filter((b) => {
     const q = search.toLowerCase();
     return (
       !q ||
@@ -302,10 +336,27 @@ const Assets = () => {
 
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
+  const searchPlaceholder =
+    activeTab === "backgrounds" ? "Buscar fundos..." :
+    activeTab === "overlays" ? "Buscar overlays..." : "Buscar efeitos...";
+
+  const countLabel =
+    activeTab === "backgrounds"
+      ? `${filtered.length} fundo${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`
+      : activeTab === "overlays"
+      ? `${filtered.length} overlay${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`
+      : `${filtered.length} efeito${filtered.length !== 1 ? "s" : ""} disponíve${filtered.length !== 1 ? "is" : "l"}`;
+
+  const mobileLabel: Record<string, string> = {
+    backgrounds: "Fundos",
+    overlays: "Overlays",
+    effects: "Efeitos",
+    sfx: "Sons",
+  };
+
   return (
-    /* Outer: full height, NO scroll */
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Fixed top section — header + tabs + search */}
+      {/* Fixed top section */}
       <div className="flex-shrink-0 px-3 pt-3 pb-2 md:px-6 md:pt-6 max-w-6xl mx-auto w-full space-y-3">
 
         {/* Header */}
@@ -315,16 +366,16 @@ const Assets = () => {
             Área de Edição 🎬
           </h1>
           <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-            Assets prontos para turbinar seus vídeos — fundos, sons, efeitos e muito mais.
+            Assets prontos para turbinar seus vídeos — fundos, overlays, efeitos e muito mais.
           </p>
         </div>
 
-        {/* Tabs — horizontal scroll */}
+        {/* Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none">
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => { setActiveTab(tab.id); setSearch(""); }}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all border shrink-0",
                 activeTab === tab.id
@@ -335,11 +386,7 @@ const Assets = () => {
             >
               {tab.icon}
               <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">
-                {tab.id === "backgrounds" ? "Fundos" :
-                 tab.id === "sfx" ? "Sons" :
-                 tab.id === "vfx" ? "Visuais" : "Transições"}
-              </span>
+              <span className="sm:hidden">{mobileLabel[tab.id] ?? tab.label}</span>
               {tab.comingSoon && (
                 <span className="hidden sm:inline text-[9px] bg-muted rounded px-1 py-0.5 uppercase tracking-wide">
                   Em breve
@@ -349,56 +396,34 @@ const Assets = () => {
           ))}
         </div>
 
-        {/* Search (only backgrounds tab) */}
-        {!currentTab.comingSoon && activeTab === "backgrounds" && (
+        {/* Search (active content tabs only) */}
+        {!currentTab.comingSoon && (
           <div className="space-y-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar fundos..."
+                placeholder={searchPlaceholder}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {filtered.length} fundo{filtered.length !== 1 ? "s" : ""} disponíve{filtered.length !== 1 ? "is" : "l"}
-            </p>
+            <p className="text-xs text-muted-foreground">{countLabel}</p>
           </div>
         )}
       </div>
 
-      {/* Scrollable content area */}
+      {/* Scrollable content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="max-w-6xl mx-auto w-full px-3 md:px-6 pb-6">
           {currentTab.comingSoon ? (
             <ComingSoon tab={currentTab} />
-          ) : activeTab === "backgrounds" ? (
-            <>
-              {filtered.length > 0 ? (
-                <>
-                  {/* Mobile: horizontal carousel */}
-                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none sm:hidden">
-                    {filtered.map((asset) => (
-                      <div key={asset.id} className="shrink-0 flex items-start pt-1">
-                        <AssetCard asset={asset} />
-                      </div>
-                    ))}
-                  </div>
-                  {/* Desktop: 9:16 grid */}
-                  <div className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pt-1">
-                    {filtered.map((asset) => (
-                      <AssetCard key={asset.id} asset={asset} />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
-                  Nenhum fundo encontrado para "{search}"
-                </div>
-              )}
-            </>
-          ) : null}
+          ) : (
+            <AssetGrid
+              assets={filtered}
+              emptyMsg={`Nenhum item encontrado para "${search}"`}
+            />
+          )}
         </div>
       </div>
     </div>
