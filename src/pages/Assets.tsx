@@ -66,6 +66,12 @@ const tabs: Tab[] = [
     description: "Overlays e efeitos visuais para turbinar seus vídeos",
   },
   {
+    id: "emojis-animados",
+    label: "Emojis Animados",
+    icon: <span className="text-sm leading-none">😜</span>,
+    description: "Emojis animados para turbinar seus vídeos",
+  },
+  {
     id: "favorites",
     label: "Favoritos",
     icon: <Heart className="h-4 w-4" />,
