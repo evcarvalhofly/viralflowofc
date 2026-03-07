@@ -1388,9 +1388,6 @@ const AssetCard = ({
           <p className="text-xs font-semibold truncate">{asset.label}</p>
           <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 shrink-0">{asset.category}</Badge>
         </div>
-        <p className="text-[10px] text-muted-foreground leading-tight">
-          💡 Para visualizar melhor clique em <span className="font-semibold text-foreground">"Abrir"</span>
-        </p>
         <div className="flex gap-1.5">
           <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
             <Button size="sm" variant="outline" className="gap-1 text-[11px] h-8 px-2 w-full">
