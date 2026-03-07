@@ -611,7 +611,7 @@ const Assets = () => {
                 "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all border shrink-0",
                 activeTab === tab.id
                   ? tab.id === "favorites"
-                    ? "bg-red-500 text-white border-red-500"
+                    ? "bg-destructive text-destructive-foreground border-destructive"
                     : "bg-primary text-primary-foreground border-primary"
                   : "bg-card text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground",
                 tab.comingSoon && activeTab !== tab.id && "opacity-60"
