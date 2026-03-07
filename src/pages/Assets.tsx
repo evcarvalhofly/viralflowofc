@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Film, Music, Sparkles, Layers, Download,
-  ExternalLink, Play, Heart
+  ExternalLink, Play, Heart, Square
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
