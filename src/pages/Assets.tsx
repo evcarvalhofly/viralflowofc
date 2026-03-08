@@ -2860,13 +2860,20 @@ const SoundCard = ({
       />
 
       {/* Fav button */}
-      <button
-        onClick={() => onToggleFav(asset.id)}
-        className="absolute top-2 right-2 z-10 rounded-full bg-background/80 backdrop-blur-sm p-1.5 shadow transition-all hover:scale-110"
-        aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-      >
-        <Heart className={cn("h-3.5 w-3.5 transition-colors", isFav ? "fill-destructive text-destructive" : "text-muted-foreground")} />
-      </button>
+      <div className="absolute top-2 right-2 z-10 flex flex-col items-center gap-0.5">
+        <button
+          onClick={() => onToggleFav(asset.id)}
+          className="rounded-full bg-background/80 backdrop-blur-sm p-1.5 shadow transition-all hover:scale-110"
+          aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+        >
+          <Heart className={cn("h-3.5 w-3.5 transition-colors", isFav ? "fill-destructive text-destructive" : "text-muted-foreground")} />
+        </button>
+        {showCount && favCount > 0 && (
+          <span className="text-[9px] font-semibold leading-none bg-background/80 backdrop-blur-sm rounded-full px-1 py-0.5 text-foreground shadow text-center">
+            {favCount} salvaram
+          </span>
+        )}
+      </div>
 
       {/* Play button + progress bar */}
       <div className="flex flex-col items-center gap-1.5 w-full">
