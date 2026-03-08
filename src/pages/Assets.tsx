@@ -1,34 +1,72 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Film, Music, Sparkles, Layers, Download,
-  ExternalLink, Play, Heart, Square
+  ExternalLink, Play, Heart, Square, TrendingUp
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
-const FAVORITES_KEY = "viralflow_asset_favorites";
-
+/* ── useFavorites: persists per user in Supabase ── */
 function useFavorites() {
-  const [favorites, setFavorites] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(FAVORITES_KEY);
-      return new Set(stored ? JSON.parse(stored) : []);
-    } catch { return new Set(); }
-  });
+  const { user } = useAuth();
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  // counts[assetId] = total users who favorited it
+  const [favCounts, setFavCounts] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
 
+  // Load user's favorites + global counts
   useEffect(() => {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
-  }, [favorites]);
+    if (!user) { setFavorites(new Set()); setLoading(false); return; }
 
-  const toggle = (id: string) =>
+    const load = async () => {
+      setLoading(true);
+      const [{ data: userFavs }, { data: allFavs }] = await Promise.all([
+        supabase.from("favorites").select("asset_id").eq("user_id", user.id),
+        supabase.from("favorites").select("asset_id"),
+      ]);
+
+      if (userFavs) setFavorites(new Set(userFavs.map((r) => r.asset_id)));
+
+      // Count per asset across all users
+      if (allFavs) {
+        const counts: Record<string, number> = {};
+        allFavs.forEach(({ asset_id }) => {
+          counts[asset_id] = (counts[asset_id] || 0) + 1;
+        });
+        setFavCounts(counts);
+      }
+      setLoading(false);
+    };
+
+    load();
+  }, [user]);
+
+  const toggle = useCallback(async (id: string) => {
+    if (!user) return;
+    const isFav = favorites.has(id);
+
+    // Optimistic update
     setFavorites((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      isFav ? next.delete(id) : next.add(id);
       return next;
     });
+    setFavCounts((prev) => ({
+      ...prev,
+      [id]: Math.max(0, (prev[id] || 0) + (isFav ? -1 : 1)),
+    }));
 
-  return { favorites, toggle };
+    if (isFav) {
+      await supabase.from("favorites").delete().eq("user_id", user.id).eq("asset_id", id);
+    } else {
+      await supabase.from("favorites").insert({ user_id: user.id, asset_id: id });
+    }
+  }, [user, favorites]);
+
+  return { favorites, favCounts, toggle, loading };
 }
 
 /* ── Types ── */
