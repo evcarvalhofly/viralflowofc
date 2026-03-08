@@ -341,7 +341,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_asset_favorite_counts: {
+        Args: never
+        Returns: {
+          asset_id: string
+          fav_count: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

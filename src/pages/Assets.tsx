@@ -13,28 +13,28 @@ import { useAuth } from "@/contexts/AuthContext";
 function useFavorites() {
   const { user } = useAuth();
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  // counts[assetId] = total users who favorited it
+  // counts[assetId] = total users who favorited it (global, from security-definer function)
   const [favCounts, setFavCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
-  // Load user's favorites + global counts
+  // Load user's favorites + global counts via security-definer function
   useEffect(() => {
     if (!user) { setFavorites(new Set()); setLoading(false); return; }
 
     const load = async () => {
       setLoading(true);
-      const [{ data: userFavs }, { data: allFavs }] = await Promise.all([
+      const [{ data: userFavs }, { data: globalCounts }] = await Promise.all([
         supabase.from("favorites").select("asset_id").eq("user_id", user.id),
-        supabase.from("favorites").select("asset_id"),
+        // This function bypasses RLS and returns aggregate counts (no user_id exposed)
+        supabase.rpc("get_asset_favorite_counts"),
       ]);
 
       if (userFavs) setFavorites(new Set(userFavs.map((r) => r.asset_id)));
 
-      // Count per asset across all users
-      if (allFavs) {
+      if (globalCounts) {
         const counts: Record<string, number> = {};
-        allFavs.forEach(({ asset_id }) => {
-          counts[asset_id] = (counts[asset_id] || 0) + 1;
+        (globalCounts as { asset_id: string; fav_count: number }[]).forEach(({ asset_id, fav_count }) => {
+          counts[asset_id] = fav_count;
         });
         setFavCounts(counts);
       }
@@ -3010,8 +3010,18 @@ const Assets = () => {
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
   const allGroups = [...overlayGroups, ...effectGroups];
-  const allAssets = [...backgrounds, ...emojiAssets, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
-  const favoriteAssets = allAssets.filter((a) => favorites.has(a.id));
+  // Video/image assets
+  const allVideoAssets = [
+    ...backgrounds,
+    ...emojiAssets,
+    ...overlayGroups.flatMap((g) => g.assets),
+    ...effectGroups.flatMap((g) => g.assets),
+  ];
+  // SFX assets
+  const allSfxAssets = sfxGroups.flatMap((g) => g.assets);
+
+  const favoriteVideoAssets = allVideoAssets.filter((a) => favorites.has(a.id));
+  const favoriteSoundAssets = allSfxAssets.filter((a) => favorites.has(a.id));
 
   // Sort helper: sort by favCounts descending when filter is active
   const sortAssets = <T extends { id: string }>(assets: T[]): T[] => {
@@ -3136,20 +3146,40 @@ const Assets = () => {
               <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
                 <span className="animate-pulse">Carregando favoritos...</span>
               </div>
-            ) : favoriteAssets.length > 0 ? (
-              <AssetGrid
-                assets={favoriteAssets}
-                favorites={favorites}
-                onToggleFav={toggleFav}
-                emptyMsg=""
-                favCounts={favCounts}
-                showCounts={false}
-              />
-            ) : (
+            ) : favoriteVideoAssets.length === 0 && favoriteSoundAssets.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
                 <Heart className="h-10 w-10 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">Nenhum favorito ainda.</p>
                 <p className="text-xs text-muted-foreground/60">Toque no ❤️ em qualquer asset para salvar aqui.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Videos first */}
+                {favoriteVideoAssets.length > 0 && (
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <Film className="h-4 w-4 text-primary" /> Vídeos & Imagens
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{favoriteVideoAssets.length}</Badge>
+                    </h2>
+                    <AssetGrid assets={favoriteVideoAssets} favorites={favorites} onToggleFav={toggleFav} emptyMsg="" favCounts={favCounts} showCounts={false} />
+                  </div>
+                )}
+                {/* Audio below */}
+                {favoriteSoundAssets.length > 0 && (
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <Music className="h-4 w-4 text-primary" /> Efeitos Sonoros
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{favoriteSoundAssets.length}</Badge>
+                    </h2>
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none">
+                      {favoriteSoundAssets.map((asset) => (
+                        <div key={asset.id} className="shrink-0">
+                          <SoundCard asset={asset} isFav={true} onToggleFav={toggleFav} favCount={favCounts[asset.id] || 0} showCount={false} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           ) : activeTab === "sfx" ? (
