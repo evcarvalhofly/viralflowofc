@@ -101,6 +101,27 @@ export type Database = {
         }
         Relationships: []
       }
+      favorites: {
+        Row: {
+          asset_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       followed_channels: {
         Row: {
           channel_name: string
