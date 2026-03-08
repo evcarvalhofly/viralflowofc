@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Auth from "./pages/Auth";
+import Home from "./pages/Home";
 import Chat from "./pages/Chat";
 import Planning from "./pages/Planning";
 import GameOver from "./pages/GameOver";
