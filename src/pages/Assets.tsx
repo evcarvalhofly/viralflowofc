@@ -3079,36 +3079,41 @@ const Assets = () => {
         </p>
 
         {/* Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all border shrink-0",
-                activeTab === tab.id
-                  ? tab.id === "favorites"
-                    ? "bg-destructive text-destructive-foreground border-destructive"
-                    : "bg-primary text-primary-foreground border-primary"
-                  : "bg-card text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground",
-                tab.comingSoon && activeTab !== tab.id && "opacity-60"
-              )}
-            >
-              {tab.icon}
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">{mobileLabel[tab.id] ?? tab.label}</span>
-              {tab.id === "favorites" && favorites.size > 0 && activeTab !== "favorites" && (
-                <span className="bg-destructive text-destructive-foreground text-[9px] rounded-full px-1.5 py-0 min-w-4 text-center leading-4 font-bold">
-                  {favorites.size}
+        <div className="grid grid-cols-5 gap-1.5">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const isFav = tab.id === "favorites";
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "relative flex flex-col items-center justify-center gap-1 py-2.5 px-1 rounded-xl text-[11px] md:text-sm font-semibold transition-all duration-200 border",
+                  isActive
+                    ? isFav
+                      ? "bg-destructive text-destructive-foreground border-destructive shadow-lg scale-[1.04]"
+                      : "bg-primary text-primary-foreground border-primary shadow-lg scale-[1.04]"
+                    : "bg-card text-muted-foreground border-border/50 hover:border-primary/50 hover:text-foreground hover:bg-muted/60",
+                  tab.comingSoon && !isActive && "opacity-50"
+                )}
+              >
+                {/* Icon — bigger when active */}
+                <span className={cn("transition-transform duration-200", isActive ? "scale-125" : "scale-100")}>
+                  {tab.icon}
                 </span>
-              )}
-              {tab.comingSoon && (
-                <span className="hidden sm:inline text-[9px] bg-muted rounded px-1 py-0.5 uppercase tracking-wide">
-                  Em breve
-                </span>
-              )}
-            </button>
-          ))}
+                {/* Label */}
+                <span className="hidden sm:block leading-tight text-center">{tab.label}</span>
+                <span className="sm:hidden leading-tight text-center">{mobileLabel[tab.id] ?? tab.label}</span>
+
+                {/* Favorites badge */}
+                {isFav && favorites.size > 0 && !isActive && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground text-[9px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold shadow">
+                    {favorites.size}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Sort filter row */}
