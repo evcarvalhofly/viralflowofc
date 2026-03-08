@@ -1562,6 +1562,13 @@ const sfxGroups: SfxGroup[] = [
       { id: "sfx-065", label: "Sound FX 11",         driveId: "1WiBMuH9C-tRS92hkop0ni7GiNUjbPPxA" },
       { id: "sfx-066", label: "Sound-1",             driveId: "1xLOveOBTJ-XAt6iL1RY4YC9zjbmTd3WB" },
       { id: "sfx-067", label: "Sound-2",             driveId: "1hVOXuWJAT3Bqb7HgoehkrKA2W1v-tmif" },
+      { id: "sfx-068", label: "Sound FX 7b",         driveId: "1CCd--dAIuB7ZkpBz0g0TRQtCC7NkQbDK" },
+      { id: "sfx-069", label: "Sound FX 8b",         driveId: "1sSR4ZlAYTnCF5h3CIMg8coTMJFb19Z4x" },
+      { id: "sfx-070", label: "Sound FX 9b",         driveId: "1H2qA2c69ysNI1Vz4MbNJXFGIU9ZuslFz" },
+      { id: "sfx-071", label: "Sound FX 10b",        driveId: "1XGPeAju-ajCf6jvHRFEmus3eXJC2_hfq" },
+      { id: "sfx-072", label: "Sound FX 2b",         driveId: "1EJ6agfO28r_c4JYJkTTL0GdrDzFeD73G" },
+      { id: "sfx-073", label: "Sound FX 5b",         driveId: "1CKxCZQLEyz98GHnJ9XkjMXfIB5b6Fl-Q" },
+      { id: "sfx-074", label: "Glitch 2",            driveId: "1H4EFCs7jc-E9BcI6st1HCNrYJOLC5M_r" },
     ],
   },
   {
