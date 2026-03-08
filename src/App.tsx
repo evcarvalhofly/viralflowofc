@@ -33,7 +33,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (user) return <Navigate to="/chat" replace />;
+  if (user) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
@@ -46,7 +46,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Navigate to="/chat" replace />} />
+              <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
               <Route path="/auth" element={<AuthRoute><Auth /></AuthRoute>} />
               <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
               <Route path="/planning" element={<ProtectedRoute><Planning /></ProtectedRoute>} />
