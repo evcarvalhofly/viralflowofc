@@ -2953,10 +2953,15 @@ const AssetGrid = ({
 
 /* ── Grouped Carousel Section ── */
 const GroupCarousel = ({
-  group, favorites, onToggleFav,
+  group, favorites, onToggleFav, favCounts = {}, sortByPopular = false, showCounts = false,
 }: {
   group: OverlayGroup | EffectGroup; favorites: Set<string>; onToggleFav: (id: string) => void;
-}) => (
+  favCounts?: Record<string, number>; sortByPopular?: boolean; showCounts?: boolean;
+}) => {
+  const sortedAssets = sortByPopular
+    ? [...group.assets].sort((a, b) => (favCounts[b.id] || 0) - (favCounts[a.id] || 0))
+    : group.assets;
+  return (
   <div className="mb-6">
     <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
       <span>{group.emoji}</span>
@@ -2964,14 +2969,15 @@ const GroupCarousel = ({
       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 ml-1">{group.assets.length}</Badge>
     </h2>
     <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-6 md:px-6 scrollbar-none">
-      {group.assets.map((asset) => (
+      {sortedAssets.map((asset) => (
         <div key={asset.id} className="shrink-0 w-[44vw] sm:w-40 md:w-44">
-          <AssetCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
+          <AssetCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} favCount={favCounts[asset.id] || 0} showCount={showCounts} />
         </div>
       ))}
     </div>
   </div>
-);
+  );
+};
 
 /* ── Sort filter button ── */
 const MostFavoritedToggle = ({
