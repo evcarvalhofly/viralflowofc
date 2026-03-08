@@ -2964,16 +2964,48 @@ const GroupCarousel = ({
   </div>
 );
 
+/* ── Sort filter button ── */
+const MostFavoritedToggle = ({
+  active,
+  onToggle,
+}: {
+  active: boolean;
+  onToggle: () => void;
+}) => (
+  <button
+    onClick={onToggle}
+    className={cn(
+      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all shrink-0",
+      active
+        ? "bg-destructive text-destructive-foreground border-destructive"
+        : "bg-card text-muted-foreground border-border/60 hover:border-destructive/40 hover:text-foreground"
+    )}
+  >
+    <TrendingUp className="h-3.5 w-3.5" />
+    Mais Favoritados
+  </button>
+);
+
 /* ── Main page ── */
 const Assets = () => {
   const [activeTab, setActiveTab] = useState("backgrounds");
-  const { favorites, toggle: toggleFav } = useFavorites();
+  const [sortByPopular, setSortByPopular] = useState(false);
+  const { favorites, favCounts, toggle: toggleFav, loading: favsLoading } = useFavorites();
 
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
   const allGroups = [...overlayGroups, ...effectGroups];
   const allAssets = [...backgrounds, ...emojiAssets, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
   const favoriteAssets = allAssets.filter((a) => favorites.has(a.id));
+
+  // Sort helper: sort by favCounts descending when filter is active
+  const sortAssets = <T extends { id: string }>(assets: T[]): T[] => {
+    if (!sortByPopular) return assets;
+    return [...assets].sort((a, b) => (favCounts[b.id] || 0) - (favCounts[a.id] || 0));
+  };
+
+  const sortedBackgrounds = sortAssets(backgrounds);
+  const sortedEmojis = sortAssets(emojiAssets);
 
   const mobileLabel: Record<string, string> = {
     backgrounds: "Fundos",
@@ -2982,6 +3014,9 @@ const Assets = () => {
     favorites: "Favs",
     sfx: "Sons",
   };
+
+  // Tabs that show the "Mais Favoritados" filter
+  const showSortFilter = ["backgrounds", "overlays-effects", "emojis-animados", "sfx"].includes(activeTab);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -3036,6 +3071,14 @@ const Assets = () => {
             </button>
           ))}
         </div>
+
+        {/* Sort filter row */}
+        {showSortFilter && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Filtrar:</span>
+            <MostFavoritedToggle active={sortByPopular} onToggle={() => setSortByPopular((v) => !v)} />
+          </div>
+        )}
       </div>
 
       {/* Scrollable content */}
@@ -3045,27 +3088,47 @@ const Assets = () => {
             <ComingSoon tab={currentTab} />
           ) : activeTab === "backgrounds" ? (
             <AssetGrid
-              assets={backgrounds}
+              assets={sortedBackgrounds}
               favorites={favorites}
               onToggleFav={toggleFav}
               emptyMsg="Nenhum fundo disponível"
+              favCounts={favCounts}
+              showCounts={sortByPopular}
             />
           ) : activeTab === "overlays-effects" ? (
-            allGroups.map((g) => <GroupCarousel key={g.id} group={g} favorites={favorites} onToggleFav={toggleFav} />)
+            allGroups.map((g) => (
+              <GroupCarousel
+                key={g.id}
+                group={g}
+                favorites={favorites}
+                onToggleFav={toggleFav}
+                favCounts={favCounts}
+                sortByPopular={sortByPopular}
+                showCounts={sortByPopular}
+              />
+            ))
           ) : activeTab === "emojis-animados" ? (
             <AssetGrid
-              assets={emojiAssets}
+              assets={sortedEmojis}
               favorites={favorites}
               onToggleFav={toggleFav}
               emptyMsg="Nenhum emoji disponível"
+              favCounts={favCounts}
+              showCounts={sortByPopular}
             />
           ) : activeTab === "favorites" ? (
-            favoriteAssets.length > 0 ? (
+            favsLoading ? (
+              <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+                <span className="animate-pulse">Carregando favoritos...</span>
+              </div>
+            ) : favoriteAssets.length > 0 ? (
               <AssetGrid
                 assets={favoriteAssets}
                 favorites={favorites}
                 onToggleFav={toggleFav}
                 emptyMsg=""
+                favCounts={favCounts}
+                showCounts={false}
               />
             ) : (
               <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
@@ -3076,22 +3139,33 @@ const Assets = () => {
             )
           ) : activeTab === "sfx" ? (
             <div className="space-y-6">
-              {sfxGroups.map((group) => (
-                <div key={group.id}>
-                  <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                    <span>{group.emoji}</span>
-                    <span>{group.label}</span>
-                    <span className="text-[10px] bg-secondary text-secondary-foreground rounded px-1.5 py-0 h-4 inline-flex items-center ml-1">{group.assets.length}</span>
-                  </h2>
-                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-6 md:px-6 scrollbar-none">
-                    {group.assets.map((asset) => (
-                      <div key={asset.id} className="shrink-0">
-                        <SoundCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={toggleFav} />
-                      </div>
-                    ))}
+              {sfxGroups.map((group) => {
+                const sortedAssets = sortByPopular
+                  ? [...group.assets].sort((a, b) => (favCounts[b.id] || 0) - (favCounts[a.id] || 0))
+                  : group.assets;
+                return (
+                  <div key={group.id}>
+                    <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                      <span>{group.emoji}</span>
+                      <span>{group.label}</span>
+                      <span className="text-[10px] bg-secondary text-secondary-foreground rounded px-1.5 py-0 h-4 inline-flex items-center ml-1">{group.assets.length}</span>
+                    </h2>
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-6 md:px-6 scrollbar-none">
+                      {sortedAssets.map((asset) => (
+                        <div key={asset.id} className="shrink-0">
+                          <SoundCard
+                            asset={asset}
+                            isFav={favorites.has(asset.id)}
+                            onToggleFav={toggleFav}
+                            favCount={favCounts[asset.id] || 0}
+                            showCount={sortByPopular}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : null}
         </div>
