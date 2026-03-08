@@ -2,11 +2,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Zap, MessageSquare, ClipboardList, TrendingUp,
-  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film
+  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film, Home
 } from "lucide-react";
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useTheme } from "next-themes";
 
 type NavItem = {
   label: string;
@@ -16,6 +13,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { label: "Início", icon: <Home className="h-5 w-5" />, path: "/" },
   { label: "IA", icon: <MessageSquare className="h-5 w-5" />, path: "/chat" },
   { label: "Planejamento", icon: <ClipboardList className="h-5 w-5" />, path: "/planning" },
   { label: "GameOver", icon: <TrendingUp className="h-5 w-5" />, path: "/gameover" },
