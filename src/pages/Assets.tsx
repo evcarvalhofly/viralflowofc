@@ -1429,9 +1429,9 @@ const SoundCard = ({
 }) => {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0); // 0–100
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Proxy via Edge Function → sem CORS
   const proxyUrl = `${SUPABASE_URL}/functions/v1/proxy-audio?id=${asset.driveId}`;
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
@@ -1441,6 +1441,7 @@ const SoundCard = ({
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
       setPlaying(false);
+      setProgress(0);
     } else {
       setLoading(true);
       try {
@@ -1454,16 +1455,29 @@ const SoundCard = ({
     }
   };
 
+  const handleTimeUpdate = () => {
+    const el = audioRef.current;
+    if (el && el.duration) {
+      setProgress((el.currentTime / el.duration) * 100);
+    }
+  };
+
+  const handleEnded = () => {
+    setPlaying(false);
+    setProgress(0);
+  };
+
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   return (
     <div className="rounded-xl border border-border/60 bg-card hover:border-primary/50 transition-all duration-200 flex flex-col items-center gap-3 p-4 w-[44vw] sm:w-40 md:w-44 shrink-0 relative">
-      {/* Hidden audio element via proxy */}
+      {/* Audio element via proxy */}
       <audio
         ref={audioRef}
         src={proxyUrl}
         preload="none"
-        onEnded={() => setPlaying(false)}
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
         onCanPlay={() => setLoading(false)}
       />
 
@@ -1476,27 +1490,40 @@ const SoundCard = ({
         <Heart className={cn("h-3.5 w-3.5 transition-colors", isFav ? "fill-destructive text-destructive" : "text-muted-foreground")} />
       </button>
 
-      {/* Play button */}
-      <button
-        onClick={togglePlay}
-        disabled={loading}
-        className={cn(
-          "w-14 h-14 rounded-full flex items-center justify-center shadow-md transition-all duration-200",
-          loading && "opacity-70 cursor-wait",
-          playing
-            ? "bg-destructive text-destructive-foreground scale-95"
-            : "bg-primary text-primary-foreground hover:scale-110"
-        )}
-        aria-label={playing ? "Parar" : loading ? "Carregando..." : "Reproduzir"}
-      >
-        {loading ? (
-          <span className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-        ) : playing ? (
-          <Square className="h-5 w-5 fill-current" />
-        ) : (
-          <Play className="h-5 w-5 fill-current" />
-        )}
-      </button>
+      {/* Play button + progress bar */}
+      <div className="flex flex-col items-center gap-1.5 w-full">
+        <button
+          onClick={togglePlay}
+          disabled={loading}
+          className={cn(
+            "w-14 h-14 rounded-full flex items-center justify-center shadow-md transition-all duration-200",
+            loading && "opacity-70 cursor-wait",
+            playing
+              ? "bg-destructive text-destructive-foreground scale-95"
+              : "bg-primary text-primary-foreground hover:scale-110"
+          )}
+          aria-label={playing ? "Parar" : loading ? "Carregando..." : "Reproduzir"}
+        >
+          {loading ? (
+            <span className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          ) : playing ? (
+            <Square className="h-5 w-5 fill-current" />
+          ) : (
+            <Play className="h-5 w-5 fill-current" />
+          )}
+        </button>
+
+        {/* Progress bar — sempre visível, cresce quando tocando */}
+        <div className="w-full h-1 rounded-full bg-muted overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-200",
+              playing ? "bg-primary" : "bg-muted-foreground/30"
+            )}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
 
       {/* Label */}
       <p className="text-xs font-semibold text-center leading-tight line-clamp-2">{asset.label}</p>
