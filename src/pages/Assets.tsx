@@ -1391,10 +1391,14 @@ const AssetCard = ({
   asset,
   isFav,
   onToggleFav,
+  favCount = 0,
+  showCount = false,
 }: {
   asset: Asset;
   isFav: boolean;
   onToggleFav: (id: string) => void;
+  favCount?: number;
+  showCount?: boolean;
 }) => {
   const [playing, setPlaying] = useState(false);
   const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
