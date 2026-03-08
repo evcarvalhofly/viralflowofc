@@ -4,6 +4,9 @@ import {
   Zap, MessageSquare, ClipboardList, TrendingUp,
   FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film, Home
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useTheme } from "next-themes";
 
 type NavItem = {
   label: string;
