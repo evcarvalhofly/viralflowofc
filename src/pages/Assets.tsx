@@ -2922,22 +2922,23 @@ const ComingSoon = ({ tab }: { tab: Tab }) => (
 
 /* ── Asset Grid ── */
 const AssetGrid = ({
-  assets, emptyMsg, favorites, onToggleFav,
+  assets, emptyMsg, favorites, onToggleFav, favCounts = {}, showCounts = false,
 }: {
   assets: Asset[]; emptyMsg: string; favorites: Set<string>; onToggleFav: (id: string) => void;
+  favCounts?: Record<string, number>; showCounts?: boolean;
 }) => (
   assets.length > 0 ? (
     <>
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none sm:hidden">
         {assets.map((asset) => (
           <div key={asset.id} className="shrink-0 flex items-start pt-1">
-            <AssetCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
+            <AssetCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} favCount={favCounts[asset.id] || 0} showCount={showCounts} />
           </div>
         ))}
       </div>
       <div className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pt-1">
         {assets.map((asset) => (
-          <AssetCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} />
+          <AssetCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={onToggleFav} favCount={favCounts[asset.id] || 0} showCount={showCounts} />
         ))}
       </div>
     </>
