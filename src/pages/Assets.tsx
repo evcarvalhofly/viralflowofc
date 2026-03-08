@@ -3010,8 +3010,18 @@ const Assets = () => {
   const currentTab = tabs.find((t) => t.id === activeTab)!;
 
   const allGroups = [...overlayGroups, ...effectGroups];
-  const allAssets = [...backgrounds, ...emojiAssets, ...overlayGroups.flatMap((g) => g.assets), ...effectGroups.flatMap((g) => g.assets)];
-  const favoriteAssets = allAssets.filter((a) => favorites.has(a.id));
+  // Video/image assets
+  const allVideoAssets = [
+    ...backgrounds,
+    ...emojiAssets,
+    ...overlayGroups.flatMap((g) => g.assets),
+    ...effectGroups.flatMap((g) => g.assets),
+  ];
+  // SFX assets
+  const allSfxAssets = sfxGroups.flatMap((g) => g.assets);
+
+  const favoriteVideoAssets = allVideoAssets.filter((a) => favorites.has(a.id));
+  const favoriteSoundAssets = allSfxAssets.filter((a) => favorites.has(a.id));
 
   // Sort helper: sort by favCounts descending when filter is active
   const sortAssets = <T extends { id: string }>(assets: T[]): T[] => {
