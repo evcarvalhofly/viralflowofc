@@ -1416,6 +1416,8 @@ const sfxAssets: SfxAsset[] = [
 ];
 
 /* ── Sound Card ── */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
 const SoundCard = ({
   asset,
   isFav,
@@ -1426,11 +1428,12 @@ const SoundCard = ({
   onToggleFav: (id: string) => void;
 }) => {
   const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Use the Google Drive preview embed URL which avoids CORS issues
-  const streamUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
+
+  // Proxy via Edge Function → sem CORS
+  const proxyUrl = `${SUPABASE_URL}/functions/v1/proxy-audio?id=${asset.driveId}`;
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
-  const openUrl = `https://drive.google.com/file/d/${asset.driveId}/view`;
 
   const togglePlay = async () => {
     if (!audioRef.current) return;
@@ -1439,12 +1442,14 @@ const SoundCard = ({
       audioRef.current.currentTime = 0;
       setPlaying(false);
     } else {
+      setLoading(true);
       try {
         await audioRef.current.play();
         setPlaying(true);
-      } catch {
-        // Fallback: open in new tab if autoplay is blocked
-        window.open(openUrl, "_blank");
+      } catch (err) {
+        console.error("Audio play error:", err);
+      } finally {
+        setLoading(false);
       }
     }
   };
@@ -1453,13 +1458,13 @@ const SoundCard = ({
 
   return (
     <div className="rounded-xl border border-border/60 bg-card hover:border-primary/50 transition-all duration-200 flex flex-col items-center gap-3 p-4 w-[44vw] sm:w-40 md:w-44 shrink-0 relative">
-      {/* Hidden audio element - let browser handle Drive redirect natively */}
+      {/* Hidden audio element via proxy */}
       <audio
         ref={audioRef}
-        src={streamUrl}
+        src={proxyUrl}
         preload="none"
         onEnded={() => setPlaying(false)}
-        onError={() => { setPlaying(false); window.open(openUrl, "_blank"); }}
+        onCanPlay={() => setLoading(false)}
       />
 
       {/* Fav button */}
@@ -1474,15 +1479,23 @@ const SoundCard = ({
       {/* Play button */}
       <button
         onClick={togglePlay}
+        disabled={loading}
         className={cn(
           "w-14 h-14 rounded-full flex items-center justify-center shadow-md transition-all duration-200",
+          loading && "opacity-70 cursor-wait",
           playing
             ? "bg-destructive text-destructive-foreground scale-95"
             : "bg-primary text-primary-foreground hover:scale-110"
         )}
-        aria-label={playing ? "Parar" : "Reproduzir"}
+        aria-label={playing ? "Parar" : loading ? "Carregando..." : "Reproduzir"}
       >
-        {playing ? <Square className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
+        {loading ? (
+          <span className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        ) : playing ? (
+          <Square className="h-5 w-5 fill-current" />
+        ) : (
+          <Play className="h-5 w-5 fill-current" />
+        )}
       </button>
 
       {/* Label */}
@@ -1491,19 +1504,12 @@ const SoundCard = ({
       {/* Badge */}
       <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">SFX</Badge>
 
-      {/* Actions */}
-      <div className="flex gap-1.5 w-full">
-        <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
-          <Button size="sm" variant="outline" className="gap-1 text-[11px] h-8 px-2 w-full">
-            <Download className="h-3 w-3" />Baixar
-          </Button>
-        </a>
-        <a href={openUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
-          <Button size="sm" className="gap-1 text-[11px] h-8 px-2 w-full">
-            <ExternalLink className="h-3 w-3" />Abrir
-          </Button>
-        </a>
-      </div>
+      {/* Download */}
+      <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="w-full">
+        <Button size="sm" variant="outline" className="gap-1 text-[11px] h-8 px-2 w-full">
+          <Download className="h-3 w-3" />Baixar
+        </Button>
+      </a>
     </div>
   );
 };
