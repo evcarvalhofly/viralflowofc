@@ -13,28 +13,28 @@ import { useAuth } from "@/contexts/AuthContext";
 function useFavorites() {
   const { user } = useAuth();
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  // counts[assetId] = total users who favorited it
+  // counts[assetId] = total users who favorited it (global, from security-definer function)
   const [favCounts, setFavCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
-  // Load user's favorites + global counts
+  // Load user's favorites + global counts via security-definer function
   useEffect(() => {
     if (!user) { setFavorites(new Set()); setLoading(false); return; }
 
     const load = async () => {
       setLoading(true);
-      const [{ data: userFavs }, { data: allFavs }] = await Promise.all([
+      const [{ data: userFavs }, { data: globalCounts }] = await Promise.all([
         supabase.from("favorites").select("asset_id").eq("user_id", user.id),
-        supabase.from("favorites").select("asset_id"),
+        // This function bypasses RLS and returns aggregate counts (no user_id exposed)
+        supabase.rpc("get_asset_favorite_counts"),
       ]);
 
       if (userFavs) setFavorites(new Set(userFavs.map((r) => r.asset_id)));
 
-      // Count per asset across all users
-      if (allFavs) {
+      if (globalCounts) {
         const counts: Record<string, number> = {};
-        allFavs.forEach(({ asset_id }) => {
-          counts[asset_id] = (counts[asset_id] || 0) + 1;
+        (globalCounts as { asset_id: string; fav_count: number }[]).forEach(({ asset_id, fav_count }) => {
+          counts[asset_id] = fav_count;
         });
         setFavCounts(counts);
       }
