@@ -1867,17 +1867,23 @@ const Assets = () => {
               </div>
             )
           ) : activeTab === "sfx" ? (
-            <div>
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none sm:hidden">
-                {sfxAssets.map((asset) => (
-                  <SoundCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={toggleFav} />
-                ))}
-              </div>
-              <div className="hidden sm:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {sfxAssets.map((asset) => (
-                  <SoundCard key={asset.id} asset={asset} isFav={favorites.has(asset.id)} onToggleFav={toggleFav} />
-                ))}
-              </div>
+            <div className="space-y-6">
+              {sfxGroups.map((group) => (
+                <div key={group.id}>
+                  <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                    <span>{group.emoji}</span>
+                    <span>{group.label}</span>
+                    <span className="text-[10px] bg-secondary text-secondary-foreground rounded px-1.5 py-0 h-4 inline-flex items-center ml-1">{group.assets.length}</span>
+                  </h2>
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 md:-mx-6 md:px-6 scrollbar-none">
+                    {group.assets.map((asset) => (
+                      <div key={asset.id} className="shrink-0">
+                        <SoundCard asset={asset} isFav={favorites.has(asset.id)} onToggleFav={toggleFav} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
