@@ -2075,8 +2075,6 @@ const sfxGroups: SfxGroup[] = [
     assets: [
       { id: "sfx-money1",  label: "Money",              driveId: "1f_u2VEbsQuUZeKlpBDXriT3lhXNKLWj8" },
       { id: "sfx-kaching", label: "Cash Register",      driveId: "1ozvVmK9abXcE4sHnOOn89yYcRu-YRjZv" },
-      { id: "sfx-qckwin2", label: "Quick Win",          driveId: "1BqDnt3yiFA_WYLrfp63ImWxosSAxzs5i" },
-      { id: "sfx-ding2",   label: "Ding",               driveId: "1RuZYOo_f-ZMhPb3CmM7xuEKVFsFqHLXD" },
     ],
   },
   {
