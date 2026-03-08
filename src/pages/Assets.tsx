@@ -3146,20 +3146,40 @@ const Assets = () => {
               <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
                 <span className="animate-pulse">Carregando favoritos...</span>
               </div>
-            ) : favoriteAssets.length > 0 ? (
-              <AssetGrid
-                assets={favoriteAssets}
-                favorites={favorites}
-                onToggleFav={toggleFav}
-                emptyMsg=""
-                favCounts={favCounts}
-                showCounts={false}
-              />
-            ) : (
+            ) : favoriteVideoAssets.length === 0 && favoriteSoundAssets.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
                 <Heart className="h-10 w-10 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">Nenhum favorito ainda.</p>
                 <p className="text-xs text-muted-foreground/60">Toque no ❤️ em qualquer asset para salvar aqui.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Videos first */}
+                {favoriteVideoAssets.length > 0 && (
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <Film className="h-4 w-4 text-primary" /> Vídeos & Imagens
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{favoriteVideoAssets.length}</Badge>
+                    </h2>
+                    <AssetGrid assets={favoriteVideoAssets} favorites={favorites} onToggleFav={toggleFav} emptyMsg="" favCounts={favCounts} showCounts={false} />
+                  </div>
+                )}
+                {/* Audio below */}
+                {favoriteSoundAssets.length > 0 && (
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <Music className="h-4 w-4 text-primary" /> Efeitos Sonoros
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{favoriteSoundAssets.length}</Badge>
+                    </h2>
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-none">
+                      {favoriteSoundAssets.map((asset) => (
+                        <div key={asset.id} className="shrink-0">
+                          <SoundCard asset={asset} isFav={true} onToggleFav={toggleFav} favCount={favCounts[asset.id] || 0} showCount={false} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           ) : activeTab === "sfx" ? (
