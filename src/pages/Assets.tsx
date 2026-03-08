@@ -2785,10 +2785,14 @@ const SoundCard = ({
   asset,
   isFav,
   onToggleFav,
+  favCount = 0,
+  showCount = false,
 }: {
   asset: SfxAsset;
   isFav: boolean;
   onToggleFav: (id: string) => void;
+  favCount?: number;
+  showCount?: boolean;
 }) => {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
