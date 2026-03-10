@@ -2065,7 +2065,8 @@ const ViralCut = () => {
                   <div className="relative flex h-6 border-b border-border/30 bg-[hsl(220,25%,8%)]">
                     <div className="w-32 shrink-0 border-r border-border/30" />
                     <div className="relative flex-1">
-                      {Array.from({ length: Math.ceil((duration || displayDuration)) + 1 }).map((_, i) => (
+                      {/* FIX 2: Ticks strictly based on displayed (virtual) timeline duration */}
+                      {Array.from({ length: Math.max(1, Math.ceil(displayDuration) + 1) }).map((_, i) => (
                         <div
                           key={i}
                           className="absolute top-0 bottom-0 border-l border-border/20 flex items-end pb-0.5"
