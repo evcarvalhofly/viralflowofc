@@ -764,15 +764,14 @@ const ViralCut = () => {
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing, updateLoop]);
 
-  // ─── Precise gap-skip: scheduled setTimeout per clip boundary ────────────
-  // Instead of polling via timeupdate (~4x/sec = 250ms lag), we compute
-  // exactly when the current clip ends and schedule a jump 1ms before it.
-  // This gives seamless, stutter-free playback between clips.
+  // ─── Precise gap-skip via timeupdate ─────────────────────────────────────
+  // Uses the native timeupdate event (fires ~4-60x/sec depending on browser).
+  // We also schedule a setTimeout as a safety backup 30ms before the clip end.
+  // This hybrid approach avoids both drift (setTimeout-only) and missed frames.
   const clipJumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastJumpSrcRef = useRef<number>(-1); // prevent double-jump
 
-  const scheduleClipJump = useCallback((v: HTMLVideoElement) => {
-    if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current);
-
+  const doClipJump = useCallback((v: HTMLVideoElement) => {
     const clips = timelineClipsRef.current;
     const videoClips = clips
       .filter(c => c.kind === "video" && c.visible)
@@ -780,18 +779,17 @@ const ViralCut = () => {
     if (videoClips.length === 0) return;
 
     const src = v.currentTime;
-
-    // Find which clip we're currently in
     const currentClipIdx = videoClips.findIndex(
-      c => src >= c.sourceStart && src < c.sourceEnd
+      c => src >= c.sourceStart && src < c.sourceEnd - 0.04
     );
 
     if (currentClipIdx === -1) {
-      // Not in any clip — jump to next clip immediately
+      // In a gap — jump to the next clip immediately
       const nextClip = videoClips.find(c => c.sourceStart > src);
-      if (nextClip) {
+      if (nextClip && Math.abs(lastJumpSrcRef.current - nextClip.sourceStart) > 0.05) {
+        lastJumpSrcRef.current = nextClip.sourceStart;
         v.currentTime = nextClip.sourceStart;
-      } else {
+      } else if (!nextClip) {
         v.pause();
         setPlaying(false);
         playingRef.current = false;
@@ -799,33 +797,19 @@ const ViralCut = () => {
       return;
     }
 
+    // Schedule a backup timer 30ms before the clip end
     const currentClip = videoClips[currentClipIdx];
     const nextClip = videoClips[currentClipIdx + 1];
+    if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current);
 
-    // Time until this clip ends (in ms), minus a small lead time
-    const msUntilEnd = ((currentClip.sourceEnd - src) / (v.playbackRate || 1)) * 1000 - 30;
-
-    if (msUntilEnd <= 0) {
-      // Already past the end — jump now
-      if (nextClip) {
-        v.currentTime = nextClip.sourceStart;
-        scheduleClipJump(v);
-      } else {
-        v.pause();
-        setPlaying(false);
-        playingRef.current = false;
-      }
-      return;
-    }
+    const msUntilEnd = Math.max(0, ((currentClip.sourceEnd - src) / (v.playbackRate || 1)) * 1000 - 30);
 
     clipJumpTimerRef.current = setTimeout(() => {
       if (v.paused || !playingRef.current) return;
-      if (nextClip) {
+      if (nextClip && Math.abs(lastJumpSrcRef.current - nextClip.sourceStart) > 0.05) {
+        lastJumpSrcRef.current = nextClip.sourceStart;
         v.currentTime = nextClip.sourceStart;
-        // Re-schedule for the clip after this one
-        scheduleClipJump(v);
-      } else {
-        // Last clip — stop at its end
+      } else if (!nextClip) {
         v.pause();
         setPlaying(false);
         playingRef.current = false;
@@ -833,28 +817,49 @@ const ViralCut = () => {
     }, msUntilEnd);
   }, []);
 
-  // Reschedule whenever play starts or user seeks
+  // Attach timeupdate + play + seeked + pause listeners
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
 
-    const onPlay = () => { if (playingRef.current) scheduleClipJump(v); };
-    const onSeeked = () => { if (playingRef.current) scheduleClipJump(v); };
-    const onPause = () => {
-      if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current);
+    const onTimeUpdate = () => {
+      if (!playingRef.current) return;
+      const clips = timelineClipsRef.current;
+      const videoClips = clips.filter(c => c.kind === "video" && c.visible).sort((a, b) => a.sourceStart - b.sourceStart);
+      if (videoClips.length === 0) return;
+      const src = v.currentTime;
+      // Check if we've overshot the current clip end
+      const inClip = videoClips.some(c => src >= c.sourceStart && src < c.sourceEnd);
+      if (!inClip) {
+        const nextClip = videoClips.find(c => c.sourceStart > src);
+        if (nextClip && Math.abs(lastJumpSrcRef.current - nextClip.sourceStart) > 0.05) {
+          lastJumpSrcRef.current = nextClip.sourceStart;
+          v.currentTime = nextClip.sourceStart;
+        } else if (!nextClip) {
+          v.pause();
+          setPlaying(false);
+          playingRef.current = false;
+        }
+      }
     };
 
+    const onPlay = () => { lastJumpSrcRef.current = -1; doClipJump(v); };
+    const onSeeked = () => { lastJumpSrcRef.current = -1; if (playingRef.current) doClipJump(v); };
+    const onPause = () => { if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current); };
+
+    v.addEventListener("timeupdate", onTimeUpdate);
     v.addEventListener("play", onPlay);
     v.addEventListener("seeked", onSeeked);
     v.addEventListener("pause", onPause);
     return () => {
+      v.removeEventListener("timeupdate", onTimeUpdate);
       v.removeEventListener("play", onPlay);
       v.removeEventListener("seeked", onSeeked);
       v.removeEventListener("pause", onPause);
       if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoSrc, scheduleClipJump]);
+  }, [videoSrc, doClipJump]);
 
   useEffect(() => {
     const v = videoRef.current;
