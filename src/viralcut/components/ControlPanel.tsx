@@ -242,11 +242,18 @@ export function ControlPanel({
         </h3>
 
         {hasSubtitles && (
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <label
+            className={cn(
+              'flex items-center gap-2 cursor-pointer select-none rounded-lg border px-3 py-2 transition-colors',
+              embedSubtitles
+                ? 'border-primary/50 bg-primary/10'
+                : 'border-border bg-muted/30'
+            )}
+          >
             <div
               onClick={() => onEmbedSubtitlesChange(!embedSubtitles)}
               className={cn(
-                'h-5 w-9 rounded-full transition-colors relative',
+                'h-5 w-9 rounded-full transition-colors relative shrink-0',
                 embedSubtitles ? 'bg-primary' : 'bg-muted'
               )}
             >
@@ -257,7 +264,19 @@ export function ControlPanel({
                 )}
               />
             </div>
-            <span className="text-xs text-muted-foreground">Embutir legenda no vídeo</span>
+            <div>
+              <span className={cn(
+                'text-xs font-medium',
+                embedSubtitles ? 'text-primary' : 'text-muted-foreground'
+              )}>
+                Embutir legenda no vídeo
+              </span>
+              {!embedSubtitles && (
+                <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                  Ative para gravar no arquivo exportado
+                </p>
+              )}
+            </div>
           </label>
         )}
 
