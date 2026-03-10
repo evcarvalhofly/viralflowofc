@@ -1280,7 +1280,7 @@ const ViralCut = () => {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   const displayDuration = virtualDuration > 0 ? virtualDuration : duration;
-  const displayTime = virtualTime;
+  const displayTime = timelineTime;
   const pxPerSec = timelineScale * 80;
 
   // Video clips for the main track
