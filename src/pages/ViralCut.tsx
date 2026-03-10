@@ -1267,64 +1267,107 @@ const ViralCut = () => {
       return;
     }
     setProcessing(true);
-    setProcessingMsg("Preparando exportação via canvas...");
+    setProcessingMsg("Preparando exportação...");
     videoRef.current?.pause();
     setPlaying(false);
+    playingRef.current = false;
 
+    // No cuts applied — direct download of original file
     if (cutSegments.length === 0) {
       const a = document.createElement("a");
       a.href = videoSrc;
-      a.download = `viralcut-export.mp4`;
+      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.mp4";
       a.click();
       setProcessing(false);
-      toast({ title: "✅ Vídeo exportado (sem cortes aplicados)" });
+      toast({ title: "✅ Vídeo exportado (original sem cortes)" });
       return;
     }
 
-    const v = document.createElement("video");
-    v.src = videoSrc;
-    v.muted = true;
-    v.load();
-    await new Promise(res => v.addEventListener("loadedmetadata", res, { once: true }));
+    try {
+      // Pick a supported mime type
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9"
+        : MediaRecorder.isTypeSupported("video/webm")
+        ? "video/webm"
+        : "video/mp4";
 
-    const canvas = document.createElement("canvas");
-    canvas.width = v.videoWidth || 1280;
-    canvas.height = v.videoHeight || 720;
-    const ctx = canvas.getContext("2d")!;
+      const exportVideo = document.createElement("video");
+      exportVideo.src = videoSrc;
+      exportVideo.muted = true;
+      exportVideo.crossOrigin = "anonymous";
+      exportVideo.preload = "auto";
 
-    const stream = canvas.captureStream(30);
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
-    const chunks: Blob[] = [];
-    recorder.ondataavailable = e => chunks.push(e.data);
+      // Wait for metadata
+      await new Promise<void>((res, rej) => {
+        exportVideo.addEventListener("loadedmetadata", () => res(), { once: true });
+        exportVideo.addEventListener("error", () => rej(new Error("Falha ao carregar vídeo para exportação")), { once: true });
+        exportVideo.load();
+      });
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "viralcut-export.webm";
-      a.click();
-      URL.revokeObjectURL(url);
-      setProcessing(false);
-      toast({ title: "✅ Vídeo exportado com cortes aplicados!" });
-    };
+      const canvas = document.createElement("canvas");
+      canvas.width = exportVideo.videoWidth || 1280;
+      canvas.height = exportVideo.videoHeight || 720;
+      const ctx = canvas.getContext("2d")!;
 
-    recorder.start();
-    setProcessingMsg("Renderizando segmentos...");
+      const stream = canvas.captureStream(30);
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-    for (let si = 0; si < cutSegments.length; si++) {
-      const seg = cutSegments[si];
-      setProcessingMsg(`Renderizando clipe ${si + 1}/${cutSegments.length}...`);
-      v.currentTime = seg.start;
-      await new Promise(res => v.addEventListener("seeked", res, { once: true }));
-      while (v.currentTime < seg.end) {
-        ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-        await new Promise(res => setTimeout(res, 1000 / 30));
-        v.currentTime = Math.min(v.currentTime + 1 / 30, seg.end);
-        await new Promise(res => v.addEventListener("seeked", res, { once: true }));
+      const exportDone = new Promise<void>(res => {
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.webm";
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          setProcessing(false);
+          toast({ title: `✅ Exportado com ${cutSegments.length} clipes!` });
+          res();
+        };
+      });
+
+      recorder.start(100); // collect data every 100ms
+
+      const seekTo = (time: number): Promise<void> =>
+        new Promise(res => {
+          const onSeeked = () => res();
+          exportVideo.addEventListener("seeked", onSeeked, { once: true });
+          exportVideo.currentTime = time;
+          // Safety fallback in case seeked never fires
+          setTimeout(res, 2000);
+        });
+
+      const renderFramesForSegment = async (start: number, end: number) => {
+        await seekTo(start);
+        const fps = 30;
+        const frameDuration = 1 / fps;
+        let t = start;
+        while (t < end - frameDuration / 2) {
+          ctx.drawImage(exportVideo, 0, 0, canvas.width, canvas.height);
+          const nextT = Math.min(t + frameDuration, end);
+          await seekTo(nextT);
+          t = nextT;
+          // Yield to keep UI responsive
+          await new Promise(r => setTimeout(r, 0));
+        }
+      };
+
+      for (let si = 0; si < cutSegments.length; si++) {
+        const seg = cutSegments[si];
+        setProcessingMsg(`Renderizando clipe ${si + 1}/${cutSegments.length}...`);
+        await renderFramesForSegment(seg.start, seg.end);
       }
+
+      recorder.stop();
+      await exportDone;
+    } catch (err) {
+      console.error("Export error:", err);
+      setProcessing(false);
+      toast({ title: "Erro na exportação", description: String(err), variant: "destructive" });
     }
-    recorder.stop();
   };
 
   const formatTime = (s: number) => {
