@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap } from "lucide-react";
+import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap, Scissors } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";

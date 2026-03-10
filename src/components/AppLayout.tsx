@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Zap, MessageSquare, ClipboardList, TrendingUp,
-  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film, Home
+  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film, Home, Scissors
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
