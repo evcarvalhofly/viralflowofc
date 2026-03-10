@@ -909,8 +909,9 @@ const ViralCut = () => {
     else { v.play(); setPlaying(true); }
   };
 
-  // Alias: all seek calls from UI go through seekTimeline
-  const seekVirtual = seekTimeline;
+  // UI alias — every visual navigation goes through seekTimeline
+  // Internal/system seeks that operate on raw file time use seekSource
+  const seekVirtual = seekTimeline; // timeline-time (edited sequence)
 
   const toggleMute = () => {
     const v = videoRef.current;
