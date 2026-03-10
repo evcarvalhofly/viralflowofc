@@ -594,23 +594,29 @@ const ViralCut = () => {
   const [videoName, setVideoName] = useState("Sem vídeo");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState([80]);
 
-  // ─ New real-clip architecture ─────────────────────────────────────────────
+  // ─ Clip architecture ──────────────────────────────────────────────────────
   const [sourceMedia, setSourceMedia] = useState<SourceMedia | null>(null);
   const [timelineClips, setTimelineClips] = useState<TimelineClip[]>([]);
+  // Keep ref for stable access inside RAF without stale closures
+  const timelineClipsRef = useRef<TimelineClip[]>([]);
 
-  // Legacy: derived from timelineClips for the playback engine
+  // Derived: for export only
   const cutSegments: ClipSegment[] = timelineClips.length > 0
     ? clipsToSegments(timelineClips)
     : [];
 
   const virtualDurationRef = useRef(0);
   const [virtualDuration, setVirtualDuration] = useState(0);
-  const [virtualTime, setVirtualTime] = useState(0);
+
+  // ── CLEAR TIME SEMANTICS ──────────────────────────────────────────────────
+  // timelineTime = position in the edited sequence (no silences)
+  // sourceTime   = real position in the source video file
+  const [timelineTime, setTimelineTime] = useState(0);
+  const [sourceTime, setSourceTime] = useState(0);
 
   // Non-video layers (text, audio, overlay)
   const [layers, setLayers] = useState<Layer[]>([]);
