@@ -222,10 +222,10 @@ export function ControlPanel({
                 )}
               >
                 <div
-                  className={cn(
-                    'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
-                    subtitleOptions.background ? 'translate-x-4' : 'translate-x-0.5'
-                  )}
+                className={cn(
+                  'absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform',
+                  subtitleOptions.background ? 'translate-x-4' : 'translate-x-0.5'
+                )}
                 />
               </div>
               <span className="text-xs text-muted-foreground">Fundo escuro</span>
