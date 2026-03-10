@@ -90,6 +90,44 @@ function clipColor(index: number) {
   return `hsl(${(262 + index * CLIP_HUE_STEP) % 360},70%,52%)`;
 }
 
+// ─── Time conversion utilities ───────────────────────────────────────────────
+
+/**
+ * Convert timeline time → source (real) time.
+ * Returns null if the timeline position falls in a gap between clips.
+ */
+function timelineToSourceTime(timelineTime: number, clips: TimelineClip[]): number | null {
+  const sorted = [...clips]
+    .filter(c => c.kind === "video" && c.visible)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+
+  for (const clip of sorted) {
+    if (timelineTime >= clip.timelineStart && timelineTime <= clip.timelineEnd) {
+      return clip.sourceStart + (timelineTime - clip.timelineStart);
+    }
+  }
+  return null;
+}
+
+/**
+ * Convert source (real) time → timeline time.
+ * If the source time is between clips, snaps to the nearest clip boundary.
+ */
+function sourceToTimelineTime(sourceTime: number, clips: TimelineClip[]): number {
+  const sorted = [...clips]
+    .filter(c => c.kind === "video" && c.visible)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+
+  for (const clip of sorted) {
+    if (sourceTime >= clip.sourceStart && sourceTime <= clip.sourceEnd) {
+      return clip.timelineStart + (sourceTime - clip.sourceStart);
+    }
+  }
+  // Outside all clips — return end of last clip
+  const last = sorted[sorted.length - 1];
+  return last ? last.timelineEnd : sourceTime;
+}
+
 // ─── Utility: build TimelineClips from silence-detection segments ─────────────
 
 function buildTimelineClipsFromSegments(
@@ -151,7 +189,7 @@ function deleteClip(clips: TimelineClip[], clipId: string): TimelineClip[] {
   return clips.filter(c => c.id !== clipId);
 }
 
-/** Convert TimelineClips (video track) to legacy ClipSegments for playback engine */
+/** Convert TimelineClips (video track) to legacy ClipSegments for export */
 function clipsToSegments(clips: TimelineClip[]): ClipSegment[] {
   return clips
     .filter(c => c.kind === "video" && c.trackId === "track-video-main" && c.visible)
