@@ -11,8 +11,6 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1316,35 +1314,7 @@ const ViralCut = () => {
     });
   };
 
-  // ─── Export ───────────────────────────────────────────────────────────────
-  // ─── FFmpeg instance (lazy-loaded once) ──────────────────────────────────
-  const ffmpegRef = useRef<FFmpeg | null>(null);
-  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
-
-  const loadFFmpeg = useCallback(async () => {
-    if (ffmpegRef.current && ffmpegLoaded) return ffmpegRef.current;
-    const ff = new FFmpeg();
-
-    // jsdelivr CDN — version pinned, files have no CORP restriction issues
-    // toBlobURL fetches the file and returns a same-origin blob: URL so the
-    // FFmpeg worker can importScripts() it without COEP problems.
-    const base = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
-
-    try {
-      const [coreURL, wasmURL] = await Promise.all([
-        toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
-        toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
-      ]);
-      await ff.load({ coreURL, wasmURL });
-    } catch (e) {
-      console.error("FFmpeg load failed:", e);
-      throw new Error("Não foi possível carregar o FFmpeg. Verifique sua conexão e tente novamente.");
-    }
-
-    ffmpegRef.current = ff;
-    setFfmpegLoaded(true);
-    return ff;
-  }, [ffmpegLoaded]);
+  // ─── Export via MediaRecorder (no WASM needed) ────────────────────────────
 
   const handleExport = async () => {
     if (!videoSrc || !videoFile) {
@@ -1358,11 +1328,11 @@ const ViralCut = () => {
 
     const segs = cutSegments;
 
-    // No cuts — direct download of original
+    // No cuts — direct download of original file
     if (segs.length === 0) {
       const a = document.createElement("a");
       a.href = videoSrc;
-      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.mp4";
+      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut" + (videoName.match(/\.[^.]+$/)?.[0] ?? ".mp4");
       a.click();
       setProcessing(false);
       toast({ title: "✅ Vídeo exportado (original sem cortes)" });
@@ -1370,81 +1340,96 @@ const ViralCut = () => {
     }
 
     try {
-      setProcessingMsg("Carregando FFmpeg...");
-      const ff = await loadFFmpeg();
+      setProcessingMsg(`Preparando exportação de ${segs.length} clipe${segs.length > 1 ? "s" : ""}...`);
 
-      setProcessingMsg("Carregando vídeo...");
-      // Write source video into FFmpeg virtual FS
-      const inputData = await fetchFile(videoFile);
-      await ff.writeFile("input.mp4", inputData);
+      // Create hidden video element for real-time playback capture
+      const captureVid = document.createElement("video");
+      captureVid.src = videoSrc;
+      captureVid.crossOrigin = "anonymous";
+      captureVid.muted = false;
+      captureVid.volume = 1;
+      captureVid.style.cssText = "position:fixed;opacity:0.01;width:1px;height:1px;top:-9999px";
+      document.body.appendChild(captureVid);
 
-      // Build a concat filter_complex that trims + concatenates all segments
-      // Format: [0:v]trim=start=S:end=E,setpts=PTS-STARTPTS[v0];
-      //         [0:a]atrim=start=S:end=E,asetpts=PTS-STARTPTS[a0]; ...
-      //         [v0][a0][v1][a1]...concat=n=N:v=1:a=1[outv][outa]
-      const filterParts: string[] = [];
-      const concatInputs: string[] = [];
-
-      for (let i = 0; i < segs.length; i++) {
-        const { start, end } = segs[i];
-        filterParts.push(
-          `[0:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${i}]`,
-          `[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i}]`
-        );
-        concatInputs.push(`[v${i}][a${i}]`);
-      }
-
-      filterParts.push(
-        `${concatInputs.join("")}concat=n=${segs.length}:v=1:a=1[outv][outa]`
-      );
-
-      const filterComplex = filterParts.join(";");
-
-      setProcessingMsg(`Exportando ${segs.length} clipe${segs.length > 1 ? "s" : ""} em MP4...`);
-
-      ff.on("progress", ({ progress }) => {
-        setProcessingMsg(`Exportando MP4... ${Math.round(progress * 100)}%`);
+      // Wait for metadata
+      await new Promise<void>((res, rej) => {
+        captureVid.onloadedmetadata = () => res();
+        captureVid.onerror = () => rej(new Error("Falha ao carregar vídeo para exportação"));
+        setTimeout(() => rej(new Error("Timeout ao carregar vídeo")), 15000);
       });
 
-      await ff.exec([
-        "-i", "input.mp4",
-        "-filter_complex", filterComplex,
-        "-map", "[outv]",
-        "-map", "[outa]",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "22",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-movflags", "+faststart",
-        "output.mp4",
-      ]);
+      // Get MediaStream from video element (includes audio track)
+      const stream = (captureVid as HTMLVideoElement & { captureStream: () => MediaStream }).captureStream();
 
-      const data = await ff.readFile("output.mp4");
-      // FileData can be Uint8Array (possibly backed by SharedArrayBuffer) or string
-      const uint8 = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
-      // Copy to a plain ArrayBuffer so Blob constructor accepts it
-      const plainBuffer = uint8.buffer.slice(uint8.byteOffset, uint8.byteOffset + uint8.byteLength) as ArrayBuffer;
-      const blob = new Blob([plainBuffer], { type: "video/mp4" });
+      // Pick best supported MIME type
+      const mimeType = [
+        "video/mp4;codecs=avc1,mp4a.40.2",
+        "video/mp4",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ].find((m) => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
+
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+      recorder.start(100); // collect data every 100ms
+
+      // Play each segment sequentially
+      for (let i = 0; i < segs.length; i++) {
+        const { start, end } = segs[i];
+        const segDuration = end - start;
+        setProcessingMsg(`Gravando clipe ${i + 1}/${segs.length}... ${Math.round(((i) / segs.length) * 100)}%`);
+
+        // Seek to start of segment
+        captureVid.currentTime = start;
+        await new Promise<void>((res) => { captureVid.onseeked = () => res(); });
+
+        captureVid.play();
+
+        // Wait for segment to finish playing
+        await new Promise<void>((res) => {
+          const checkEnd = () => {
+            if (captureVid.currentTime >= end - 0.05) {
+              captureVid.pause();
+              res();
+            } else {
+              requestAnimationFrame(checkEnd);
+            }
+          };
+          requestAnimationFrame(checkEnd);
+          // Safety timeout
+          setTimeout(() => { captureVid.pause(); res(); }, (segDuration + 2) * 1000);
+        });
+      }
+
+      setProcessingMsg("Finalizando exportação...");
+      recorder.stop();
+
+      await new Promise<void>((res) => { recorder.onstop = () => res(); });
+
+      document.body.removeChild(captureVid);
+
+      const isMP4 = mimeType.includes("mp4");
+      const ext = isMP4 ? ".mp4" : ".webm";
+      const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.mp4";
+      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut" + ext;
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-
-      // Cleanup FS
-      await ff.deleteFile("input.mp4");
-      await ff.deleteFile("output.mp4");
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
 
       setProcessing(false);
-      toast({ title: `✅ MP4 exportado com áudio! ${segs.length} clipe${segs.length > 1 ? "s" : ""}.` });
+      toast({ title: `✅ Vídeo exportado${isMP4 ? " em MP4" : " em WebM"} com áudio! ${segs.length} clipe${segs.length > 1 ? "s" : ""}.` });
     } catch (err) {
       console.error("Export error:", err);
       setProcessing(false);
       toast({ title: "Erro na exportação", description: String(err), variant: "destructive" });
     }
   };
+
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
