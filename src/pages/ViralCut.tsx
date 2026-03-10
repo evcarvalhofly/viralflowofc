@@ -13,6 +13,9 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
+// Vite ?url imports so bundler resolves and serves the WASM assets correctly
+import ffmpegCoreJsURL from "@ffmpeg/core/dist/umd/ffmpeg-core.js?url";
+import ffmpegCoreWasmURL from "@ffmpeg/core/dist/umd/ffmpeg-core.wasm?url";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1324,37 +1327,16 @@ const ViralCut = () => {
   const loadFFmpeg = useCallback(async () => {
     if (ffmpegRef.current && ffmpegLoaded) return ffmpegRef.current;
     const ff = new FFmpeg();
-
-    // Load from local node_modules via Vite's asset import system
-    // These URLs resolve to files served by Vite dev server / bundler
-    const coreURL = new URL(
-      "/node_modules/@ffmpeg/core/dist/umd/ffmpeg-core.js",
-      import.meta.url
-    ).href;
-    const wasmURL = new URL(
-      "/node_modules/@ffmpeg/core/dist/umd/ffmpeg-core.wasm",
-      import.meta.url
-    ).href;
-
     try {
-      // Convert to blob URLs so they work regardless of COEP headers
+      // Use Vite-resolved URLs (from ?url imports) converted to blob URLs
+      // so they satisfy COEP regardless of the serving headers
       await ff.load({
-        coreURL: await toBlobURL(coreURL, "text/javascript"),
-        wasmURL: await toBlobURL(wasmURL, "application/wasm"),
+        coreURL: await toBlobURL(ffmpegCoreJsURL, "text/javascript"),
+        wasmURL: await toBlobURL(ffmpegCoreWasmURL, "application/wasm"),
       });
-    } catch (e1) {
-      console.warn("toBlobURL failed, trying direct URL:", e1);
-      try {
-        await ff.load({ coreURL, wasmURL });
-      } catch (e2) {
-        // Last resort: unpkg CDN
-        console.warn("Direct URL failed, trying unpkg:", e2);
-        const unpkg = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
-        await ff.load({
-          coreURL: await toBlobURL(`${unpkg}/ffmpeg-core.js`, "text/javascript"),
-          wasmURL: await toBlobURL(`${unpkg}/ffmpeg-core.wasm`, "application/wasm"),
-        });
-      }
+    } catch (e) {
+      console.error("FFmpeg load failed:", e);
+      throw new Error("Não foi possível carregar o FFmpeg. Verifique sua conexão e tente novamente.");
     }
     ffmpegRef.current = ff;
     setFfmpegLoaded(true);
