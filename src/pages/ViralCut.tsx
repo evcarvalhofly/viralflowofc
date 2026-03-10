@@ -1283,8 +1283,9 @@ const ViralCut = () => {
     setPlaying(false);
     playingRef.current = false;
 
-    // No cuts applied — direct download of original file
-    if (cutSegments.length === 0) {
+    // No cuts — direct download of original
+    const segs = cutSegments;
+    if (segs.length === 0) {
       const a = document.createElement("a");
       a.href = videoSrc;
       a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.mp4";
@@ -1295,37 +1296,89 @@ const ViralCut = () => {
     }
 
     try {
-      // Pick a supported mime type
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : MediaRecorder.isTypeSupported("video/webm")
-        ? "video/webm"
-        : "video/mp4";
+      const mimeType = ["video/webm;codecs=vp9", "video/webm", "video/mp4"]
+        .find(m => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
 
-      const exportVideo = document.createElement("video");
-      exportVideo.src = videoSrc;
-      exportVideo.muted = true;
-      exportVideo.crossOrigin = "anonymous";
-      exportVideo.preload = "auto";
+      // Hidden video element for export — plays the source at real speed
+      const ev = document.createElement("video");
+      ev.src = videoSrc;
+      ev.muted = true;
+      ev.playsInline = true;
+      ev.crossOrigin = "anonymous";
+      document.body.appendChild(ev); // must be in DOM for captureStream
 
-      // Wait for metadata
       await new Promise<void>((res, rej) => {
-        exportVideo.addEventListener("loadedmetadata", () => res(), { once: true });
-        exportVideo.addEventListener("error", () => rej(new Error("Falha ao carregar vídeo para exportação")), { once: true });
-        exportVideo.load();
+        ev.onloadedmetadata = () => res();
+        ev.onerror = () => rej(new Error("Erro ao carregar vídeo"));
+        ev.load();
       });
 
       const canvas = document.createElement("canvas");
-      canvas.width = exportVideo.videoWidth || 1280;
-      canvas.height = exportVideo.videoHeight || 720;
+      canvas.width = ev.videoWidth || 1280;
+      canvas.height = ev.videoHeight || 720;
       const ctx = canvas.getContext("2d")!;
 
-      const stream = canvas.captureStream(30);
-      const recorder = new MediaRecorder(stream, { mimeType });
+      // Capture canvas stream + audio stream from video
+      const videoStream = canvas.captureStream(30);
+      let combinedStream = videoStream;
+      try {
+        // Try to capture audio too
+        const audioCtx = new AudioContext();
+        const src = audioCtx.createMediaElementSource(ev);
+        const dest = audioCtx.createMediaStreamDestination();
+        src.connect(dest);
+        src.connect(audioCtx.destination);
+        const audioTrack = dest.stream.getAudioTracks()[0];
+        if (audioTrack) {
+          combinedStream = new MediaStream([...videoStream.getVideoTracks(), audioTrack]);
+        }
+      } catch (_) { /* no audio capture — ok */ }
+
+      const recorder = new MediaRecorder(combinedStream, { mimeType });
       const chunks: Blob[] = [];
       recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-      const exportDone = new Promise<void>(res => {
+      // Draw frames to canvas while video plays
+      let drawing = true;
+      const drawFrame = () => {
+        if (!drawing) return;
+        ctx.drawImage(ev, 0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(drawFrame);
+      };
+      requestAnimationFrame(drawFrame);
+
+      recorder.start(200);
+
+      // Play each segment sequentially
+      for (let si = 0; si < segs.length; si++) {
+        const seg = segs[si];
+        setProcessingMsg(`Exportando clipe ${si + 1}/${segs.length}...`);
+
+        // Seek to start
+        await new Promise<void>(res => {
+          ev.onseeked = () => res();
+          ev.currentTime = seg.start;
+          setTimeout(res, 3000); // safety fallback
+        });
+
+        // Play until end of segment
+        await new Promise<void>(res => {
+          const onTime = () => {
+            if (ev.currentTime >= seg.end - 0.05) {
+              ev.removeEventListener("timeupdate", onTime);
+              ev.pause();
+              res();
+            }
+          };
+          ev.addEventListener("timeupdate", onTime);
+          ev.play().catch(() => res());
+        });
+      }
+
+      drawing = false;
+      recorder.stop();
+
+      await new Promise<void>(res => {
         recorder.onstop = () => {
           const blob = new Blob(chunks, { type: mimeType });
           const url = URL.createObjectURL(blob);
@@ -1333,47 +1386,14 @@ const ViralCut = () => {
           a.href = url;
           a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.webm";
           a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 5000);
-          setProcessing(false);
-          toast({ title: `✅ Exportado com ${cutSegments.length} clipes!` });
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
           res();
         };
       });
 
-      recorder.start(100); // collect data every 100ms
-
-      const seekTo = (time: number): Promise<void> =>
-        new Promise(res => {
-          const onSeeked = () => res();
-          exportVideo.addEventListener("seeked", onSeeked, { once: true });
-          exportVideo.currentTime = time;
-          // Safety fallback in case seeked never fires
-          setTimeout(res, 2000);
-        });
-
-      const renderFramesForSegment = async (start: number, end: number) => {
-        await seekTo(start);
-        const fps = 30;
-        const frameDuration = 1 / fps;
-        let t = start;
-        while (t < end - frameDuration / 2) {
-          ctx.drawImage(exportVideo, 0, 0, canvas.width, canvas.height);
-          const nextT = Math.min(t + frameDuration, end);
-          await seekTo(nextT);
-          t = nextT;
-          // Yield to keep UI responsive
-          await new Promise(r => setTimeout(r, 0));
-        }
-      };
-
-      for (let si = 0; si < cutSegments.length; si++) {
-        const seg = cutSegments[si];
-        setProcessingMsg(`Renderizando clipe ${si + 1}/${cutSegments.length}...`);
-        await renderFramesForSegment(seg.start, seg.end);
-      }
-
-      recorder.stop();
-      await exportDone;
+      document.body.removeChild(ev);
+      setProcessing(false);
+      toast({ title: `✅ Exportado! ${segs.length} clipe${segs.length > 1 ? "s" : ""} combinados.` });
     } catch (err) {
       console.error("Export error:", err);
       setProcessing(false);
