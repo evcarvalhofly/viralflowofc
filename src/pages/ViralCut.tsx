@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Upload, Scissors, Type, Layers, Download, Play, Pause,
+  Upload, Scissors, Type, Layers, Wand2, Download, Play, Pause,
   SkipBack, SkipForward, Volume2, VolumeX, ZoomIn, ZoomOut,
-  Music, Sparkles, Trash2, Eye, EyeOff,
+  Film, Music, Sparkles, Trash2, Eye, EyeOff,
   ChevronRight, ChevronLeft, Loader2, X,
-  ChevronUp, ChevronDown, Mic, Undo2
+  RotateCcw, ChevronUp, ChevronDown, Mic, MicOff, Undo2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
