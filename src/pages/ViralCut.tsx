@@ -1192,97 +1192,107 @@ const ViralCut = () => {
             )}
           </div>
 
-          {/* Player controls */}
-          <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-3 py-2 flex items-center gap-2">
-            <button onClick={() => seekVirtual(0)} className="text-muted-foreground hover:text-foreground shrink-0">
-              <SkipBack className="h-4 w-4" />
-            </button>
-            <button onClick={togglePlay} className="h-7 w-7 rounded-full bg-primary flex items-center justify-center hover:bg-primary/80 transition-colors shrink-0">
-              {playing ? <Pause className="h-3.5 w-3.5 text-primary-foreground" /> : <Play className="h-3.5 w-3.5 text-primary-foreground ml-0.5" />}
-            </button>
-            <button onClick={() => seekVirtual(displayDuration)} className="text-muted-foreground hover:text-foreground shrink-0">
-              <SkipForward className="h-4 w-4" />
-            </button>
-
-            {/* Seek bar */}
-            <div className="flex-1 relative h-2 bg-border rounded-full cursor-pointer"
-              onClick={e => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const vt = ((e.clientX - rect.left) / rect.width) * displayDuration;
-                seekVirtual(vt);
-              }}>
-              <div className="absolute h-full bg-primary rounded-full transition-none"
-                style={{ width: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%" }} />
-              {/* Segment markers */}
-              {cutSegments.length > 0 && (() => {
-                let acc = 0;
-                return cutSegments.map((s) => {
-                  const left = (acc / displayDuration) * 100;
-                  const w = ((s.end - s.start) / displayDuration) * 100;
-                  acc += s.end - s.start;
-                  return (
-                    <div key={s.id} className="absolute top-0 h-full bg-yellow-400/30 border-l border-yellow-400/60"
-                      style={{ left: `${left}%`, width: `${w}%` }} />
-                  );
-                });
-              })()}
-              {/* Draggable thumb */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-4 w-4 rounded-full bg-primary border-2 border-primary-foreground shadow cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
-                style={{ left: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%", touchAction: "none" }}
-                onMouseDown={e => {
-                  e.preventDefault();
-                  const bar = e.currentTarget.parentElement!;
-                  const onMove = (ev: MouseEvent) => {
-                    const rect = bar.getBoundingClientRect();
-                    const vt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
-                    seekVirtual(vt);
-                  };
-                  const onUp = () => {
-                    window.removeEventListener("mousemove", onMove);
-                    window.removeEventListener("mouseup", onUp);
-                  };
-                  window.addEventListener("mousemove", onMove);
-                  window.addEventListener("mouseup", onUp);
-                }}
-                onTouchStart={e => {
-                  const bar = e.currentTarget.parentElement!;
-                  const onMove = (ev: TouchEvent) => {
-                    const rect = bar.getBoundingClientRect();
-                    const vt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
-                    seekVirtual(vt);
-                  };
-                  const onEnd = () => {
-                    window.removeEventListener("touchmove", onMove);
-                    window.removeEventListener("touchend", onEnd);
-                  };
-                  window.addEventListener("touchmove", onMove, { passive: true });
-                  window.addEventListener("touchend", onEnd);
-                }}
-              />
-            </div>
-
-            <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
-              {formatTime(displayTime)} / {formatTime(displayDuration)}
-            </span>
-
-            <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground shrink-0">
-              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-            </button>
-            <div className="w-16 shrink-0">
-              <Slider value={volume} onValueChange={setVolume} min={0} max={100} step={1} />
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* ══ Action toolbar — above timeline, full width ══════════════════════ */}
-      <div className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 px-2 py-1.5 flex items-center gap-1.5 flex-wrap">
-        {/* Undo */}
+      {/* ══ Player controls — full width, above action toolbar ══════════════ */}
+      <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-4 py-2.5 flex items-center gap-3 w-full">
+        <button onClick={() => seekVirtual(0)} className="text-muted-foreground hover:text-foreground shrink-0">
+          <SkipBack className="h-5 w-5" />
+        </button>
+        <button
+          onClick={togglePlay}
+          className="h-9 w-9 rounded-full bg-primary flex items-center justify-center hover:bg-primary/80 transition-colors shrink-0 shadow-md"
+        >
+          {playing
+            ? <Pause className="h-4 w-4 text-primary-foreground" />
+            : <Play className="h-4 w-4 text-primary-foreground ml-0.5" />}
+        </button>
+        <button onClick={() => seekVirtual(displayDuration)} className="text-muted-foreground hover:text-foreground shrink-0">
+          <SkipForward className="h-5 w-5" />
+        </button>
+
+        {/* Seek bar */}
+        <div
+          className="flex-1 relative h-2.5 bg-border/60 rounded-full cursor-pointer"
+          onClick={e => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const vt = ((e.clientX - rect.left) / rect.width) * displayDuration;
+            seekVirtual(vt);
+          }}
+        >
+          <div
+            className="absolute h-full bg-primary rounded-full transition-none"
+            style={{ width: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%" }}
+          />
+          {/* Segment markers */}
+          {cutSegments.length > 0 && (() => {
+            let acc = 0;
+            return cutSegments.map(s => {
+              const left = (acc / displayDuration) * 100;
+              const w = ((s.end - s.start) / displayDuration) * 100;
+              acc += s.end - s.start;
+              return (
+                <div key={s.id} className="absolute top-0 h-full bg-yellow-400/30 border-l border-yellow-400/60"
+                  style={{ left: `${left}%`, width: `${w}%` }} />
+              );
+            });
+          })()}
+          {/* Draggable thumb */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-primary border-2 border-primary-foreground shadow-lg cursor-grab active:cursor-grabbing hover:scale-110 transition-transform"
+            style={{ left: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%", touchAction: "none" }}
+            onMouseDown={e => {
+              e.preventDefault();
+              const bar = e.currentTarget.parentElement!;
+              const onMove = (ev: MouseEvent) => {
+                const rect = bar.getBoundingClientRect();
+                const vt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
+                seekVirtual(vt);
+              };
+              const onUp = () => {
+                window.removeEventListener("mousemove", onMove);
+                window.removeEventListener("mouseup", onUp);
+              };
+              window.addEventListener("mousemove", onMove);
+              window.addEventListener("mouseup", onUp);
+            }}
+            onTouchStart={e => {
+              const bar = e.currentTarget.parentElement!;
+              const onMove = (ev: TouchEvent) => {
+                const rect = bar.getBoundingClientRect();
+                const vt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
+                seekVirtual(vt);
+              };
+              const onEnd = () => {
+                window.removeEventListener("touchmove", onMove);
+                window.removeEventListener("touchend", onEnd);
+              };
+              window.addEventListener("touchmove", onMove, { passive: true });
+              window.addEventListener("touchend", onEnd);
+            }}
+          />
+        </div>
+
+        <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
+          {formatTime(displayTime)} / {formatTime(displayDuration)}
+        </span>
+
+        <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground shrink-0">
+          {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+        </button>
+        <div className="w-20 shrink-0 hidden sm:block">
+          <Slider value={volume} onValueChange={setVolume} min={0} max={100} step={1} />
+        </div>
+      </div>
+
+      {/* ══ Action toolbar — full width, above timeline ══════════════════════ */}
+      <div className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 px-2 py-1.5 flex items-center gap-1 flex-wrap w-full">
+        {/* Undo — destaque */}
         <Button
           size="sm"
           variant="ghost"
-          className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-2"
+          className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-2.5"
           onClick={handleUndo}
           disabled={history.length === 0}
         >
@@ -1290,42 +1300,41 @@ const ViralCut = () => {
           Desfazer
         </Button>
 
-        <div className="h-4 w-px bg-border/40" />
+        <div className="h-4 w-px bg-border/40 mx-0.5" />
 
-        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2" onClick={() => fileInputRef.current?.click()}>
-          <Upload className="h-3 w-3" /> Upload
+        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => fileInputRef.current?.click()}>
+          <Upload className="h-3.5 w-3.5" /> Upload
         </Button>
-        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2"
+        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5"
           onClick={handleAutoCut} disabled={!videoSrc || autoCutLoading}>
           {autoCutLoading
-            ? <><Loader2 className="h-3 w-3 animate-spin" />{autoCutProgress}%</>
-            : <><Scissors className="h-3 w-3" />Corte Auto</>}
+            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />{autoCutProgress}%</>
+            : <><Scissors className="h-3.5 w-3.5" />Corte Auto</>}
         </Button>
-        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2"
-          onClick={() => setActiveTab("captions")}>
-          <Sparkles className="h-3 w-3" /> Legenda
+        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("captions")}>
+          <Sparkles className="h-3.5 w-3.5" /> Legenda
         </Button>
-        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2" onClick={() => setActiveTab("text")}>
-          <Type className="h-3 w-3" /> Texto
+        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("text")}>
+          <Type className="h-3.5 w-3.5" /> Texto
         </Button>
-        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2" onClick={() => setActiveTab("chroma")}>
-          <Layers className="h-3 w-3" /> Chroma
+        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("chroma")}>
+          <Layers className="h-3.5 w-3.5" /> Chroma
         </Button>
 
         {/* Zoom timeline */}
         <div className="flex items-center gap-1 ml-auto">
-          <span className="text-[9px] text-muted-foreground uppercase tracking-widest mr-1">Zoom</span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-widest mr-1 hidden sm:inline">Zoom</span>
           <button onClick={() => setTimelineScale(s => Math.max(0.25, Math.round((s - 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
             <ZoomOut className="h-3.5 w-3.5" />
           </button>
-          <span className="text-[9px] text-muted-foreground w-8 text-center">{timelineScale}x</span>
+          <span className="text-[9px] text-muted-foreground w-7 text-center">{timelineScale}x</span>
           <button onClick={() => setTimelineScale(s => Math.min(8, Math.round((s + 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
             <ZoomIn className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        <Button size="sm" className="h-7 text-xs gap-1.5 ml-2" onClick={handleExport} disabled={!videoSrc || processing}>
-          {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+        <Button size="sm" className="h-8 text-xs gap-1.5 ml-2" onClick={handleExport} disabled={!videoSrc || processing}>
+          {processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
           Exportar
         </Button>
 
