@@ -12,8 +12,6 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
     headers: {
-      // Required for FFmpeg WASM (SharedArrayBuffer)
-      // credentialless allows cross-origin resources without CORP headers
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "credentialless",
     },
@@ -28,4 +26,15 @@ export default defineConfig(({ mode }) => ({
     exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "@ffmpeg/core"],
   },
   assetsInclude: ["**/*.wasm"],
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep WASM files as separate assets so they can be fetched at runtime
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name?.endsWith(".wasm")) return "assets/[name][extname]";
+          return "assets/[name]-[hash][extname]";
+        },
+      },
+    },
+  },
 }));
