@@ -177,23 +177,193 @@ function applyChromaKey(
   ctx.putImageData(imageData, 0, 0);
 }
 
+// ─── Video Clip Block (draggable, resizable) ─────────────────────────────────
+
+function VideoClipBlock({
+  seg, index, pxPerSec, trackHeight,
+  onDragEnd, onResizeEnd, onSeek, onSplit, onDelete,
+}: {
+  seg: ClipSegment;
+  index: number;
+  pxPerSec: number;
+  trackHeight: number;
+  onDragEnd: (id: string, newStart: number) => void;
+  onResizeEnd: (id: string, side: "left" | "right", newVal: number) => void;
+  onSeek: (t: number) => void;
+  onSplit: (id: string, at: number) => void;
+  onDelete: (id: string) => void;
+}) {
+  const left = seg.start * pxPerSec;
+  const width = Math.max(16, (seg.end - seg.start) * pxPerSec);
+  const color = clipColor(index);
+
+  const dragRef = useRef<{ startX: number; origStart: number; origEnd: number } | null>(null);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [tempLeft, setTempLeft] = useState<number | null>(null);
+
+  // ── drag (long-press to activate on touch) ────────────────────────────────
+  const startDrag = useCallback((clientX: number) => {
+    dragRef.current = { startX: clientX, origStart: seg.start, origEnd: seg.end };
+    setDragging(true);
+    const dur = seg.end - seg.start;
+
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      const cx = "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const dx = (cx - dragRef.current!.startX) / pxPerSec;
+      const newStart = Math.max(0, dragRef.current!.origStart + dx);
+      setTempLeft(newStart * pxPerSec);
+    };
+    const onUp = (e: MouseEvent | TouchEvent) => {
+      if (dragRef.current) {
+        const cx = "changedTouches" in e
+          ? (e as TouchEvent).changedTouches[0].clientX
+          : (e as MouseEvent).clientX;
+        const dx = (cx - dragRef.current.startX) / pxPerSec;
+        const newStart = Math.max(0, dragRef.current.origStart + dx);
+        onDragEnd(seg.id, newStart);
+      }
+      setDragging(false);
+      setTempLeft(null);
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove as EventListener);
+      window.removeEventListener("mouseup", onUp as EventListener);
+      window.removeEventListener("touchmove", onMove as EventListener);
+      window.removeEventListener("touchend", onUp as EventListener);
+    };
+    window.addEventListener("mousemove", onMove as EventListener);
+    window.addEventListener("mouseup", onUp as EventListener);
+    window.addEventListener("touchmove", onMove as EventListener, { passive: true });
+    window.addEventListener("touchend", onUp as EventListener);
+  }, [seg, pxPerSec, onDragEnd]);
+
+  // ── resize ────────────────────────────────────────────────────────────────
+  const startResize = useCallback((side: "left" | "right", clientX: number, e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    const orig = side === "left" ? seg.start : seg.end;
+
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      const cx = "touches" in ev ? ev.touches[0].clientX : (ev as MouseEvent).clientX;
+      const dt = (cx - clientX) / pxPerSec;
+      const newVal = orig + dt;
+      onResizeEnd(seg.id, side, newVal);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove as EventListener);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove as EventListener);
+      window.removeEventListener("touchend", onUp);
+    };
+    window.addEventListener("mousemove", onMove as EventListener);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove as EventListener, { passive: true });
+    window.addEventListener("touchend", onUp);
+  }, [seg, pxPerSec, onResizeEnd]);
+
+  const currentLeft = tempLeft !== null ? tempLeft : left;
+
+  return (
+    <div
+      className={cn(
+        "absolute top-1 select-none",
+        dragging ? "z-30 opacity-80 shadow-xl" : "z-10"
+      )}
+      style={{ left: currentLeft, width, height: trackHeight - 8, cursor: dragging ? "grabbing" : "grab" }}
+      onMouseDown={e => {
+        if ((e.target as HTMLElement).dataset.handle) return;
+        e.preventDefault();
+        startDrag(e.clientX);
+      }}
+      onTouchStart={e => {
+        if ((e.target as HTMLElement).dataset.handle) return;
+        longPressRef.current = setTimeout(() => {
+          startDrag(e.touches[0].clientX);
+        }, 350);
+      }}
+      onTouchEnd={() => {
+        if (longPressRef.current) clearTimeout(longPressRef.current);
+      }}
+      onClick={e => {
+        e.stopPropagation();
+        // Short click → seek to start of clip
+        if (!dragging) onSeek(seg.start);
+      }}
+    >
+      {/* Main block */}
+      <div
+        className="w-full h-full rounded flex items-center overflow-hidden border border-white/10 shadow"
+        style={{ backgroundColor: color }}
+      >
+        {/* Left resize handle */}
+        <div
+          data-handle="left"
+          className="absolute left-0 top-0 h-full w-2.5 cursor-w-resize flex items-center justify-center z-20 hover:bg-black/20"
+          onMouseDown={e => startResize("left", e.clientX, e)}
+          onTouchStart={e => startResize("left", e.touches[0].clientX, e)}
+        >
+          <div className="w-0.5 h-4 bg-white/50 rounded pointer-events-none" />
+        </div>
+
+        {/* Label */}
+        <span className="text-[9px] text-white font-semibold truncate px-3 pointer-events-none select-none flex-1 text-center">
+          {index + 1}
+        </span>
+
+        {/* Delete btn */}
+        <button
+          data-handle="del"
+          className="absolute top-0.5 right-0.5 h-4 w-4 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:opacity-100 z-20 transition-opacity"
+          style={{ opacity: width > 40 ? undefined : 0, pointerEvents: width > 40 ? undefined : "none" }}
+          onMouseDown={e => { e.stopPropagation(); onDelete(seg.id); }}
+          onTouchEnd={e => { e.stopPropagation(); onDelete(seg.id); }}
+        >
+          <X className="h-2.5 w-2.5 text-white" />
+        </button>
+
+        {/* Right resize handle */}
+        <div
+          data-handle="right"
+          className="absolute right-0 top-0 h-full w-2.5 cursor-e-resize flex items-center justify-center z-20 hover:bg-black/20"
+          onMouseDown={e => startResize("right", e.clientX, e)}
+          onTouchStart={e => startResize("right", e.touches[0].clientX, e)}
+        >
+          <div className="w-0.5 h-4 bg-white/50 rounded pointer-events-none" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Timeline Lane ────────────────────────────────────────────────────────────
 
 function TimelineLane({
-  layer, duration, scale,
-  onToggleVisible, onDelete, onSeek
+  layer, segments, duration, scale, isVideoTrack, cutMode,
+  onToggleVisible, onDelete, onSeek,
+  onSegmentDragEnd, onSegmentResizeEnd, onSegmentDelete, onManualCut,
 }: {
-  layer: Layer; duration: number; scale: number; currentTime: number;
+  layer: Layer;
+  segments?: ClipSegment[];
+  duration: number;
+  scale: number;
+  currentTime: number;
+  isVideoTrack?: boolean;
+  cutMode?: boolean;
   onToggleVisible: (id: string) => void;
   onDelete: (id: string) => void;
   onSeek: (t: number) => void;
+  onSegmentDragEnd?: (id: string, newStart: number) => void;
+  onSegmentResizeEnd?: (id: string, side: "left" | "right", newVal: number) => void;
+  onSegmentDelete?: (id: string) => void;
+  onManualCut?: (at: number) => void;
 }) {
   const pxPerSec = scale * 80;
   const left = layer.start * pxPerSec;
   const width = Math.max(20, (layer.end - layer.start) * pxPerSec);
+  const trackHeight = 40;
 
   return (
-    <div className="flex items-center h-10 border-b border-border/30 group">
+    <div className="flex items-center border-b border-border/30 group" style={{ height: trackHeight }}>
+      {/* Label column */}
       <div className="w-32 shrink-0 flex items-center gap-1 px-2 border-r border-border/30 h-full bg-card/50">
         <button onClick={() => onToggleVisible(layer.id)} className="text-muted-foreground hover:text-foreground">
           {layer.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -203,20 +373,73 @@ function TimelineLane({
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
+
+      {/* Track body */}
       <div
-        className="relative flex-1 h-full overflow-hidden cursor-pointer"
+        className={cn(
+          "relative flex-1 h-full overflow-hidden",
+          cutMode ? "cursor-crosshair" : "cursor-pointer"
+        )}
         onClick={e => {
           const rect = e.currentTarget.getBoundingClientRect();
-          const t = ((e.clientX - rect.left) / rect.width) * duration;
-          onSeek(t);
+          const t = (e.clientX - rect.left) / pxPerSec;
+          if (cutMode && isVideoTrack && onManualCut) {
+            onManualCut(t);
+          } else {
+            onSeek(t);
+          }
         }}
       >
-        <div
-          className="absolute top-1 bottom-1 rounded flex items-center px-2"
-          style={{ left, width, backgroundColor: layer.color, opacity: layer.visible ? 0.9 : 0.3 }}
-        >
-          <span className="text-[9px] text-white font-medium truncate">{layer.label}</span>
-        </div>
+        {isVideoTrack && segments && segments.length > 0 ? (
+          // Render individual clip blocks
+          <>
+            {/* Dark "removed" background */}
+            <div className="absolute inset-0 bg-border/10" />
+            {/* Gap markers (silences) between segments */}
+            {segments.map((seg, i) => {
+              const prev = segments[i - 1];
+              const gapStart = prev ? prev.end : 0;
+              const gapEnd = seg.start;
+              if (gapEnd <= gapStart) return null;
+              return (
+                <div
+                  key={`gap-${seg.id}`}
+                  className="absolute top-0 bottom-0 bg-black/40 border-x border-destructive/20"
+                  style={{ left: gapStart * pxPerSec, width: Math.max(2, (gapEnd - gapStart) * pxPerSec) }}
+                />
+              );
+            })}
+            {/* Clip blocks */}
+            {segments.map((seg, i) => (
+              <VideoClipBlock
+                key={seg.id}
+                seg={seg}
+                index={i}
+                pxPerSec={pxPerSec}
+                trackHeight={trackHeight}
+                onDragEnd={onSegmentDragEnd!}
+                onResizeEnd={onSegmentResizeEnd!}
+                onSeek={onSeek}
+                onSplit={() => {}}
+                onDelete={onSegmentDelete!}
+              />
+            ))}
+            {/* Cut cursor line */}
+            {cutMode && (
+              <div className="absolute inset-0 flex items-center pointer-events-none">
+                <div className="w-full h-full border-2 border-dashed border-destructive/60 rounded opacity-60" />
+              </div>
+            )}
+          </>
+        ) : (
+          // Normal single-block layer
+          <div
+            className="absolute top-1 bottom-1 rounded flex items-center px-2"
+            style={{ left, width, backgroundColor: layer.color, opacity: layer.visible ? 0.9 : 0.3 }}
+          >
+            <span className="text-[9px] text-white font-medium truncate">{layer.label}</span>
+          </div>
+        )}
       </div>
     </div>
   );
