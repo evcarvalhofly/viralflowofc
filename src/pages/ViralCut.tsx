@@ -1790,10 +1790,17 @@ const ViralCut = () => {
 
           {/* Zoom hint */}
           <div className="px-3 py-1 border-t border-border/20 shrink-0 flex items-center gap-3">
-            <span className="text-[8px] text-muted-foreground/50">Ctrl+scroll ou pinça para zoom • Arraste ▲ para navegar</span>
+            {cutMode ? (
+              <span className="text-[9px] text-destructive font-semibold flex items-center gap-1">
+                <Scissors className="h-3 w-3" />
+                Modo corte ativo — clique sobre um clipe para cortá-lo
+              </span>
+            ) : (
+              <span className="text-[8px] text-muted-foreground/50">Ctrl+scroll ou pinça para zoom • Arraste ▲ para navegar • Long-press para mover clipe</span>
+            )}
             {cutSegments.length > 0 && (
               <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5 ml-auto">
-                {cutSegments.length} cortes • {formatTime(displayDuration)}
+                {cutSegments.length} clipes • {formatTime(displayDuration)}
               </span>
             )}
           </div>
