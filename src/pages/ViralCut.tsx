@@ -14,6 +14,32 @@ import { useToast } from "@/hooks/use-toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** A real editable clip on the timeline */
+interface TimelineClip {
+  id: string;
+  sourceId: string;
+  kind: "video" | "audio" | "text" | "overlay";
+  trackId: string;
+  sourceStart: number;
+  sourceEnd: number;
+  timelineStart: number;
+  timelineEnd: number;
+  visible: boolean;
+  locked: boolean;
+  color: string;
+  text?: string;
+}
+
+/** Source media file */
+interface SourceMedia {
+  id: string;
+  type: "video" | "audio" | "image";
+  name: string;
+  src: string;
+  duration: number;
+}
+
+// Keep legacy ClipSegment for history & export compatibility
 type ClipSegment = { id: string; start: number; end: number };
 type LayerType = "video" | "overlay" | "text" | "audio";
 
@@ -27,8 +53,6 @@ interface Layer {
   locked: boolean;
   color: string;
   content?: string;
-  // For video layers that are individual cut segments
-  segmentIndex?: number;
 }
 
 interface CaptionBlock {
@@ -41,10 +65,8 @@ interface CaptionBlock {
 type AutoCutLevel = "suave" | "medio" | "agressivo";
 type CaptionWordMode = 1 | 2 | 3;
 
-// ─── History entry ────────────────────────────────────────────────────────────
-
 interface HistoryEntry {
-  cutSegments: ClipSegment[];
+  timelineClips: TimelineClip[];
   layers: Layer[];
   captions: CaptionBlock[];
   virtualDuration: number;
@@ -63,14 +85,81 @@ const LAYER_COLORS: Record<LayerType, string> = {
   audio: "hsl(210,80%,50%)",
 };
 
-// ─── Clip segment colors for visual differentiation ──────────────────────────
 const CLIP_HUE_STEP = 37;
 function clipColor(index: number) {
-  const hue = (262 + index * CLIP_HUE_STEP) % 360;
-  return `hsl(${hue},70%,52%)`;
+  return `hsl(${(262 + index * CLIP_HUE_STEP) % 360},70%,52%)`;
 }
 
-// ─── Silence Detection (Web Audio API) ────────────────────────────────────────
+// ─── Utility: build TimelineClips from silence-detection segments ─────────────
+
+function buildTimelineClipsFromSegments(
+  segments: { id: string; start: number; end: number }[],
+  sourceId: string
+): TimelineClip[] {
+  let cursor = 0;
+  return segments.map((seg, index) => {
+    const duration = seg.end - seg.start;
+    const clip: TimelineClip = {
+      id: `clip-${index}-${Date.now()}`,
+      sourceId,
+      kind: "video",
+      trackId: "track-video-main",
+      sourceStart: seg.start,
+      sourceEnd: seg.end,
+      timelineStart: cursor,
+      timelineEnd: cursor + duration,
+      visible: true,
+      locked: false,
+      color: clipColor(index),
+    };
+    cursor += duration;
+    return clip;
+  });
+}
+
+// ─── Clip mutation helpers ────────────────────────────────────────────────────
+
+function moveClip(clips: TimelineClip[], clipId: string, newTimelineStart: number): TimelineClip[] {
+  return clips.map(clip => {
+    if (clip.id !== clipId) return clip;
+    const dur = clip.timelineEnd - clip.timelineStart;
+    const ts = Math.max(0, newTimelineStart);
+    return { ...clip, timelineStart: ts, timelineEnd: ts + dur };
+  });
+}
+
+function resizeClip(
+  clips: TimelineClip[],
+  clipId: string,
+  side: "left" | "right",
+  newTime: number
+): TimelineClip[] {
+  return clips.map(clip => {
+    if (clip.id !== clipId) return clip;
+    if (side === "left") {
+      const newStart = Math.min(clip.timelineEnd - 0.1, Math.max(0, newTime));
+      const delta = newStart - clip.timelineStart;
+      return { ...clip, timelineStart: newStart, sourceStart: clip.sourceStart + delta };
+    }
+    const newEnd = Math.max(clip.timelineStart + 0.1, newTime);
+    const delta = newEnd - clip.timelineEnd;
+    return { ...clip, timelineEnd: newEnd, sourceEnd: clip.sourceEnd + delta };
+  });
+}
+
+function deleteClip(clips: TimelineClip[], clipId: string): TimelineClip[] {
+  return clips.filter(c => c.id !== clipId);
+}
+
+/** Convert TimelineClips (video track) to legacy ClipSegments for playback engine */
+function clipsToSegments(clips: TimelineClip[]): ClipSegment[] {
+  return clips
+    .filter(c => c.kind === "video" && c.trackId === "track-video-main" && c.visible)
+    .sort((a, b) => a.timelineStart - b.timelineStart)
+    .map(c => ({ id: c.id, start: c.sourceStart, end: c.sourceEnd }));
+}
+
+// ─── Silence Detection ────────────────────────────────────────────────────────
 
 async function detectSilenceSegments(
   videoEl: HTMLVideoElement,
@@ -86,7 +175,7 @@ async function detectSilenceSegments(
 
   const data = audioBuf.getChannelData(0);
   const sampleRate = audioBuf.sampleRate;
-  const duration = audioBuf.duration;
+  const dur = audioBuf.duration;
 
   const windowSamples = Math.floor(sampleRate * 0.05);
   const rms: number[] = [];
@@ -115,13 +204,13 @@ async function detectSilenceSegments(
       const silenceDur = t - silenceStart;
       if (silenceDur >= minDuration) {
         const keepEnd = Math.max(0, silenceStart - margin_before);
-        const keepStart = Math.min(duration, t + margin_after);
+        const keepStart = Math.min(dur, t + margin_after);
         if (keepEnd > lastKeepEnd) keepRanges.push({ start: lastKeepEnd, end: keepEnd });
         lastKeepEnd = keepStart;
       }
     }
   });
-  keepRanges.push({ start: lastKeepEnd, end: duration });
+  keepRanges.push({ start: lastKeepEnd, end: dur });
 
   const segments = keepRanges
     .filter(r => r.end - r.start > 0.1)
@@ -129,7 +218,7 @@ async function detectSilenceSegments(
 
   onProgress(100);
   audioCtx.close();
-  return segments.length > 0 ? segments : [{ id: "clip-0", start: 0, end: duration }];
+  return segments.length > 0 ? segments : [{ id: "clip-0", start: 0, end: dur }];
 }
 
 // ─── Caption splitter ─────────────────────────────────────────────────────────
@@ -177,36 +266,32 @@ function applyChromaKey(
   ctx.putImageData(imageData, 0, 0);
 }
 
-// ─── Video Clip Block (draggable, resizable) ─────────────────────────────────
+// ─── TimelineClipBlock (draggable, resizable) ─────────────────────────────────
 
-function VideoClipBlock({
-  seg, index, pxPerSec, trackHeight,
-  onDragEnd, onResizeEnd, onSeek, onSplit, onDelete,
+function TimelineClipBlock({
+  clip, index, pxPerSec, trackHeight,
+  onDragEnd, onResizeEnd, onSeek, onDelete,
 }: {
-  seg: ClipSegment;
+  clip: TimelineClip;
   index: number;
   pxPerSec: number;
   trackHeight: number;
-  onDragEnd: (id: string, newStart: number) => void;
-  onResizeEnd: (id: string, side: "left" | "right", newVal: number) => void;
+  onDragEnd: (id: string, newTimelineStart: number) => void;
+  onResizeEnd: (id: string, side: "left" | "right", newTime: number) => void;
   onSeek: (t: number) => void;
-  onSplit: (id: string, at: number) => void;
   onDelete: (id: string) => void;
 }) {
-  const left = seg.start * pxPerSec;
-  const width = Math.max(16, (seg.end - seg.start) * pxPerSec);
-  const color = clipColor(index);
+  const left = clip.timelineStart * pxPerSec;
+  const width = Math.max(16, (clip.timelineEnd - clip.timelineStart) * pxPerSec);
 
-  const dragRef = useRef<{ startX: number; origStart: number; origEnd: number } | null>(null);
+  const dragRef = useRef<{ startX: number; origStart: number } | null>(null);
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dragging, setDragging] = useState(false);
   const [tempLeft, setTempLeft] = useState<number | null>(null);
 
-  // ── drag (long-press to activate on touch) ────────────────────────────────
   const startDrag = useCallback((clientX: number) => {
-    dragRef.current = { startX: clientX, origStart: seg.start, origEnd: seg.end };
+    dragRef.current = { startX: clientX, origStart: clip.timelineStart };
     setDragging(true);
-    const dur = seg.end - seg.start;
 
     const onMove = (e: MouseEvent | TouchEvent) => {
       const cx = "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
@@ -221,7 +306,7 @@ function VideoClipBlock({
           : (e as MouseEvent).clientX;
         const dx = (cx - dragRef.current.startX) / pxPerSec;
         const newStart = Math.max(0, dragRef.current.origStart + dx);
-        onDragEnd(seg.id, newStart);
+        onDragEnd(clip.id, newStart);
       }
       setDragging(false);
       setTempLeft(null);
@@ -235,18 +320,16 @@ function VideoClipBlock({
     window.addEventListener("mouseup", onUp as EventListener);
     window.addEventListener("touchmove", onMove as EventListener, { passive: true });
     window.addEventListener("touchend", onUp as EventListener);
-  }, [seg, pxPerSec, onDragEnd]);
+  }, [clip, pxPerSec, onDragEnd]);
 
-  // ── resize ────────────────────────────────────────────────────────────────
   const startResize = useCallback((side: "left" | "right", clientX: number, e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-    const orig = side === "left" ? seg.start : seg.end;
+    const origVal = side === "left" ? clip.timelineStart : clip.timelineEnd;
 
     const onMove = (ev: MouseEvent | TouchEvent) => {
       const cx = "touches" in ev ? ev.touches[0].clientX : (ev as MouseEvent).clientX;
       const dt = (cx - clientX) / pxPerSec;
-      const newVal = orig + dt;
-      onResizeEnd(seg.id, side, newVal);
+      onResizeEnd(clip.id, side, origVal + dt);
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove as EventListener);
@@ -258,14 +341,14 @@ function VideoClipBlock({
     window.addEventListener("mouseup", onUp);
     window.addEventListener("touchmove", onMove as EventListener, { passive: true });
     window.addEventListener("touchend", onUp);
-  }, [seg, pxPerSec, onResizeEnd]);
+  }, [clip, pxPerSec, onResizeEnd]);
 
   const currentLeft = tempLeft !== null ? tempLeft : left;
 
   return (
     <div
       className={cn(
-        "absolute top-1 select-none",
+        "absolute top-1 select-none group",
         dragging ? "z-30 opacity-80 shadow-xl" : "z-10"
       )}
       style={{ left: currentLeft, width, height: trackHeight - 8, cursor: dragging ? "grabbing" : "grab" }}
@@ -276,23 +359,14 @@ function VideoClipBlock({
       }}
       onTouchStart={e => {
         if ((e.target as HTMLElement).dataset.handle) return;
-        longPressRef.current = setTimeout(() => {
-          startDrag(e.touches[0].clientX);
-        }, 350);
+        longPressRef.current = setTimeout(() => startDrag(e.touches[0].clientX), 350);
       }}
-      onTouchEnd={() => {
-        if (longPressRef.current) clearTimeout(longPressRef.current);
-      }}
-      onClick={e => {
-        e.stopPropagation();
-        // Short click → seek to start of clip
-        if (!dragging) onSeek(seg.start);
-      }}
+      onTouchEnd={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
+      onClick={e => { e.stopPropagation(); if (!dragging) onSeek(clip.timelineStart); }}
     >
-      {/* Main block */}
       <div
         className="w-full h-full rounded flex items-center overflow-hidden border border-white/10 shadow"
-        style={{ backgroundColor: color }}
+        style={{ backgroundColor: clip.color }}
       >
         {/* Left resize handle */}
         <div
@@ -312,10 +386,10 @@ function VideoClipBlock({
         {/* Delete btn */}
         <button
           data-handle="del"
-          className="absolute top-0.5 right-0.5 h-4 w-4 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:opacity-100 z-20 transition-opacity"
-          style={{ opacity: width > 40 ? undefined : 0, pointerEvents: width > 40 ? undefined : "none" }}
-          onMouseDown={e => { e.stopPropagation(); onDelete(seg.id); }}
-          onTouchEnd={e => { e.stopPropagation(); onDelete(seg.id); }}
+          className="absolute top-0.5 right-6 h-4 w-4 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 z-20 transition-opacity"
+          style={{ pointerEvents: width > 40 ? undefined : "none", opacity: width > 40 ? undefined : 0 }}
+          onMouseDown={e => { e.stopPropagation(); onDelete(clip.id); }}
+          onTouchEnd={e => { e.stopPropagation(); onDelete(clip.id); }}
         >
           <X className="h-2.5 w-2.5 text-white" />
         </button>
@@ -334,27 +408,103 @@ function VideoClipBlock({
   );
 }
 
-// ─── Timeline Lane ────────────────────────────────────────────────────────────
+// ─── Video Track Lane ─────────────────────────────────────────────────────────
 
-function TimelineLane({
-  layer, segments, duration, scale, isVideoTrack, cutMode,
-  onToggleVisible, onDelete, onSeek,
-  onSegmentDragEnd, onSegmentResizeEnd, onSegmentDelete, onManualCut,
+function VideoTrackLane({
+  clips, duration, scale, cutMode,
+  onSeek, onClipDragEnd, onClipResizeEnd, onClipDelete, onManualCut,
 }: {
-  layer: Layer;
-  segments?: ClipSegment[];
+  clips: TimelineClip[];
   duration: number;
   scale: number;
-  currentTime: number;
-  isVideoTrack?: boolean;
-  cutMode?: boolean;
+  cutMode: boolean;
+  onSeek: (t: number) => void;
+  onClipDragEnd: (id: string, newStart: number) => void;
+  onClipResizeEnd: (id: string, side: "left" | "right", newTime: number) => void;
+  onClipDelete: (id: string) => void;
+  onManualCut: (at: number) => void;
+}) {
+  const pxPerSec = scale * 80;
+  const trackHeight = 40;
+  const totalWidth = Math.max(duration * pxPerSec, 200);
+
+  const sorted = [...clips].sort((a, b) => a.timelineStart - b.timelineStart);
+
+  return (
+    <div className="flex items-center border-b border-border/30 group" style={{ height: trackHeight }}>
+      {/* Label column */}
+      <div className="w-32 shrink-0 flex items-center gap-1 px-2 border-r border-border/30 h-full bg-card/50">
+        <Eye className="h-3 w-3 text-muted-foreground" />
+        <span className="text-[10px] truncate text-muted-foreground flex-1">
+          Vídeo • {clips.length} clip{clips.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {/* Track body */}
+      <div
+        className={cn("relative h-full overflow-hidden", cutMode ? "cursor-crosshair" : "cursor-pointer")}
+        style={{ width: totalWidth }}
+        onClick={e => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const t = (e.clientX - rect.left) / pxPerSec;
+          if (cutMode) onManualCut(t);
+          else onSeek(t);
+        }}
+      >
+        {/* Dark background */}
+        <div className="absolute inset-0 bg-border/10" />
+
+        {/* Gap indicators between clips */}
+        {sorted.map((clip, i) => {
+          const prev = sorted[i - 1];
+          const gapStart = prev ? prev.timelineEnd : 0;
+          const gapEnd = clip.timelineStart;
+          if (gapEnd <= gapStart + 0.01) return null;
+          return (
+            <div
+              key={`gap-${clip.id}`}
+              className="absolute top-0 bottom-0 bg-black/40 border-x border-destructive/20"
+              style={{ left: gapStart * pxPerSec, width: Math.max(2, (gapEnd - gapStart) * pxPerSec) }}
+            />
+          );
+        })}
+
+        {/* Clip blocks */}
+        {sorted.map((clip, i) => (
+          <TimelineClipBlock
+            key={clip.id}
+            clip={clip}
+            index={i}
+            pxPerSec={pxPerSec}
+            trackHeight={trackHeight}
+            onDragEnd={onClipDragEnd}
+            onResizeEnd={onClipResizeEnd}
+            onSeek={onSeek}
+            onDelete={onClipDelete}
+          />
+        ))}
+
+        {/* Cut mode overlay */}
+        {cutMode && (
+          <div className="absolute inset-0 border-2 border-dashed border-destructive/60 rounded opacity-60 pointer-events-none" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Generic Layer Lane (text, audio, overlay) ────────────────────────────────
+
+function LayerLane({
+  layer, scale, displayDuration,
+  onToggleVisible, onDelete, onSeek,
+}: {
+  layer: Layer;
+  scale: number;
+  displayDuration: number;
   onToggleVisible: (id: string) => void;
   onDelete: (id: string) => void;
   onSeek: (t: number) => void;
-  onSegmentDragEnd?: (id: string, newStart: number) => void;
-  onSegmentResizeEnd?: (id: string, side: "left" | "right", newVal: number) => void;
-  onSegmentDelete?: (id: string) => void;
-  onManualCut?: (at: number) => void;
 }) {
   const pxPerSec = scale * 80;
   const left = layer.start * pxPerSec;
@@ -363,7 +513,6 @@ function TimelineLane({
 
   return (
     <div className="flex items-center border-b border-border/30 group" style={{ height: trackHeight }}>
-      {/* Label column */}
       <div className="w-32 shrink-0 flex items-center gap-1 px-2 border-r border-border/30 h-full bg-card/50">
         <button onClick={() => onToggleVisible(layer.id)} className="text-muted-foreground hover:text-foreground">
           {layer.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -373,73 +522,19 @@ function TimelineLane({
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
-
-      {/* Track body */}
       <div
-        className={cn(
-          "relative flex-1 h-full overflow-hidden",
-          cutMode ? "cursor-crosshair" : "cursor-pointer"
-        )}
+        className="relative flex-1 h-full overflow-hidden cursor-pointer"
         onClick={e => {
           const rect = e.currentTarget.getBoundingClientRect();
-          const t = (e.clientX - rect.left) / pxPerSec;
-          if (cutMode && isVideoTrack && onManualCut) {
-            onManualCut(t);
-          } else {
-            onSeek(t);
-          }
+          onSeek((e.clientX - rect.left) / pxPerSec);
         }}
       >
-        {isVideoTrack && segments && segments.length > 0 ? (
-          // Render individual clip blocks
-          <>
-            {/* Dark "removed" background */}
-            <div className="absolute inset-0 bg-border/10" />
-            {/* Gap markers (silences) between segments */}
-            {segments.map((seg, i) => {
-              const prev = segments[i - 1];
-              const gapStart = prev ? prev.end : 0;
-              const gapEnd = seg.start;
-              if (gapEnd <= gapStart) return null;
-              return (
-                <div
-                  key={`gap-${seg.id}`}
-                  className="absolute top-0 bottom-0 bg-black/40 border-x border-destructive/20"
-                  style={{ left: gapStart * pxPerSec, width: Math.max(2, (gapEnd - gapStart) * pxPerSec) }}
-                />
-              );
-            })}
-            {/* Clip blocks */}
-            {segments.map((seg, i) => (
-              <VideoClipBlock
-                key={seg.id}
-                seg={seg}
-                index={i}
-                pxPerSec={pxPerSec}
-                trackHeight={trackHeight}
-                onDragEnd={onSegmentDragEnd!}
-                onResizeEnd={onSegmentResizeEnd!}
-                onSeek={onSeek}
-                onSplit={() => {}}
-                onDelete={onSegmentDelete!}
-              />
-            ))}
-            {/* Cut cursor line */}
-            {cutMode && (
-              <div className="absolute inset-0 flex items-center pointer-events-none">
-                <div className="w-full h-full border-2 border-dashed border-destructive/60 rounded opacity-60" />
-              </div>
-            )}
-          </>
-        ) : (
-          // Normal single-block layer
-          <div
-            className="absolute top-1 bottom-1 rounded flex items-center px-2"
-            style={{ left, width, backgroundColor: layer.color, opacity: layer.visible ? 0.9 : 0.3 }}
-          >
-            <span className="text-[9px] text-white font-medium truncate">{layer.label}</span>
-          </div>
-        )}
+        <div
+          className="absolute top-1 bottom-1 rounded flex items-center px-2"
+          style={{ left, width, backgroundColor: layer.color, opacity: layer.visible ? 0.9 : 0.3 }}
+        >
+          <span className="text-[9px] text-white font-medium truncate">{layer.label}</span>
+        </div>
       </div>
     </div>
   );
@@ -459,17 +554,27 @@ const ViralCut = () => {
   // ─ State ──────────────────────────────────────────────────────────────────
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoName, setVideoName] = useState("Sem vídeo");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState([80]);
 
-  const [cutSegments, setCutSegments] = useState<ClipSegment[]>([]);
+  // ─ New real-clip architecture ─────────────────────────────────────────────
+  const [sourceMedia, setSourceMedia] = useState<SourceMedia | null>(null);
+  const [timelineClips, setTimelineClips] = useState<TimelineClip[]>([]);
+
+  // Legacy: derived from timelineClips for the playback engine
+  const cutSegments: ClipSegment[] = timelineClips.length > 0
+    ? clipsToSegments(timelineClips)
+    : [];
+
   const virtualDurationRef = useRef(0);
   const [virtualDuration, setVirtualDuration] = useState(0);
   const [virtualTime, setVirtualTime] = useState(0);
 
+  // Non-video layers (text, audio, overlay)
   const [layers, setLayers] = useState<Layer[]>([]);
   const [captions, setCaptions] = useState<CaptionBlock[]>([]);
   const [activeCaptions, setActiveCaptions] = useState<CaptionBlock[]>([]);
@@ -501,15 +606,15 @@ const ViralCut = () => {
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingMsg, setProcessingMsg] = useState("");
-  const [cutMode, setCutMode] = useState(false); // manual cut scissors mode
+  const [cutMode, setCutMode] = useState(false);
 
   // ─ History (Undo) ─────────────────────────────────────────────────────────
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   const pushHistory = useCallback((
-    segs: ClipSegment[], lays: Layer[], caps: CaptionBlock[], virtDur: number
+    clips: TimelineClip[], lays: Layer[], caps: CaptionBlock[], virtDur: number
   ) => {
-    setHistory(prev => [...prev.slice(-19), { cutSegments: segs, layers: lays, captions: caps, virtualDuration: virtDur }]);
+    setHistory(prev => [...prev.slice(-19), { timelineClips: clips, layers: lays, captions: caps, virtualDuration: virtDur }]);
   }, []);
 
   const handleUndo = () => {
@@ -518,7 +623,7 @@ const ViralCut = () => {
       return;
     }
     const last = history[history.length - 1];
-    setCutSegments(last.cutSegments);
+    setTimelineClips(last.timelineClips);
     setLayers(last.layers);
     setCaptions(last.captions);
     setVirtualDuration(last.virtualDuration);
@@ -531,20 +636,14 @@ const ViralCut = () => {
   const playheadDragging = useRef(false);
   const timelineRulerRef = useRef<HTMLDivElement>(null);
 
-  const handlePlayheadMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    playheadDragging.current = true;
-  }, []);
-
   const handleTimelineMouseMove = useCallback((e: MouseEvent) => {
     if (!playheadDragging.current || !timelineRulerRef.current) return;
     const rect = timelineRulerRef.current.getBoundingClientRect();
-    const relX = e.clientX - rect.left - 128; // offset for lane labels
+    const relX = e.clientX - rect.left - 128;
     const pxPerSec = timelineScale * 80;
     const displayDur = virtualDurationRef.current > 0 ? virtualDurationRef.current : 0;
     if (displayDur <= 0 || pxPerSec <= 0) return;
     const t = Math.max(0, Math.min(displayDur, relX / pxPerSec));
-    // seekVirtual uses state so we need direct refs approach
     const v = videoRef.current;
     if (!v) return;
     setVirtualTime(t);
@@ -565,7 +664,7 @@ const ViralCut = () => {
     };
   }, [handleTimelineMouseMove, handleTimelineMouseUp]);
 
-  // ─ Timeline pinch/wheel zoom ──────────────────────────────────────────────
+  // ─ Timeline zoom ──────────────────────────────────────────────────────────
   const lastPinchDist = useRef<number | null>(null);
 
   const handleTimelineWheel = useCallback((e: React.WheelEvent) => {
@@ -684,7 +783,6 @@ const ViralCut = () => {
     if (v) v.volume = volume[0] / 100;
   }, [volume]);
 
-  // Keep virtualDurationRef in sync
   useEffect(() => {
     virtualDurationRef.current = virtualDuration > 0 ? virtualDuration : duration;
   }, [virtualDuration, duration]);
@@ -694,9 +792,19 @@ const ViralCut = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
+    setVideoFile(file);
     setVideoSrc(url);
     setVideoName(file.name);
-    setCutSegments([]);
+
+    setSourceMedia({
+      id: "source-main",
+      type: "video",
+      name: file.name,
+      src: url,
+      duration: 0,
+    });
+
+    setTimelineClips([]);
     setCaptions([]);
     setTranscriptWords([]);
     setLayers([]);
@@ -708,17 +816,26 @@ const ViralCut = () => {
   const handleMetadata = () => {
     const v = videoRef.current;
     if (!v) return;
-    const dur = v.duration;
+    const dur = v.duration || 0;
     setDuration(dur);
     virtualDurationRef.current = dur;
     setVirtualDuration(0);
-    setLayers([{
-      id: "main-video",
-      type: "video",
-      label: videoName.replace(/\.[^.]+$/, ""),
-      start: 0, end: dur,
-      visible: true, locked: false,
-      color: LAYER_COLORS.video,
+
+    setSourceMedia(prev => prev ? { ...prev, duration: dur } : null);
+
+    // Create single full-duration clip as initial state
+    setTimelineClips([{
+      id: "clip-main-0",
+      sourceId: "source-main",
+      kind: "video",
+      trackId: "track-video-main",
+      sourceStart: 0,
+      sourceEnd: dur,
+      timelineStart: 0,
+      timelineEnd: dur,
+      visible: true,
+      locked: false,
+      color: "hsl(262,83%,58%)",
     }]);
   };
 
@@ -750,45 +867,31 @@ const ViralCut = () => {
   // ─── Auto-cut ─────────────────────────────────────────────────────────────
   const handleAutoCut = async () => {
     const v = videoRef.current;
-    if (!v || !videoSrc) {
+    if (!v || !videoSrc || !sourceMedia) {
       toast({ title: "Sem vídeo", description: "Carregue um vídeo primeiro.", variant: "destructive" });
       return;
     }
-    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+    pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setAutoCutLoading(true);
     setAutoCutProgress(0);
     try {
       const minDur = SILENCE_THRESHOLDS[autoCutLevel];
       const segs = await detectSilenceSegments(v, minDur, setAutoCutProgress);
-      setCutSegments(segs);
 
-      const virtDur = segs.reduce((acc, s) => acc + (s.end - s.start), 0);
-      virtualDurationRef.current = virtDur;
-      setVirtualDuration(virtDur);
+      const clips = buildTimelineClipsFromSegments(segs, sourceMedia.id);
+      setTimelineClips(clips);
 
-      // One "video" layer that acts as the container for the segments
-      setLayers(prev => {
-        const others = prev.filter(l => l.type !== "video");
-        return [
-          {
-            id: "main-video",
-            type: "video" as LayerType,
-            label: `Vídeo • ${segs.length} clipes`,
-            start: 0, end: v.duration, // spans full real duration
-            visible: true, locked: false,
-            color: LAYER_COLORS.video,
-          },
-          ...others,
-        ];
-      });
+      const total = clips.reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
+      virtualDurationRef.current = total;
+      setVirtualDuration(total);
 
-      if (v && segs.length > 0) {
-        v.currentTime = segs[0].start;
-        setCurrentTime(segs[0].start);
+      if (v && clips.length > 0) {
+        v.currentTime = clips[0].sourceStart;
+        setCurrentTime(clips[0].sourceStart);
         setVirtualTime(0);
       }
 
-      toast({ title: `✂️ ${segs.length} clipes detectados`, description: `Silêncios removidos • Nível: ${autoCutLevel}` });
+      toast({ title: `✂️ ${clips.length} clipes detectados`, description: `Silêncios removidos • Nível: ${autoCutLevel}` });
     } catch (err) {
       console.error(err);
       toast({ title: "Erro no corte automático", variant: "destructive" });
@@ -799,82 +902,81 @@ const ViralCut = () => {
   };
 
   // ─── Manual cut ───────────────────────────────────────────────────────────
-  const handleManualCut = useCallback((atRealTime: number) => {
-    if (!duration) return;
-    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+  const handleManualCut = useCallback((atTimelineTime: number) => {
+    if (!duration || !sourceMedia) return;
+    pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
 
-    const existing = cutSegments.length > 0
-      ? cutSegments
-      : [{ id: "clip-0", start: 0, end: duration }];
+    // Find which clip contains this timeline position
+    const idx = timelineClips.findIndex(
+      c => c.kind === "video" && atTimelineTime > c.timelineStart && atTimelineTime < c.timelineEnd
+    );
+    if (idx === -1) return;
 
-    // Find which segment contains this timestamp
-    const idx = existing.findIndex(s => atRealTime > s.start && atRealTime < s.end);
-    if (idx === -1) return; // cut lands in a gap or outside
+    const clip = timelineClips[idx];
+    const ratio = (atTimelineTime - clip.timelineStart) / (clip.timelineEnd - clip.timelineStart);
+    const sourceAtCut = clip.sourceStart + ratio * (clip.sourceEnd - clip.sourceStart);
 
-    const seg = existing[idx];
-    const left: ClipSegment = { id: `clip-${Date.now()}-a`, start: seg.start, end: atRealTime };
-    const right: ClipSegment = { id: `clip-${Date.now()}-b`, start: atRealTime, end: seg.end };
-    const newSegs = [...existing.slice(0, idx), left, right, ...existing.slice(idx + 1)];
-    setCutSegments(newSegs);
+    const leftClip: TimelineClip = {
+      ...clip,
+      id: `clip-${Date.now()}-a`,
+      sourceEnd: sourceAtCut,
+      timelineEnd: atTimelineTime,
+    };
+    const rightClip: TimelineClip = {
+      ...clip,
+      id: `clip-${Date.now()}-b`,
+      sourceStart: sourceAtCut,
+      timelineStart: atTimelineTime,
+      color: clipColor(idx + 1),
+    };
 
-    const virtDur = newSegs.reduce((acc, s) => acc + (s.end - s.start), 0);
-    setVirtualDuration(virtDur);
-    virtualDurationRef.current = virtDur;
+    const newClips = [
+      ...timelineClips.slice(0, idx),
+      leftClip,
+      rightClip,
+      ...timelineClips.slice(idx + 1),
+    ];
+    setTimelineClips(newClips);
 
-    setLayers(prev => prev.map(l =>
-      l.id === "main-video"
-        ? { ...l, label: `Vídeo • ${newSegs.length} clipes` }
-        : l
-    ));
+    const total = newClips
+      .filter(c => c.kind === "video")
+      .reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
+    setVirtualDuration(total);
+    virtualDurationRef.current = total;
 
     setCutMode(false);
-    toast({ title: `✂️ Corte manual em ${atRealTime.toFixed(2)}s` });
-  }, [cutSegments, layers, captions, duration, virtualDuration, pushHistory]);
+    toast({ title: `✂️ Corte manual em ${atTimelineTime.toFixed(2)}s` });
+  }, [timelineClips, layers, captions, duration, virtualDuration, sourceMedia, pushHistory]);
 
-  // ─── Segment drag / resize ────────────────────────────────────────────────
-  const handleSegmentDragEnd = useCallback((id: string, newStart: number) => {
-    setCutSegments(prev => {
-      const seg = prev.find(s => s.id === id);
-      if (!seg) return prev;
-      const dur = seg.end - seg.start;
-      const clamped = Math.max(0, Math.min(duration - dur, newStart));
-      return prev.map(s => s.id === id ? { ...s, start: clamped, end: clamped + dur } : s);
-    });
-  }, [duration]);
+  // ─── Clip drag / resize / delete ─────────────────────────────────────────
+  const handleClipDragEnd = useCallback((id: string, newTimelineStart: number) => {
+    setTimelineClips(prev => moveClip(prev, id, newTimelineStart));
+  }, []);
 
-  const handleSegmentResizeEnd = useCallback((id: string, side: "left" | "right", newVal: number) => {
-    setCutSegments(prev => prev.map(s => {
-      if (s.id !== id) return s;
-      if (side === "left") return { ...s, start: Math.max(0, Math.min(s.end - 0.1, newVal)) };
-      return { ...s, end: Math.max(s.start + 0.1, Math.min(duration, newVal)) };
-    }));
-  }, [duration]);
+  const handleClipResizeEnd = useCallback((id: string, side: "left" | "right", newTime: number) => {
+    setTimelineClips(prev => resizeClip(prev, id, side, newTime));
+  }, []);
 
-  const handleSegmentDelete = useCallback((id: string) => {
-    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
-    setCutSegments(prev => {
-      const next = prev.filter(s => s.id !== id);
-      // If none left, reset
-      if (next.length === 0) {
+  const handleClipDelete = useCallback((id: string) => {
+    pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+    setTimelineClips(prev => {
+      const next = deleteClip(prev, id);
+      if (next.filter(c => c.kind === "video").length === 0) {
         setVirtualDuration(0);
         virtualDurationRef.current = duration;
-        return [];
+        return next;
       }
-      const virtDur = next.reduce((acc, s) => acc + (s.end - s.start), 0);
-      setVirtualDuration(virtDur);
-      virtualDurationRef.current = virtDur;
+      const total = next
+        .filter(c => c.kind === "video")
+        .reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
+      setVirtualDuration(total);
+      virtualDurationRef.current = total;
       return next;
     });
-    setLayers(prev => prev.map(l =>
-      l.id === "main-video"
-        ? { ...l, label: `Vídeo • ${cutSegments.length - 1} clipes` }
-        : l
-    ));
     toast({ title: "Clipe removido" });
-  }, [cutSegments, layers, captions, duration, virtualDuration, pushHistory]);
+  }, [timelineClips, layers, captions, duration, virtualDuration, pushHistory]);
 
-
-  // ─── Captions via Web Speech API (áudio do vídeo) ────────────────────────
+  // ─── Captions via Web Speech API ─────────────────────────────────────────
   const speechRecognitionRef = useRef<any>(null);
   const audioCtxCaptionRef = useRef<AudioContext | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -887,117 +989,85 @@ const ViralCut = () => {
       return;
     }
 
-    // If we already have transcribed words, just re-split them
     if (transcriptWords.length > 0) {
-      pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
       const blocks = splitCaptionsFromTranscript(transcriptWords, captionMode);
       applyCaptures(blocks);
+      toast({ title: `${blocks.length} legendas geradas` });
       return;
     }
 
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      toast({
-        title: "Transcrição não suportada",
-        description: "Use Chrome ou Edge para transcrição automática.",
-        variant: "destructive"
-      });
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({ title: "Reconhecimento de voz não suportado neste navegador", variant: "destructive" });
       return;
     }
 
-    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setCaptionLoading(true);
     setIsTranscribing(true);
-    setTranscriptRaw("");
-    const words: Array<{ text: string; start: number; end: number }> = [];
 
     try {
-      // ── Route video audio → MediaStream → SpeechRecognition ──────────────
-      // Each call creates a fresh AudioContext to avoid "already connected" errors
-      if (audioCtxCaptionRef.current) {
-        audioCtxCaptionRef.current.close();
-      }
       const audioCtx = new AudioContext();
       audioCtxCaptionRef.current = audioCtx;
-
       const source = audioCtx.createMediaElementSource(v);
       const dest = audioCtx.createMediaStreamDestination();
-
-      // Keep audio audible while transcribing
-      source.connect(audioCtx.destination);
       source.connect(dest);
+      source.connect(audioCtx.destination);
 
-      const recognition = new SR();
+      const recognition = new SpeechRecognition();
       speechRecognitionRef.current = recognition;
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = "pt-BR";
-      recognition.maxAlternatives = 1;
 
-      // Feed the video's audio stream to recognition
-      (recognition as any).stream = dest.stream;
+      const wordTimings: Array<{ text: string; start: number; end: number }> = [];
 
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
+      recognition.onresult = (event: any) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) {
-            const transcript = result[0].transcript.trim();
-            const parts = transcript.split(/\s+/).filter(Boolean);
-            const now = v.currentTime;
-            const blockDur = parts.length > 0 ? 0.35 : 0;
-            parts.forEach((word, j) => {
-              const wStart = now - blockDur * (parts.length - j);
-              const wEnd = wStart + 0.3;
-              words.push({ text: word.toUpperCase(), start: Math.max(0, wStart), end: wEnd });
+          if (event.results[i].isFinal) {
+            const transcript = event.results[i][0].transcript.trim();
+            const words = transcript.split(/\s+/).filter(Boolean);
+            const t = v.currentTime;
+            const estDur = words.length * 0.4;
+            words.forEach((word: string, wi: number) => {
+              wordTimings.push({
+                text: word,
+                start: Math.max(0, t - estDur + wi * 0.4),
+                end: Math.max(0, t - estDur + (wi + 1) * 0.4),
+              });
             });
             setTranscriptRaw(prev => prev + " " + transcript);
           }
         }
       };
 
-      recognition.onerror = (e: any) => {
-        console.error("SpeechRecognition error", e);
-        setIsTranscribing(false);
-        setCaptionLoading(false);
-        audioCtx.close();
-      };
-
       recognition.onend = () => {
+        if (wordTimings.length > 0) {
+          setTranscriptWords(wordTimings);
+          const blocks = splitCaptionsFromTranscript(wordTimings, captionMode);
+          applyCaptures(blocks);
+          toast({ title: `${blocks.length} legendas geradas de ${wordTimings.length} palavras` });
+        } else {
+          toast({ title: "Nenhuma fala detectada", variant: "destructive" });
+        }
         setIsTranscribing(false);
         setCaptionLoading(false);
-        audioCtx.close();
-        if (words.length > 0) {
-          setTranscriptWords(words);
-          const blocks = splitCaptionsFromTranscript(words, captionMode);
-          applyCaptures(blocks);
-          toast({ title: `🎬 Transcrição concluída`, description: `${blocks.length} legendas geradas a partir do vídeo` });
-        } else {
-          toast({ title: "Nenhuma fala detectada", description: "Verifique se o vídeo possui áudio com fala.", variant: "destructive" });
-        }
       };
 
-      // Start recognition then play video from the beginning
-      recognition.start();
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        setIsTranscribing(false);
+        setCaptionLoading(false);
+      };
+
+      recognition.start(dest.stream);
       v.currentTime = 0;
-      setVirtualTime(0);
       await v.play();
       setPlaying(true);
-
-      const onEnded = () => {
-        recognition.stop();
-        v.removeEventListener("ended", onEnded);
-      };
-      v.addEventListener("ended", onEnded);
-
     } catch (err) {
-      console.error("Caption error:", err);
+      console.error(err);
       setCaptionLoading(false);
       setIsTranscribing(false);
-      toast({
-        title: "Erro ao acessar o áudio do vídeo",
-        description: "Tente recarregar o vídeo e tente novamente.",
-        variant: "destructive"
-      });
+      toast({ title: "Erro ao iniciar transcrição", variant: "destructive" });
     }
   };
 
@@ -1035,7 +1105,7 @@ const ViralCut = () => {
       toast({ title: "Carregue um vídeo primeiro", variant: "destructive" });
       return;
     }
-    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+    pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => [...prev, {
       id: `text-${Date.now()}`,
       type: "text",
@@ -1053,7 +1123,7 @@ const ViralCut = () => {
   const handleAudioLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !duration) return;
-    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+    pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => [...prev, {
       id: `audio-${Date.now()}`,
       type: "audio",
@@ -1068,12 +1138,12 @@ const ViralCut = () => {
 
   // ─── Layer actions ────────────────────────────────────────────────────────
   const toggleLayerVisible = (id: string) => {
-    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+    pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
   };
 
   const deleteLayer = (id: string) => {
-    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+    pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => prev.filter(l => l.id !== id));
   };
 
@@ -1156,6 +1226,16 @@ const ViralCut = () => {
   const displayTime = virtualTime;
   const pxPerSec = timelineScale * 80;
 
+  // Video clips for the main track
+  const videoClips = timelineClips
+    .filter(c => c.kind === "video" && c.trackId === "track-video-main")
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+
+  // Non-video layers
+  const nonVideoLayers = layers.filter(l => l.type !== "video");
+
+  const hasTimeline = videoSrc !== null;
+
   return (
     <div className="flex flex-col h-full bg-[hsl(220,25%,8%)] text-foreground overflow-hidden select-none">
 
@@ -1170,7 +1250,6 @@ const ViralCut = () => {
         </div>
 
         <div className="flex items-center gap-1 flex-1 flex-wrap min-w-0">
-          {/* Undo — destaque na frente */}
           <Button
             size="sm"
             variant="ghost"
@@ -1196,7 +1275,7 @@ const ViralCut = () => {
               : <><Scissors className="h-3 w-3" /><span className="hidden sm:inline">Corte Auto</span></>}
           </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0"
-            onClick={() => { setActiveTab("captions"); }}>
+            onClick={() => setActiveTab("captions")}>
             <Sparkles className="h-3 w-3" />
             <span className="hidden sm:inline">Legenda</span>
           </Button>
@@ -1285,14 +1364,27 @@ const ViralCut = () => {
                         : <><Scissors className="h-3 w-3 mr-1" />Cortar silêncio</>
                       }
                     </Button>
-                    {cutSegments.length > 0 && (
+                    {videoClips.length > 1 && (
                       <div className="bg-primary/10 border border-primary/30 rounded p-2 space-y-0.5">
-                        <p className="text-[10px] text-primary font-medium">{cutSegments.length} segmentos ativos</p>
+                        <p className="text-[10px] text-primary font-medium">{videoClips.length} clipes ativos</p>
                         <p className="text-[9px] text-muted-foreground">Preview reproduz apenas as partes com fala</p>
                         <button
                           onClick={() => {
-                            pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
-                            setCutSegments([]);
+                            pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+                            // Reset to single full-duration clip
+                            setTimelineClips([{
+                              id: "clip-main-reset",
+                              sourceId: "source-main",
+                              kind: "video",
+                              trackId: "track-video-main",
+                              sourceStart: 0,
+                              sourceEnd: duration,
+                              timelineStart: 0,
+                              timelineEnd: duration,
+                              visible: true,
+                              locked: false,
+                              color: "hsl(262,83%,58%)",
+                            }]);
                             setVirtualDuration(0);
                             setVirtualTime(0);
                           }}
@@ -1510,9 +1602,9 @@ const ViralCut = () => {
                   <canvas ref={canvasRef} className="max-h-full max-w-full object-contain" style={videoStyle} />
                 )}
 
-                {cutSegments.length > 0 && (
+                {videoClips.length > 1 && (
                   <div className="absolute top-2 right-2 bg-primary/80 text-primary-foreground text-[9px] px-2 py-0.5 rounded-full">
-                    ✂️ {cutSegments.length} cortes ativos
+                    ✂️ {videoClips.length} clips ativos
                   </div>
                 )}
 
@@ -1537,317 +1629,310 @@ const ViralCut = () => {
               </div>
             )}
           </div>
-
         </div>
       </div>
 
-      {/* ══ Bottom panel (player + toolbar + timeline) — max-height prevents overflow */}
+      {/* ══ Bottom panel ════════════════════════════════════════════════════ */}
       <div className="flex flex-col overflow-hidden" style={{ maxHeight: "min(46vh, 330px)" }}>
 
-      {/* ══ Player controls — full width, above action toolbar ══════════════ */}
-      <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-4 py-2.5 flex items-center gap-3 w-full">
-        <button onClick={() => seekVirtual(0)} className="text-muted-foreground hover:text-foreground shrink-0">
-          <SkipBack className="h-5 w-5" />
-        </button>
-        <button
-          onClick={togglePlay}
-          className="h-9 w-9 rounded-full bg-primary flex items-center justify-center hover:bg-primary/80 transition-colors shrink-0 shadow-md"
-        >
-          {playing
-            ? <Pause className="h-4 w-4 text-primary-foreground" />
-            : <Play className="h-4 w-4 text-primary-foreground ml-0.5" />}
-        </button>
-        <button onClick={() => seekVirtual(displayDuration)} className="text-muted-foreground hover:text-foreground shrink-0">
-          <SkipForward className="h-5 w-5" />
-        </button>
-
-        {/* Seek bar */}
-        <div
-          className="flex-1 relative h-2.5 bg-border/60 rounded-full cursor-pointer"
-          onClick={e => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const vt = ((e.clientX - rect.left) / rect.width) * displayDuration;
-            seekVirtual(vt);
-          }}
-        >
-          <div
-            className="absolute h-full bg-primary rounded-full transition-none"
-            style={{ width: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%" }}
-          />
-          {/* Segment markers */}
-          {cutSegments.length > 0 && (() => {
-            let acc = 0;
-            return cutSegments.map(s => {
-              const left = (acc / displayDuration) * 100;
-              const w = ((s.end - s.start) / displayDuration) * 100;
-              acc += s.end - s.start;
-              return (
-                <div key={s.id} className="absolute top-0 h-full bg-yellow-400/30 border-l border-yellow-400/60"
-                  style={{ left: `${left}%`, width: `${w}%` }} />
-              );
-            });
-          })()}
-          {/* Draggable thumb */}
-          <div
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-primary border-2 border-primary-foreground shadow-lg cursor-grab active:cursor-grabbing hover:scale-110 transition-transform"
-            style={{ left: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%", touchAction: "none" }}
-            onMouseDown={e => {
-              e.preventDefault();
-              const bar = e.currentTarget.parentElement!;
-              const onMove = (ev: MouseEvent) => {
-                const rect = bar.getBoundingClientRect();
-                const vt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
-                seekVirtual(vt);
-              };
-              const onUp = () => {
-                window.removeEventListener("mousemove", onMove);
-                window.removeEventListener("mouseup", onUp);
-              };
-              window.addEventListener("mousemove", onMove);
-              window.addEventListener("mouseup", onUp);
-            }}
-            onTouchStart={e => {
-              const bar = e.currentTarget.parentElement!;
-              const onMove = (ev: TouchEvent) => {
-                const rect = bar.getBoundingClientRect();
-                const vt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
-                seekVirtual(vt);
-              };
-              const onEnd = () => {
-                window.removeEventListener("touchmove", onMove);
-                window.removeEventListener("touchend", onEnd);
-              };
-              window.addEventListener("touchmove", onMove, { passive: true });
-              window.addEventListener("touchend", onEnd);
-            }}
-          />
-        </div>
-
-        <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
-          {formatTime(displayTime)} / {formatTime(displayDuration)}
-        </span>
-
-        <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground shrink-0">
-          {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-        </button>
-        <div className="w-20 shrink-0 hidden sm:block">
-          <Slider value={volume} onValueChange={setVolume} min={0} max={100} step={1} />
-        </div>
-      </div>
-
-      {/* ══ Action toolbar — full width, above timeline ══════════════════════ */}
-      <div className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 px-2 py-1.5 flex items-center gap-1 flex-wrap w-full">
-        {/* Undo — destaque */}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-2.5"
-          onClick={handleUndo}
-          disabled={history.length === 0}
-        >
-          <Undo2 className="h-3.5 w-3.5" />
-          Desfazer
-        </Button>
-
-        <div className="h-4 w-px bg-border/40 mx-0.5" />
-
-        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => fileInputRef.current?.click()}>
-          <Upload className="h-3.5 w-3.5" /> Upload
-        </Button>
-        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5"
-          onClick={handleAutoCut} disabled={!videoSrc || autoCutLoading}>
-          {autoCutLoading
-            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />{autoCutProgress}%</>
-            : <><Scissors className="h-3.5 w-3.5" />Corte Auto</>}
-        </Button>
-        <Button
-          size="sm"
-          variant={cutMode ? "default" : "ghost"}
-          className={cn(
-            "h-8 text-xs gap-1.5 px-2.5",
-            cutMode && "bg-destructive text-destructive-foreground hover:bg-destructive/80"
-          )}
-          onClick={() => setCutMode(m => !m)}
-          disabled={!videoSrc}
-          title="Modo corte manual: clique em um clipe na timeline para cortá-lo"
-        >
-          <Scissors className="h-3.5 w-3.5" />
-          {cutMode ? "Cortando..." : "Cortar"}
-        </Button>
-        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("captions")}>
-          <Sparkles className="h-3.5 w-3.5" /> Legenda
-        </Button>
-        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("text")}>
-          <Type className="h-3.5 w-3.5" /> Texto
-        </Button>
-        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("chroma")}>
-          <Layers className="h-3.5 w-3.5" /> Chroma
-        </Button>
-
-        {/* Zoom timeline */}
-        <div className="flex items-center gap-1 ml-auto">
-          <span className="text-[9px] text-muted-foreground uppercase tracking-widest mr-1 hidden sm:inline">Zoom</span>
-          <button onClick={() => setTimelineScale(s => Math.max(0.25, Math.round((s - 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
-            <ZoomOut className="h-3.5 w-3.5" />
+        {/* ── Player controls ─────────────────────────────────────────────── */}
+        <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-4 py-2.5 flex items-center gap-3 w-full">
+          <button onClick={() => seekVirtual(0)} className="text-muted-foreground hover:text-foreground shrink-0">
+            <SkipBack className="h-5 w-5" />
           </button>
-          <span className="text-[9px] text-muted-foreground w-7 text-center">{timelineScale}x</span>
-          <button onClick={() => setTimelineScale(s => Math.min(8, Math.round((s + 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
-            <ZoomIn className="h-3.5 w-3.5" />
+          <button
+            onClick={togglePlay}
+            className="h-9 w-9 rounded-full bg-primary flex items-center justify-center hover:bg-primary/80 transition-colors shrink-0 shadow-md"
+          >
+            {playing
+              ? <Pause className="h-4 w-4 text-primary-foreground" />
+              : <Play className="h-4 w-4 text-primary-foreground ml-0.5" />}
+          </button>
+          <button onClick={() => seekVirtual(displayDuration)} className="text-muted-foreground hover:text-foreground shrink-0">
+            <SkipForward className="h-5 w-5" />
+          </button>
+
+          {/* Seek bar */}
+          <div
+            className="flex-1 relative h-2.5 bg-border/60 rounded-full cursor-pointer"
+            onClick={e => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const vt = ((e.clientX - rect.left) / rect.width) * displayDuration;
+              seekVirtual(vt);
+            }}
+          >
+            <div
+              className="absolute h-full bg-primary rounded-full transition-none"
+              style={{ width: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%" }}
+            />
+            {/* Clip markers on seek bar */}
+            {videoClips.length > 1 && (() => {
+              const total = videoClips.reduce((a, c) => a + (c.timelineEnd - c.timelineStart), 0);
+              let acc = 0;
+              return videoClips.map(c => {
+                const lft = (acc / total) * 100;
+                const w = ((c.timelineEnd - c.timelineStart) / total) * 100;
+                acc += c.timelineEnd - c.timelineStart;
+                return (
+                  <div key={c.id} className="absolute top-0 h-full bg-yellow-400/30 border-l border-yellow-400/60"
+                    style={{ left: `${lft}%`, width: `${w}%` }} />
+                );
+              });
+            })()}
+            {/* Draggable thumb */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-primary border-2 border-primary-foreground shadow-lg cursor-grab active:cursor-grabbing hover:scale-110 transition-transform"
+              style={{ left: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%", touchAction: "none" }}
+              onMouseDown={e => {
+                e.preventDefault();
+                const bar = e.currentTarget.parentElement!;
+                const onMove = (ev: MouseEvent) => {
+                  const rect = bar.getBoundingClientRect();
+                  const vt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
+                  seekVirtual(vt);
+                };
+                const onUp = () => {
+                  window.removeEventListener("mousemove", onMove);
+                  window.removeEventListener("mouseup", onUp);
+                };
+                window.addEventListener("mousemove", onMove);
+                window.addEventListener("mouseup", onUp);
+              }}
+              onTouchStart={e => {
+                const bar = e.currentTarget.parentElement!;
+                const onMove = (ev: TouchEvent) => {
+                  const rect = bar.getBoundingClientRect();
+                  const vt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
+                  seekVirtual(vt);
+                };
+                const onEnd = () => {
+                  window.removeEventListener("touchmove", onMove);
+                  window.removeEventListener("touchend", onEnd);
+                };
+                window.addEventListener("touchmove", onMove, { passive: true });
+                window.addEventListener("touchend", onEnd);
+              }}
+            />
+          </div>
+
+          <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
+            {formatTime(displayTime)} / {formatTime(displayDuration)}
+          </span>
+
+          <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground shrink-0">
+            {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          </button>
+          <div className="w-20 shrink-0 hidden sm:block">
+            <Slider value={volume} onValueChange={setVolume} min={0} max={100} step={1} />
+          </div>
+        </div>
+
+        {/* ── Action toolbar ───────────────────────────────────────────────── */}
+        <div className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 px-2 py-1.5 flex items-center gap-1 flex-wrap w-full">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-2.5"
+            onClick={handleUndo}
+            disabled={history.length === 0}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Desfazer
+          </Button>
+
+          <div className="h-4 w-px bg-border/40 mx-0.5" />
+
+          <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-3.5 w-3.5" /> Upload
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5"
+            onClick={handleAutoCut} disabled={!videoSrc || autoCutLoading}>
+            {autoCutLoading
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />{autoCutProgress}%</>
+              : <><Scissors className="h-3.5 w-3.5" />Corte Auto</>}
+          </Button>
+          <Button
+            size="sm"
+            variant={cutMode ? "default" : "ghost"}
+            className={cn(
+              "h-8 text-xs gap-1.5 px-2.5",
+              cutMode && "bg-destructive text-destructive-foreground hover:bg-destructive/80"
+            )}
+            onClick={() => setCutMode(m => !m)}
+            disabled={!videoSrc}
+            title="Modo corte manual: clique em um clipe na timeline para cortá-lo"
+          >
+            <Scissors className="h-3.5 w-3.5" />
+            {cutMode ? "Cortando..." : "Cortar"}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("captions")}>
+            <Sparkles className="h-3.5 w-3.5" /> Legenda
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("text")}>
+            <Type className="h-3.5 w-3.5" /> Texto
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("chroma")}>
+            <Layers className="h-3.5 w-3.5" /> Chroma
+          </Button>
+
+          <div className="flex items-center gap-1 ml-auto">
+            <span className="text-[9px] text-muted-foreground uppercase tracking-widest mr-1 hidden sm:inline">Zoom</span>
+            <button onClick={() => setTimelineScale(s => Math.max(0.25, Math.round((s - 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <span className="text-[9px] text-muted-foreground w-7 text-center">{timelineScale}x</span>
+            <button onClick={() => setTimelineScale(s => Math.min(8, Math.round((s + 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <Button size="sm" className="h-8 text-xs gap-1.5 ml-2" onClick={handleExport} disabled={!videoSrc || processing}>
+            {processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            Exportar
+          </Button>
+
+          <button onClick={() => setBottomCollapsed(!bottomCollapsed)} className="text-muted-foreground hover:text-foreground ml-1">
+            {bottomCollapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
         </div>
 
-        <Button size="sm" className="h-8 text-xs gap-1.5 ml-2" onClick={handleExport} disabled={!videoSrc || processing}>
-          {processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-          Exportar
-        </Button>
+        {/* ── Timeline ─────────────────────────────────────────────────── */}
+        {!bottomCollapsed && (
+          <div
+            className="flex-1 min-h-0 bg-[hsl(220,25%,9%)] border-t border-border/30 flex flex-col overflow-hidden"
+            onWheel={handleTimelineWheel}
+            onTouchStart={handleTimelineTouchStart}
+            onTouchMove={handleTimelineTouchMove}
+            onTouchEnd={handleTimelineTouchEnd}
+          >
+            {!hasTimeline ? (
+              <div className="flex items-center justify-center h-full text-[11px] text-muted-foreground">
+                Carregue um vídeo para ver a timeline
+              </div>
+            ) : (
+              <div className="flex-1 overflow-auto min-h-0" ref={timelineScrollRef}>
+                <div className="min-w-max" ref={timelineRulerRef}>
 
-        <button onClick={() => setBottomCollapsed(!bottomCollapsed)} className="text-muted-foreground hover:text-foreground ml-1">
-          {bottomCollapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        </button>
-      </div>
-
-      {/* ── Timeline ─────────────────────────────────────────────────── */}
-      {!bottomCollapsed && (
-        <div
-          className="flex-1 min-h-0 bg-[hsl(220,25%,9%)] border-t border-border/30 flex flex-col overflow-hidden"
-          onWheel={handleTimelineWheel}
-          onTouchStart={handleTimelineTouchStart}
-          onTouchMove={handleTimelineTouchMove}
-          onTouchEnd={handleTimelineTouchEnd}
-        >
-          {layers.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-[11px] text-muted-foreground">
-              Carregue um vídeo para ver a timeline
-            </div>
-          ) : (
-            <div className="flex-1 overflow-auto min-h-0" ref={timelineScrollRef}>
-              <div
-                className="min-w-max"
-                ref={timelineRulerRef}
-              >
-                {/* Time ruler — draggable playhead */}
-                <div className="relative flex h-6 border-b border-border/30 bg-[hsl(220,25%,8%)]">
-                  {/* Label offset */}
-                  <div className="w-32 shrink-0 border-r border-border/30" />
-                  <div className="relative flex-1">
-                    {/* Ticks based on real duration for the video track */}
-                    {Array.from({ length: Math.ceil((duration || displayDuration)) + 1 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="absolute top-0 bottom-0 border-l border-border/20 flex items-end pb-0.5"
-                        style={{ left: i * pxPerSec }}
-                      >
-                        <span className="text-[8px] text-muted-foreground pl-1">{i}s</span>
-                      </div>
-                    ))}
-                    {/* Playhead on ruler — draggable */}
+                  {/* Time ruler */}
+                  <div className="relative flex h-6 border-b border-border/30 bg-[hsl(220,25%,8%)]">
+                    <div className="w-32 shrink-0 border-r border-border/30" />
+                    <div className="relative flex-1">
+                      {Array.from({ length: Math.ceil((duration || displayDuration)) + 1 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="absolute top-0 bottom-0 border-l border-border/20 flex items-end pb-0.5"
+                          style={{ left: i * pxPerSec }}
+                        >
+                          <span className="text-[8px] text-muted-foreground pl-1">{i}s</span>
+                        </div>
+                      ))}
+                      {/* Playhead on ruler */}
+                      {displayDuration > 0 && (
+                        <div
+                          className="absolute top-0 bottom-0 w-3 -translate-x-1/2 flex flex-col items-center cursor-col-resize z-20 group"
+                          style={{ left: displayTime * pxPerSec }}
+                          onMouseDown={e => {
+                            e.preventDefault();
+                            const ruler = e.currentTarget.parentElement!;
+                            const onMove = (ev: MouseEvent) => {
+                              const rect = ruler.getBoundingClientRect();
+                              const vt = Math.max(0, Math.min(displayDuration, (ev.clientX - rect.left) / pxPerSec));
+                              seekVirtual(vt);
+                            };
+                            const onUp = () => {
+                              window.removeEventListener("mousemove", onMove);
+                              window.removeEventListener("mouseup", onUp);
+                            };
+                            window.addEventListener("mousemove", onMove);
+                            window.addEventListener("mouseup", onUp);
+                          }}
+                          onTouchStart={e => {
+                            const ruler = e.currentTarget.parentElement!;
+                            const onMove = (ev: TouchEvent) => {
+                              const rect = ruler.getBoundingClientRect();
+                              const vt = Math.max(0, Math.min(displayDuration, (ev.touches[0].clientX - rect.left) / pxPerSec));
+                              seekVirtual(vt);
+                            };
+                            const onEnd = () => {
+                              window.removeEventListener("touchmove", onMove);
+                              window.removeEventListener("touchend", onEnd);
+                            };
+                            window.addEventListener("touchmove", onMove, { passive: true });
+                            window.addEventListener("touchend", onEnd);
+                          }}
+                        >
+                          <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[7px] border-l-transparent border-r-transparent border-t-primary group-hover:border-t-primary/70 transition-colors" />
+                        </div>
+                      )}
+                    </div>
                     {displayDuration > 0 && (
                       <div
-                        className="absolute top-0 bottom-0 w-3 -translate-x-1/2 flex flex-col items-center cursor-col-resize z-20 group"
-                        style={{ left: displayTime * pxPerSec }}
-                        onMouseDown={e => {
-                          e.preventDefault();
-                          const ruler = e.currentTarget.parentElement!;
-                          const onMove = (ev: MouseEvent) => {
-                            const rect = ruler.getBoundingClientRect();
-                            const vt = Math.max(0, Math.min(displayDuration, (ev.clientX - rect.left) / pxPerSec));
-                            seekVirtual(vt);
-                          };
-                          const onUp = () => {
-                            window.removeEventListener("mousemove", onMove);
-                            window.removeEventListener("mouseup", onUp);
-                          };
-                          window.addEventListener("mousemove", onMove);
-                          window.addEventListener("mouseup", onUp);
-                        }}
-                        onTouchStart={e => {
-                          const ruler = e.currentTarget.parentElement!;
-                          const onMove = (ev: TouchEvent) => {
-                            const rect = ruler.getBoundingClientRect();
-                            const vt = Math.max(0, Math.min(displayDuration, (ev.touches[0].clientX - rect.left) / pxPerSec));
-                            seekVirtual(vt);
-                          };
-                          const onEnd = () => {
-                            window.removeEventListener("touchmove", onMove);
-                            window.removeEventListener("touchend", onEnd);
-                          };
-                          window.addEventListener("touchmove", onMove, { passive: true });
-                          window.addEventListener("touchend", onEnd);
-                        }}
-                      >
-                        {/* Triangle handle */}
-                        <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[7px] border-l-transparent border-r-transparent border-t-primary group-hover:border-t-primary/70 transition-colors" />
-                      </div>
+                        className="absolute top-0 bottom-0 w-px bg-primary/70 pointer-events-none z-10"
+                        style={{ left: 128 + displayTime * pxPerSec }}
+                      />
                     )}
                   </div>
-                  {/* Vertical playhead line across all tracks */}
-                  {displayDuration > 0 && (
-                    <div
-                      className="absolute top-0 bottom-0 w-px bg-primary/70 pointer-events-none z-10"
-                      style={{ left: 128 + displayTime * pxPerSec }}
-                    />
-                  )}
-                </div>
 
-                {/* Tracks */}
-                <div className="relative">
-                  {/* Playhead line across tracks */}
-                  {displayDuration > 0 && (
-                    <div
-                      className="absolute top-0 bottom-0 w-px bg-primary z-10 pointer-events-none"
-                      style={{ left: 128 + displayTime * pxPerSec }}
+                  {/* Tracks */}
+                  <div className="relative">
+                    {/* Playhead line across tracks */}
+                    {displayDuration > 0 && (
+                      <div
+                        className="absolute top-0 bottom-0 w-px bg-primary z-10 pointer-events-none"
+                        style={{ left: 128 + displayTime * pxPerSec }}
+                      />
+                    )}
+
+                    {/* ── Video track (real clips) ── */}
+                    <VideoTrackLane
+                      clips={videoClips}
+                      duration={duration || displayDuration}
+                      scale={timelineScale}
+                      cutMode={cutMode}
+                      onSeek={seekVirtual}
+                      onClipDragEnd={handleClipDragEnd}
+                      onClipResizeEnd={handleClipResizeEnd}
+                      onClipDelete={handleClipDelete}
+                      onManualCut={handleManualCut}
                     />
-                  )}
-                  {layers.map(layer => {
-                    const isVideoTrack = layer.id === "main-video";
-                    const segs = isVideoTrack && cutSegments.length > 0 ? cutSegments : undefined;
-                    // For video track, use real duration as the track width base
-                    const trackDur = isVideoTrack ? (duration || displayDuration) : displayDuration;
-                    return (
-                      <TimelineLane
+
+                    {/* ── Non-video layers (text, audio, overlay) ── */}
+                    {nonVideoLayers.map(layer => (
+                      <LayerLane
                         key={layer.id}
                         layer={layer}
-                        segments={segs}
-                        duration={trackDur}
                         scale={timelineScale}
-                        currentTime={displayTime}
-                        isVideoTrack={isVideoTrack}
-                        cutMode={cutMode}
+                        displayDuration={displayDuration}
                         onToggleVisible={toggleLayerVisible}
                         onDelete={deleteLayer}
                         onSeek={seekVirtual}
-                        onSegmentDragEnd={handleSegmentDragEnd}
-                        onSegmentResizeEnd={handleSegmentResizeEnd}
-                        onSegmentDelete={handleSegmentDelete}
-                        onManualCut={handleManualCut}
                       />
-                    );
-                  })}
+                    ))}
+                  </div>
+
                 </div>
               </div>
+            )}
+
+            {/* Status bar */}
+            <div className="px-3 py-1 border-t border-border/20 shrink-0 flex items-center gap-3">
+              {cutMode ? (
+                <span className="text-[9px] text-destructive font-semibold flex items-center gap-1">
+                  <Scissors className="h-3 w-3" />
+                  Modo corte ativo — clique sobre um clipe para cortá-lo
+                </span>
+              ) : (
+                <span className="text-[8px] text-muted-foreground/50">Ctrl+scroll ou pinça para zoom • Arraste ▲ para navegar • Long-press para mover clipe</span>
+              )}
+              {videoClips.length > 1 && (
+                <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5 ml-auto">
+                  {videoClips.length} clips • {formatTime(displayDuration)}
+                </span>
+              )}
             </div>
-          )}
-
-          {/* Zoom hint */}
-          <div className="px-3 py-1 border-t border-border/20 shrink-0 flex items-center gap-3">
-            {cutMode ? (
-              <span className="text-[9px] text-destructive font-semibold flex items-center gap-1">
-                <Scissors className="h-3 w-3" />
-                Modo corte ativo — clique sobre um clipe para cortá-lo
-              </span>
-            ) : (
-              <span className="text-[8px] text-muted-foreground/50">Ctrl+scroll ou pinça para zoom • Arraste ▲ para navegar • Long-press para mover clipe</span>
-            )}
-            {cutSegments.length > 0 && (
-              <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5 ml-auto">
-                {cutSegments.length} clipes • {formatTime(displayDuration)}
-              </span>
-            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Close bottom panel wrapper */}
       </div>
 
       {/* ── Processing overlay ──────────────────────────────────────── */}
