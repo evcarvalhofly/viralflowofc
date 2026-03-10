@@ -475,7 +475,35 @@ const ViralCut = () => {
   const speechRecognitionRef = useRef<any>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptRaw, setTranscriptRaw] = useState("");
-...
+
+  const handleGenerateCaptions = async () => {
+    const v = videoRef.current;
+    if (!v || !videoSrc) {
+      toast({ title: "Carregue um vídeo primeiro.", variant: "destructive" });
+      return;
+    }
+
+    if (transcriptWords.length > 0) {
+      const blocks = splitCaptionsFromTranscript(transcriptWords, captionMode);
+      applyCaptures(blocks);
+      return;
+    }
+
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast({
+        title: "Transcrição não suportada",
+        description: "Use Chrome ou Edge para transcrição automática.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setCaptionLoading(true);
+    setIsTranscribing(true);
+    setTranscriptRaw("");
+    const words: Array<{ text: string; start: number; end: number }> = [];
+
     const recognition = new SR();
     speechRecognitionRef.current = recognition;
     recognition.continuous = true;
