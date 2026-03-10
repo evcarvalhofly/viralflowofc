@@ -1757,18 +1757,31 @@ const ViralCut = () => {
                       style={{ left: 128 + displayTime * pxPerSec }}
                     />
                   )}
-                  {layers.map(layer => (
-                    <TimelineLane
-                      key={layer.id}
-                      layer={layer}
-                      duration={displayDuration}
-                      scale={timelineScale}
-                      currentTime={displayTime}
-                      onToggleVisible={toggleLayerVisible}
-                      onDelete={deleteLayer}
-                      onSeek={seekVirtual}
-                    />
-                  ))}
+                  {layers.map(layer => {
+                    const isVideoTrack = layer.id === "main-video";
+                    const segs = isVideoTrack && cutSegments.length > 0 ? cutSegments : undefined;
+                    // For video track, use real duration as the track width base
+                    const trackDur = isVideoTrack ? (duration || displayDuration) : displayDuration;
+                    return (
+                      <TimelineLane
+                        key={layer.id}
+                        layer={layer}
+                        segments={segs}
+                        duration={trackDur}
+                        scale={timelineScale}
+                        currentTime={displayTime}
+                        isVideoTrack={isVideoTrack}
+                        cutMode={cutMode}
+                        onToggleVisible={toggleLayerVisible}
+                        onDelete={deleteLayer}
+                        onSeek={seekVirtual}
+                        onSegmentDragEnd={handleSegmentDragEnd}
+                        onSegmentResizeEnd={handleSegmentResizeEnd}
+                        onSegmentDelete={handleSegmentDelete}
+                        onManualCut={handleManualCut}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             </div>
