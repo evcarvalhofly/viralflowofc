@@ -2,7 +2,7 @@ import { SubtitleItem } from '../types';
 
 export interface TranscriberWord {
   text: string;
-  timestamp: [number, number];
+  timestamp: [number, number | null];
 }
 
 /**
@@ -18,8 +18,17 @@ export function buildSubtitleBlocks(
     const group = words.slice(i, i + wordsPerBlock).filter(Boolean);
     if (!group.length) continue;
 
-    const start = group[0].timestamp[0];
-    const end = group[group.length - 1].timestamp[1];
+    const start = group[0].timestamp[0] ?? 0;
+    // end: use last non-null timestamp, fallback to start + 1s
+    let end: number = start + 1;
+    for (let j = group.length - 1; j >= 0; j--) {
+      const ts = group[j].timestamp[1];
+      if (ts !== null && ts !== undefined && ts > 0) {
+        end = ts;
+        break;
+      }
+    }
+
     const text = group
       .map((w) => w.text.trim())
       .join(' ')
@@ -64,17 +73,17 @@ export function toSrt(subs: SubtitleItem[]): string {
 
 /**
  * Transcribes audio using Transformers.js Whisper model in-browser.
- * Returns word-level timestamps.
+ * Compatible with @huggingface/transformers v3.
  */
 export async function transcribeFile(
   file: File,
   onProgress?: (label: string) => void
 ): Promise<SubtitleItem[]> {
-  // Dynamically import to avoid loading the heavy model on startup
   const { pipeline, env } = await import('@huggingface/transformers');
 
-  // Allow remote models (CDN)
+  // @ts-ignore — env.allowRemoteModels exists in v3
   env.allowRemoteModels = true;
+  // @ts-ignore
   env.useBrowserCache = true;
 
   onProgress?.('Carregando modelo Whisper…');
@@ -83,10 +92,14 @@ export async function transcribeFile(
     'automatic-speech-recognition',
     'Xenova/whisper-tiny',
     {
+      // @ts-ignore
       progress_callback: (info: any) => {
-        if (info?.status === 'downloading') {
+        if (info?.status === 'downloading' || info?.status === 'progress') {
           const pct = info.progress ? Math.round(info.progress) : 0;
           onProgress?.(`Baixando modelo: ${pct}%`);
+        }
+        if (info?.status === 'ready') {
+          onProgress?.('Modelo carregado. Transcrevendo…');
         }
       },
     }
@@ -94,22 +107,52 @@ export async function transcribeFile(
 
   onProgress?.('Transcrevendo áudio…');
 
-  // Convert file to object URL for the pipeline
   const audioUrl = URL.createObjectURL(file);
 
-  const result: any = await transcriber(audioUrl, {
-    return_timestamps: 'word',
-    chunk_length_s: 30,
-    stride_length_s: 5,
-  });
+  let result: any;
+  try {
+    result = await (transcriber as any)(audioUrl, {
+      return_timestamps: 'word',
+      chunk_length_s: 30,
+      stride_length_s: 5,
+    });
+  } finally {
+    URL.revokeObjectURL(audioUrl);
+  }
 
-  URL.revokeObjectURL(audioUrl);
+  console.debug('[subtitleEngine] raw result:', JSON.stringify(result)?.slice(0, 500));
 
-  const words: TranscriberWord[] =
-    result?.chunks?.map((c: any) => ({
-      text: c.text,
-      timestamp: c.timestamp as [number, number],
-    })) ?? [];
+  // Normalize: v3 pipeline may return { chunks } or { text, chunks } or array
+  let words: TranscriberWord[] = [];
 
-  return buildSubtitleBlocks(words, 3);
+  const raw = Array.isArray(result) ? result[0] : result;
+
+  if (raw?.chunks && Array.isArray(raw.chunks)) {
+    // word-level chunks: { text, timestamp: [start, end] }
+    words = raw.chunks
+      .filter((c: any) => c?.timestamp && Array.isArray(c.timestamp))
+      .map((c: any) => ({
+        text: c.text as string,
+        timestamp: [
+          typeof c.timestamp[0] === 'number' ? c.timestamp[0] : 0,
+          typeof c.timestamp[1] === 'number' ? c.timestamp[1] : null,
+        ] as [number, number | null],
+      }));
+  } else if (typeof raw?.text === 'string' && raw.text.trim()) {
+    // Fallback: no word timestamps — create a single subtitle block
+    console.warn('[subtitleEngine] No word-level timestamps. Falling back to single block.');
+    words = [{ text: raw.text.trim(), timestamp: [0, null] }];
+  }
+
+  console.debug('[subtitleEngine] words parsed:', words.length);
+
+  if (!words.length) {
+    throw new Error(
+      'Nenhuma palavra foi transcrita. Verifique se o vídeo tem áudio claro e tente novamente.'
+    );
+  }
+
+  const blocks = buildSubtitleBlocks(words, 3);
+  console.debug('[subtitleEngine] subtitle blocks:', blocks.length, blocks.slice(0, 3));
+  return blocks;
 }
