@@ -501,6 +501,7 @@ const ViralCut = () => {
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingMsg, setProcessingMsg] = useState("");
+  const [cutMode, setCutMode] = useState(false); // manual cut scissors mode
 
   // ─ History (Undo) ─────────────────────────────────────────────────────────
   const [history, setHistory] = useState<HistoryEntry[]>([]);
