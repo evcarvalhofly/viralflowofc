@@ -680,6 +680,118 @@ const ViralCut = () => {
   const playheadDragging = useRef(false);
   const timelineRulerRef = useRef<HTMLDivElement>(null);
 
+  // ─── Keep clips ref in sync for stable RAF access ─────────────────────────
+  useEffect(() => { timelineClipsRef.current = timelineClips; }, [timelineClips]);
+
+  // ─── seekTimeline: always writes sourceTime to video.currentTime ──────────
+  const seekTimeline = useCallback((tl: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const clips = timelineClipsRef.current;
+    const src = clips.length > 0
+      ? (timelineToSourceTime(tl, clips) ?? clips[0].sourceStart)
+      : tl;
+    v.currentTime = src;                // ← always source time
+    setTimelineTime(tl);
+    setSourceTime(src);
+  }, []);
+
+  // ─── seekSource: seeks by raw source time ─────────────────────────────────
+  const seekSource = useCallback((src: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const clips = timelineClipsRef.current;
+    v.currentTime = src;                // ← source time
+    setSourceTime(src);
+    setTimelineTime(clips.length > 0 ? sourceToTimelineTime(src, clips) : src);
+  }, []);
+
+  // ─── RAF update loop ──────────────────────────────────────────────────────
+  const captionsRef = useRef(captions);
+  useEffect(() => { captionsRef.current = captions; }, [captions]);
+
+  const updateLoop = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const src = v.currentTime;            // ← read source time from video
+    const clips = timelineClipsRef.current;
+
+    const tl = clips.length > 0
+      ? sourceToTimelineTime(src, clips)
+      : src;
+
+    setSourceTime(src);
+    setTimelineTime(tl);
+
+    // Captions keyed on timelineTime
+    setActiveCaptions(prev => {
+      const next = captionsRef.current.filter(c => tl >= c.start && tl < c.end);
+      if (next.length !== prev.length || next.some((c, i) => c.id !== prev[i]?.id)) return next;
+      return prev;
+    });
+
+    // Chroma key
+    if (chromaEnabled && canvasRef.current && !v.paused) {
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) {
+        canvasRef.current.width = v.videoWidth || 640;
+        canvasRef.current.height = v.videoHeight || 360;
+        ctx.drawImage(v, 0, 0);
+        const r = parseInt(chromaColor.slice(1, 3), 16);
+        const g = parseInt(chromaColor.slice(3, 5), 16);
+        const b = parseInt(chromaColor.slice(5, 7), 16);
+        applyChromaKey(ctx, canvasRef.current, [r, g, b], chromaTolerance[0], chromaSmoothing[0]);
+      }
+    }
+
+    // Skip over silences: if source position is not inside any clip, jump to next clip
+    if (clips.length > 1 && !v.paused) {
+      const videoClips = clips
+        .filter(c => c.kind === "video" && c.visible)
+        .sort((a, b) => a.sourceStart - b.sourceStart);
+
+      const inClip = videoClips.some(c => src >= c.sourceStart && src < c.sourceEnd);
+      if (!inClip) {
+        const nextClip = videoClips.find(c => c.sourceStart > src);
+        if (nextClip) {
+          v.currentTime = nextClip.sourceStart; // ← source time
+        } else {
+          v.pause();
+          setPlaying(false);
+        }
+      }
+
+      // Stop at timeline end
+      const timelineEnd = Math.max(...videoClips.map(c => c.timelineEnd));
+      if (tl >= timelineEnd - 0.05) {
+        v.pause();
+        setPlaying(false);
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(updateLoop);
+  }, [chromaEnabled, chromaColor, chromaTolerance, chromaSmoothing]);
+
+  useEffect(() => {
+    if (playing) {
+      rafRef.current = requestAnimationFrame(updateLoop);
+    } else {
+      cancelAnimationFrame(rafRef.current);
+    }
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [playing, updateLoop]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v) v.volume = volume[0] / 100;
+  }, [volume]);
+
+  useEffect(() => {
+    virtualDurationRef.current = virtualDuration > 0 ? virtualDuration : duration;
+  }, [virtualDuration, duration]);
+
+  // ─ Playhead drag (timeline time) ─────────────────────────────────────────
   const handleTimelineMouseMove = useCallback((e: MouseEvent) => {
     if (!playheadDragging.current || !timelineRulerRef.current) return;
     const rect = timelineRulerRef.current.getBoundingClientRect();
@@ -687,13 +799,9 @@ const ViralCut = () => {
     const pxPerSec = timelineScale * 80;
     const displayDur = virtualDurationRef.current > 0 ? virtualDurationRef.current : 0;
     if (displayDur <= 0 || pxPerSec <= 0) return;
-    const t = Math.max(0, Math.min(displayDur, relX / pxPerSec));
-    const v = videoRef.current;
-    if (!v) return;
-    setVirtualTime(t);
-    setCurrentTime(t);
-    v.currentTime = t;
-  }, [timelineScale]);
+    const tl = Math.max(0, Math.min(displayDur, relX / pxPerSec));
+    seekTimeline(tl);                    // ← always timeline seek
+  }, [timelineScale, seekTimeline]);
 
   const handleTimelineMouseUp = useCallback(() => {
     playheadDragging.current = false;
@@ -746,91 +854,6 @@ const ViralCut = () => {
     filter: `brightness(${filterBrightness[0]}%) contrast(${filterContrast[0]}%) saturate(${filterSaturation[0]}%)`,
   };
 
-  // ─── Segmented playback ────────────────────────────────────────────────────
-  const virtualToReal = useCallback((vt: number, segs: ClipSegment[]): number => {
-    if (segs.length === 0) return vt;
-    let acc = 0;
-    for (const seg of segs) {
-      const len = seg.end - seg.start;
-      if (vt <= acc + len) return seg.start + (vt - acc);
-      acc += len;
-    }
-    return segs[segs.length - 1].end;
-  }, []);
-
-  const realToVirtual = useCallback((rt: number, segs: ClipSegment[]): number => {
-    if (segs.length === 0) return rt;
-    let acc = 0;
-    for (const seg of segs) {
-      if (rt >= seg.start && rt <= seg.end) return acc + (rt - seg.start);
-      acc += seg.end - seg.start;
-    }
-    return acc;
-  }, []);
-
-  const updateLoop = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const segs = cutSegments.length > 0 ? cutSegments : null;
-
-    const rt = v.currentTime;
-    const vt = segs ? realToVirtual(rt, segs) : rt;
-    setCurrentTime(rt);
-    setVirtualTime(vt);
-
-    setActiveCaptions(prev => {
-      const next = captions.filter(c => rt >= c.start && rt < c.end);
-      if (next.length !== prev.length || next.some((c, i) => c.id !== prev[i]?.id)) return next;
-      return prev;
-    });
-
-    if (chromaEnabled && canvasRef.current && !v.paused) {
-      const ctx = canvasRef.current.getContext("2d");
-      if (ctx) {
-        canvasRef.current.width = v.videoWidth || 640;
-        canvasRef.current.height = v.videoHeight || 360;
-        ctx.drawImage(v, 0, 0);
-        const r = parseInt(chromaColor.slice(1, 3), 16);
-        const g = parseInt(chromaColor.slice(3, 5), 16);
-        const b = parseInt(chromaColor.slice(5, 7), 16);
-        applyChromaKey(ctx, canvasRef.current, [r, g, b], chromaTolerance[0], chromaSmoothing[0]);
-      }
-    }
-
-    if (segs && !v.paused) {
-      const inSegment = segs.some(s => rt >= s.start && rt < s.end);
-      if (!inSegment) {
-        const next = segs.find(s => s.start > rt);
-        if (next) {
-          v.currentTime = next.start;
-        } else {
-          v.pause();
-          setPlaying(false);
-        }
-      }
-    }
-
-    rafRef.current = requestAnimationFrame(updateLoop);
-  }, [cutSegments, captions, chromaEnabled, chromaColor, chromaTolerance, chromaSmoothing, realToVirtual]);
-
-  useEffect(() => {
-    if (playing) {
-      rafRef.current = requestAnimationFrame(updateLoop);
-    } else {
-      cancelAnimationFrame(rafRef.current);
-    }
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [playing, updateLoop]);
-
-  useEffect(() => {
-    const v = videoRef.current;
-    if (v) v.volume = volume[0] / 100;
-  }, [volume]);
-
-  useEffect(() => {
-    virtualDurationRef.current = virtualDuration > 0 ? virtualDuration : duration;
-  }, [virtualDuration, duration]);
-
   // ─── Video load ───────────────────────────────────────────────────────────
   const handleVideoLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -839,21 +862,16 @@ const ViralCut = () => {
     setVideoFile(file);
     setVideoSrc(url);
     setVideoName(file.name);
-
-    setSourceMedia({
-      id: "source-main",
-      type: "video",
-      name: file.name,
-      src: url,
-      duration: 0,
-    });
-
+    setSourceMedia({ id: "source-main", type: "video", name: file.name, src: url, duration: 0 });
     setTimelineClips([]);
+    timelineClipsRef.current = [];
     setCaptions([]);
     setTranscriptWords([]);
     setLayers([]);
     setHistory([]);
     setPlaying(false);
+    setTimelineTime(0);
+    setSourceTime(0);
     toast({ title: "Vídeo carregado!", description: file.name });
   };
 
@@ -863,12 +881,10 @@ const ViralCut = () => {
     const dur = v.duration || 0;
     setDuration(dur);
     virtualDurationRef.current = dur;
-    setVirtualDuration(0);
-
+    setVirtualDuration(dur);
     setSourceMedia(prev => prev ? { ...prev, duration: dur } : null);
 
-    // Create single full-duration clip as initial state
-    setTimelineClips([{
+    const initialClip: TimelineClip = {
       id: "clip-main-0",
       sourceId: "source-main",
       kind: "video",
@@ -880,7 +896,9 @@ const ViralCut = () => {
       visible: true,
       locked: false,
       color: "hsl(262,83%,58%)",
-    }]);
+    };
+    setTimelineClips([initialClip]);
+    timelineClipsRef.current = [initialClip];
   };
 
   // ─── Playback controls ────────────────────────────────────────────────────
@@ -891,15 +909,8 @@ const ViralCut = () => {
     else { v.play(); setPlaying(true); }
   };
 
-  const seekVirtual = useCallback((vt: number) => {
-    const v = videoRef.current;
-    if (!v) return;
-    const segs = cutSegments.length > 0 ? cutSegments : null;
-    const rt = segs ? virtualToReal(vt, segs) : vt;
-    v.currentTime = rt;
-    setCurrentTime(rt);
-    setVirtualTime(vt);
-  }, [cutSegments, virtualToReal]);
+  // Alias: all seek calls from UI go through seekTimeline
+  const seekVirtual = seekTimeline;
 
   const toggleMute = () => {
     const v = videoRef.current;
@@ -924,15 +935,17 @@ const ViralCut = () => {
 
       const clips = buildTimelineClipsFromSegments(segs, sourceMedia.id);
       setTimelineClips(clips);
+      timelineClipsRef.current = clips;
 
       const total = clips.reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
       virtualDurationRef.current = total;
       setVirtualDuration(total);
 
-      if (v && clips.length > 0) {
-        v.currentTime = clips[0].sourceStart;
-        setCurrentTime(clips[0].sourceStart);
-        setVirtualTime(0);
+      // Seek to the start of the first clip (source time)
+      if (clips.length > 0) {
+        v.currentTime = clips[0].sourceStart;  // ← source time
+        setSourceTime(clips[0].sourceStart);
+        setTimelineTime(0);
       }
 
       toast({ title: `✂️ ${clips.length} clipes detectados`, description: `Silêncios removidos • Nível: ${autoCutLevel}` });
