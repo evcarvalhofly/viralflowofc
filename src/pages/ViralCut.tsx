@@ -942,12 +942,9 @@ const ViralCut = () => {
       virtualDurationRef.current = total;
       setVirtualDuration(total);
 
-      // Seek to the start of the first clip (source time)
-      if (clips.length > 0) {
-        v.currentTime = clips[0].sourceStart;  // ← source time
-        setSourceTime(clips[0].sourceStart);
-        setTimelineTime(0);
-      }
+      // Seek to the start of the first clip via seekTimeline(0)
+      // (timeline 0 maps to clips[0].sourceStart via timelineToSourceTime)
+      seekTimeline(0);
 
       toast({ title: `✂️ ${clips.length} clipes detectados`, description: `Silêncios removidos • Nível: ${autoCutLevel}` });
     } catch (err) {
