@@ -1409,9 +1409,11 @@ const ViralCut = () => {
       ]);
 
       const data = await ff.readFile("output.mp4");
-      // FileData can be Uint8Array or string; force to Uint8Array then copy to plain ArrayBuffer
+      // FileData can be Uint8Array (possibly backed by SharedArrayBuffer) or string
       const uint8 = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
-      const blob = new Blob([uint8.buffer.slice(0)], { type: "video/mp4" });
+      // Copy to a plain ArrayBuffer so Blob constructor accepts it
+      const plainBuffer = uint8.buffer.slice(uint8.byteOffset, uint8.byteOffset + uint8.byteLength) as ArrayBuffer;
+      const blob = new Blob([plainBuffer], { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
