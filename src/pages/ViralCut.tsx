@@ -1183,6 +1183,49 @@ const ViralCut = () => {
     toast({ title: "🎵 Áudio adicionado" });
   };
 
+  // ─── Reset main media (called when video is fully removed) ───────────────
+  const resetMainMediaState = useCallback(() => {
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      v.removeAttribute("src");
+      v.load();
+    }
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    cancelAnimationFrame(rafRef.current);
+
+    setPlaying(false);
+    setMuted(false);
+    setCurrentTime(0);
+    setTimelineTime(0);
+    setSourceTime(0);
+    setDuration(0);
+    setVirtualDuration(0);
+    virtualDurationRef.current = 0;
+
+    setVideoSrc(null);
+    setVideoName("Sem vídeo");
+    setSourceMedia(null);
+    setVideoFile(null);
+
+    setCaptions([]);
+    setActiveCaptions([]);
+    setTranscriptWords([]);
+    setTranscriptRaw("");
+
+    setTimelineClips([]);
+    timelineClipsRef.current = [];
+
+    setLayers(prev => prev.filter(l => l.type !== "video"));
+    setHistory([]);
+  }, []);
+
   // ─── Layer actions ────────────────────────────────────────────────────────
   const toggleLayerVisible = (id: string) => {
     pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
@@ -1190,8 +1233,18 @@ const ViralCut = () => {
   };
 
   const deleteLayer = (id: string) => {
+    // If deleting the main video track, reset everything
+    if (id === "main-video" || id === "track-video-main") {
+      resetMainMediaState();
+      return;
+    }
     pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => prev.filter(l => l.id !== id));
+    setTimelineClips(prev => {
+      const next = prev.filter(c => c.trackId !== id && c.id !== id);
+      timelineClipsRef.current = next;
+      return next;
+    });
   };
 
   // ─── Export ───────────────────────────────────────────────────────────────
