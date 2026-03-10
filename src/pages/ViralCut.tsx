@@ -1487,9 +1487,7 @@ const ViralCut = () => {
                             timelineClipsRef.current = [resetClip];
                             setVirtualDuration(duration);
                             virtualDurationRef.current = duration;
-                            setTimelineTime(0);
-                            setSourceTime(0);
-                            if (videoRef.current) videoRef.current.currentTime = 0;
+                            seekSource(0); // rewind after resetting cuts
                           }}
                           className="text-[9px] text-destructive hover:underline"
                         >Desfazer cortes</button>
