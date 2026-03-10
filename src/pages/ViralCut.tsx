@@ -706,11 +706,11 @@ const ViralCut = () => {
     setTimelineTime(clips.length > 0 ? sourceToTimelineTime(src, clips) : src);
   }, []);
 
-  // ─── RAF update loop ──────────────────────────────────────────────────────
+  // ─── RAF update loop (UI sync only — no gap-skip here) ───────────────────
   const captionsRef = useRef(captions);
   useEffect(() => { captionsRef.current = captions; }, [captions]);
 
-  // Use a ref to track playing state inside RAF to avoid stale closures
+  // Stable ref so RAF never reads stale playing state
   const playingRef = useRef(false);
   useEffect(() => { playingRef.current = playing; }, [playing]);
 
@@ -718,17 +718,14 @@ const ViralCut = () => {
     const v = videoRef.current;
     if (!v || !playingRef.current) return;
 
-    const src = v.currentTime;            // ← read source time from video
+    const src = v.currentTime;
     const clips = timelineClipsRef.current;
-
-    const tl = clips.length > 0
-      ? sourceToTimelineTime(src, clips)
-      : src;
+    const tl = clips.length > 0 ? sourceToTimelineTime(src, clips) : src;
 
     setSourceTime(src);
     setTimelineTime(tl);
 
-    // Captions keyed on timelineTime
+    // Captions
     setActiveCaptions(prev => {
       const next = captionsRef.current.filter(c => tl >= c.start && tl < c.end);
       if (next.length !== prev.length || next.some((c, i) => c.id !== prev[i]?.id)) return next;
@@ -749,41 +746,6 @@ const ViralCut = () => {
       }
     }
 
-    // ── Gap-skip and end-of-timeline logic ───────────────────────────────
-    const videoClips = clips
-      .filter(c => c.kind === "video" && c.visible)
-      .sort((a, b) => a.sourceStart - b.sourceStart);
-
-    if (videoClips.length > 0) {
-      const timelineEnd = Math.max(...videoClips.map(c => c.timelineEnd));
-
-      // Stop at end of timeline
-      if (tl >= timelineEnd - 0.05) {
-        v.pause();
-        playingRef.current = false;
-        setPlaying(false);
-        rafRef.current = 0;
-        return; // stop the RAF
-      }
-
-      // Skip over gaps between clips (source time not inside any clip)
-      if (videoClips.length > 1 && !v.paused) {
-        const inClip = videoClips.some(c => src >= c.sourceStart - 0.05 && src < c.sourceEnd);
-        if (!inClip) {
-          const nextClip = videoClips.find(c => c.sourceStart > src);
-          if (nextClip) {
-            v.currentTime = nextClip.sourceStart; // jump to next clip source start
-          } else {
-            v.pause();
-            playingRef.current = false;
-            setPlaying(false);
-            rafRef.current = 0;
-            return;
-          }
-        }
-      }
-    }
-
     rafRef.current = requestAnimationFrame(updateLoop);
   }, [chromaEnabled, chromaColor, chromaTolerance, chromaSmoothing]);
 
@@ -795,6 +757,55 @@ const ViralCut = () => {
     }
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing, updateLoop]);
+
+  // ─── Gap-skip via timeupdate event (reliable, outside RAF) ───────────────
+  // Runs on the video element's timeupdate — fires ~4x/sec while playing.
+  // Detects when currentTime is outside all clips and jumps to next clip.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const handleTimeUpdate = () => {
+      const clips = timelineClipsRef.current;
+      const videoClips = clips
+        .filter(c => c.kind === "video" && c.visible)
+        .sort((a, b) => a.sourceStart - b.sourceStart);
+
+      if (videoClips.length === 0 || v.paused) return;
+
+      const src = v.currentTime;
+
+      // Check end of last clip
+      const lastClip = videoClips[videoClips.length - 1];
+      if (src >= lastClip.sourceEnd - 0.05) {
+        v.pause();
+        setPlaying(false);
+        playingRef.current = false;
+        const tl = sourceToTimelineTime(src, videoClips);
+        setTimelineTime(tl);
+        setSourceTime(src);
+        return;
+      }
+
+      // Check if inside any clip
+      const inClip = videoClips.some(c => src >= c.sourceStart && src < c.sourceEnd);
+      if (!inClip) {
+        // Find next clip and jump to its start
+        const nextClip = videoClips.find(c => c.sourceStart > src);
+        if (nextClip) {
+          v.currentTime = nextClip.sourceStart;
+        } else {
+          v.pause();
+          setPlaying(false);
+          playingRef.current = false;
+        }
+      }
+    };
+
+    v.addEventListener("timeupdate", handleTimeUpdate);
+    return () => v.removeEventListener("timeupdate", handleTimeUpdate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoSrc]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -1272,8 +1283,9 @@ const ViralCut = () => {
     setPlaying(false);
     playingRef.current = false;
 
-    // No cuts applied — direct download of original file
-    if (cutSegments.length === 0) {
+    // No cuts — direct download of original
+    const segs = cutSegments;
+    if (segs.length === 0) {
       const a = document.createElement("a");
       a.href = videoSrc;
       a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.mp4";
@@ -1284,37 +1296,89 @@ const ViralCut = () => {
     }
 
     try {
-      // Pick a supported mime type
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : MediaRecorder.isTypeSupported("video/webm")
-        ? "video/webm"
-        : "video/mp4";
+      const mimeType = ["video/webm;codecs=vp9", "video/webm", "video/mp4"]
+        .find(m => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
 
-      const exportVideo = document.createElement("video");
-      exportVideo.src = videoSrc;
-      exportVideo.muted = true;
-      exportVideo.crossOrigin = "anonymous";
-      exportVideo.preload = "auto";
+      // Hidden video element for export — plays the source at real speed
+      const ev = document.createElement("video");
+      ev.src = videoSrc;
+      ev.muted = true;
+      ev.playsInline = true;
+      ev.crossOrigin = "anonymous";
+      document.body.appendChild(ev); // must be in DOM for captureStream
 
-      // Wait for metadata
       await new Promise<void>((res, rej) => {
-        exportVideo.addEventListener("loadedmetadata", () => res(), { once: true });
-        exportVideo.addEventListener("error", () => rej(new Error("Falha ao carregar vídeo para exportação")), { once: true });
-        exportVideo.load();
+        ev.onloadedmetadata = () => res();
+        ev.onerror = () => rej(new Error("Erro ao carregar vídeo"));
+        ev.load();
       });
 
       const canvas = document.createElement("canvas");
-      canvas.width = exportVideo.videoWidth || 1280;
-      canvas.height = exportVideo.videoHeight || 720;
+      canvas.width = ev.videoWidth || 1280;
+      canvas.height = ev.videoHeight || 720;
       const ctx = canvas.getContext("2d")!;
 
-      const stream = canvas.captureStream(30);
-      const recorder = new MediaRecorder(stream, { mimeType });
+      // Capture canvas stream + audio stream from video
+      const videoStream = canvas.captureStream(30);
+      let combinedStream = videoStream;
+      try {
+        // Try to capture audio too
+        const audioCtx = new AudioContext();
+        const src = audioCtx.createMediaElementSource(ev);
+        const dest = audioCtx.createMediaStreamDestination();
+        src.connect(dest);
+        src.connect(audioCtx.destination);
+        const audioTrack = dest.stream.getAudioTracks()[0];
+        if (audioTrack) {
+          combinedStream = new MediaStream([...videoStream.getVideoTracks(), audioTrack]);
+        }
+      } catch (_) { /* no audio capture — ok */ }
+
+      const recorder = new MediaRecorder(combinedStream, { mimeType });
       const chunks: Blob[] = [];
       recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-      const exportDone = new Promise<void>(res => {
+      // Draw frames to canvas while video plays
+      let drawing = true;
+      const drawFrame = () => {
+        if (!drawing) return;
+        ctx.drawImage(ev, 0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(drawFrame);
+      };
+      requestAnimationFrame(drawFrame);
+
+      recorder.start(200);
+
+      // Play each segment sequentially
+      for (let si = 0; si < segs.length; si++) {
+        const seg = segs[si];
+        setProcessingMsg(`Exportando clipe ${si + 1}/${segs.length}...`);
+
+        // Seek to start
+        await new Promise<void>(res => {
+          ev.onseeked = () => res();
+          ev.currentTime = seg.start;
+          setTimeout(res, 3000); // safety fallback
+        });
+
+        // Play until end of segment
+        await new Promise<void>(res => {
+          const onTime = () => {
+            if (ev.currentTime >= seg.end - 0.05) {
+              ev.removeEventListener("timeupdate", onTime);
+              ev.pause();
+              res();
+            }
+          };
+          ev.addEventListener("timeupdate", onTime);
+          ev.play().catch(() => res());
+        });
+      }
+
+      drawing = false;
+      recorder.stop();
+
+      await new Promise<void>(res => {
         recorder.onstop = () => {
           const blob = new Blob(chunks, { type: mimeType });
           const url = URL.createObjectURL(blob);
@@ -1322,47 +1386,14 @@ const ViralCut = () => {
           a.href = url;
           a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.webm";
           a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 5000);
-          setProcessing(false);
-          toast({ title: `✅ Exportado com ${cutSegments.length} clipes!` });
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
           res();
         };
       });
 
-      recorder.start(100); // collect data every 100ms
-
-      const seekTo = (time: number): Promise<void> =>
-        new Promise(res => {
-          const onSeeked = () => res();
-          exportVideo.addEventListener("seeked", onSeeked, { once: true });
-          exportVideo.currentTime = time;
-          // Safety fallback in case seeked never fires
-          setTimeout(res, 2000);
-        });
-
-      const renderFramesForSegment = async (start: number, end: number) => {
-        await seekTo(start);
-        const fps = 30;
-        const frameDuration = 1 / fps;
-        let t = start;
-        while (t < end - frameDuration / 2) {
-          ctx.drawImage(exportVideo, 0, 0, canvas.width, canvas.height);
-          const nextT = Math.min(t + frameDuration, end);
-          await seekTo(nextT);
-          t = nextT;
-          // Yield to keep UI responsive
-          await new Promise(r => setTimeout(r, 0));
-        }
-      };
-
-      for (let si = 0; si < cutSegments.length; si++) {
-        const seg = cutSegments[si];
-        setProcessingMsg(`Renderizando clipe ${si + 1}/${cutSegments.length}...`);
-        await renderFramesForSegment(seg.start, seg.end);
-      }
-
-      recorder.stop();
-      await exportDone;
+      document.body.removeChild(ev);
+      setProcessing(false);
+      toast({ title: `✅ Exportado! ${segs.length} clipe${segs.length > 1 ? "s" : ""} combinados.` });
     } catch (err) {
       console.error("Export error:", err);
       setProcessing(false);
