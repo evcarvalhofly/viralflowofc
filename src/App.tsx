@@ -12,6 +12,7 @@ import Planning from "./pages/Planning";
 import GameOver from "./pages/GameOver";
 import ViralVideos from "./pages/ViralVideos";
 import Assets from "./pages/Assets";
+import ViralCut from "./pages/ViralCut";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/gameover" element={<ProtectedRoute><GameOver /></ProtectedRoute>} />
               <Route path="/viral-videos" element={<ProtectedRoute><ViralVideos /></ProtectedRoute>} />
               <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
+              <Route path="/viralcut" element={<ProtectedRoute><ViralCut /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

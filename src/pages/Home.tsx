@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap } from "lucide-react";
+import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap, Scissors } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +54,16 @@ const modules = [
     gradient: "from-[hsl(160,70%,40%)] to-[hsl(180,60%,30%)]",
     glow: "hsl(160,70%,40%)",
     emoji: "✂️",
+    available: true,
+  },
+  {
+    label: "ViralCut",
+    description: "Editor de vídeo rápido para criadores",
+    icon: Scissors,
+    path: "/viralcut",
+    gradient: "from-[hsl(340,80%,55%)] to-[hsl(15,80%,45%)]",
+    glow: "hsl(340,80%,55%)",
+    emoji: "🎞️",
     available: true,
   },
   {
