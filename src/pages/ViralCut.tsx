@@ -1148,7 +1148,7 @@ const ViralCut = () => {
       };
 
       recognition.start(dest.stream);
-      v.currentTime = 0;
+      seekSource(0); // rewind to source start for transcription
       await v.play();
       setPlaying(true);
     } catch (err) {
