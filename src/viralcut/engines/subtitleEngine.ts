@@ -251,7 +251,7 @@ export async function transcribeFile(
     throw new Error('Nenhuma fala detectada. Verifique se o vídeo tem áudio claro.');
   }
 
-  const blocks = buildSubtitleBlocks(words, 3);
+  const blocks = buildSubtitleBlocks(words, 4);
   console.log('[subtitleEngine] Blocks:', blocks.length, blocks[0], blocks[blocks.length - 1]);
 
   if (!blocks.length) {
