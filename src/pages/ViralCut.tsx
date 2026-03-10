@@ -206,10 +206,16 @@ async function exportWithFFmpeg(
 
   onProgress(82, "Concatenando clipes...");
 
+  const toBlob = (fileData: Awaited<ReturnType<typeof ffmpeg.readFile>>, mime: string) => {
+    // FFmpeg returns Uint8Array; copy buffer to avoid SharedArrayBuffer issues
+    const u8 = fileData as Uint8Array;
+    const copy = new Uint8Array(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
+    return new Blob([copy], { type: mime });
+  };
+
   if (segFiles.length === 1) {
-    // Single segment — just read it back
     const data = await ffmpeg.readFile(segFiles[0]);
-    return new Blob([data as Uint8Array], { type: "video/mp4" });
+    return toBlob(data, "video/mp4");
   }
 
   // Write concat list
@@ -226,7 +232,7 @@ async function exportWithFFmpeg(
 
   onProgress(96, "Finalizando...");
   const data = await ffmpeg.readFile("output.mp4");
-  return new Blob([data], { type: "video/mp4" });
+  return toBlob(data, "video/mp4");
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
