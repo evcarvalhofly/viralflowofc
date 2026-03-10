@@ -57,6 +57,16 @@ const modules = [
     available: true,
   },
   {
+    label: "ViralCut",
+    description: "Editor de vídeo rápido para criadores",
+    icon: Scissors,
+    path: "/viralcut",
+    gradient: "from-[hsl(340,80%,55%)] to-[hsl(15,80%,45%)]",
+    glow: "hsl(340,80%,55%)",
+    emoji: "🎞️",
+    available: true,
+  },
+  {
     label: "Comunidade",
     description: "Conecte-se com outros criadores",
     icon: Users,
