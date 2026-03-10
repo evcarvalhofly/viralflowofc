@@ -203,14 +203,13 @@ export async function transcribeFile(
 
   onProgress?.('Transcrevendo com Whisper…');
 
-  // Use sentence-level timestamps — more reliable across all browsers
-  // return_timestamps:'word' often silently falls back to sentence-level in whisper-tiny
+  // Smaller chunks = more precise per-segment timestamps from whisper-tiny
   let result: any;
   try {
     result = await transcriber(audioData, {
-      return_timestamps: true,       // sentence-level — reliable
-      chunk_length_s: 30,
-      stride_length_s: 5,
+      return_timestamps: true,
+      chunk_length_s: 15,     // smaller window → tighter timestamps
+      stride_length_s: 3,
       language: 'portuguese',
       task: 'transcribe',
     });
@@ -220,8 +219,8 @@ export async function transcribeFile(
     try {
       result = await transcriber(audioData, {
         return_timestamps: true,
-        chunk_length_s: 30,
-        stride_length_s: 5,
+        chunk_length_s: 15,
+        stride_length_s: 3,
       });
     } catch (err2) {
       console.error('[subtitleEngine] Retry failed:', err2);
