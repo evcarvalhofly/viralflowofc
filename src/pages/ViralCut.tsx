@@ -27,6 +27,8 @@ interface Layer {
   locked: boolean;
   color: string;
   content?: string;
+  // For video layers that are individual cut segments
+  segmentIndex?: number;
 }
 
 interface CaptionBlock {
@@ -60,6 +62,13 @@ const LAYER_COLORS: Record<LayerType, string> = {
   text: "hsl(160,70%,40%)",
   audio: "hsl(210,80%,50%)",
 };
+
+// ─── Clip segment colors for visual differentiation ──────────────────────────
+const CLIP_HUE_STEP = 37;
+function clipColor(index: number) {
+  const hue = (262 + index * CLIP_HUE_STEP) % 360;
+  return `hsl(${hue},70%,52%)`;
+}
 
 // ─── Silence Detection (Web Audio API) ────────────────────────────────────────
 
@@ -168,23 +177,193 @@ function applyChromaKey(
   ctx.putImageData(imageData, 0, 0);
 }
 
+// ─── Video Clip Block (draggable, resizable) ─────────────────────────────────
+
+function VideoClipBlock({
+  seg, index, pxPerSec, trackHeight,
+  onDragEnd, onResizeEnd, onSeek, onSplit, onDelete,
+}: {
+  seg: ClipSegment;
+  index: number;
+  pxPerSec: number;
+  trackHeight: number;
+  onDragEnd: (id: string, newStart: number) => void;
+  onResizeEnd: (id: string, side: "left" | "right", newVal: number) => void;
+  onSeek: (t: number) => void;
+  onSplit: (id: string, at: number) => void;
+  onDelete: (id: string) => void;
+}) {
+  const left = seg.start * pxPerSec;
+  const width = Math.max(16, (seg.end - seg.start) * pxPerSec);
+  const color = clipColor(index);
+
+  const dragRef = useRef<{ startX: number; origStart: number; origEnd: number } | null>(null);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [tempLeft, setTempLeft] = useState<number | null>(null);
+
+  // ── drag (long-press to activate on touch) ────────────────────────────────
+  const startDrag = useCallback((clientX: number) => {
+    dragRef.current = { startX: clientX, origStart: seg.start, origEnd: seg.end };
+    setDragging(true);
+    const dur = seg.end - seg.start;
+
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      const cx = "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const dx = (cx - dragRef.current!.startX) / pxPerSec;
+      const newStart = Math.max(0, dragRef.current!.origStart + dx);
+      setTempLeft(newStart * pxPerSec);
+    };
+    const onUp = (e: MouseEvent | TouchEvent) => {
+      if (dragRef.current) {
+        const cx = "changedTouches" in e
+          ? (e as TouchEvent).changedTouches[0].clientX
+          : (e as MouseEvent).clientX;
+        const dx = (cx - dragRef.current.startX) / pxPerSec;
+        const newStart = Math.max(0, dragRef.current.origStart + dx);
+        onDragEnd(seg.id, newStart);
+      }
+      setDragging(false);
+      setTempLeft(null);
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove as EventListener);
+      window.removeEventListener("mouseup", onUp as EventListener);
+      window.removeEventListener("touchmove", onMove as EventListener);
+      window.removeEventListener("touchend", onUp as EventListener);
+    };
+    window.addEventListener("mousemove", onMove as EventListener);
+    window.addEventListener("mouseup", onUp as EventListener);
+    window.addEventListener("touchmove", onMove as EventListener, { passive: true });
+    window.addEventListener("touchend", onUp as EventListener);
+  }, [seg, pxPerSec, onDragEnd]);
+
+  // ── resize ────────────────────────────────────────────────────────────────
+  const startResize = useCallback((side: "left" | "right", clientX: number, e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    const orig = side === "left" ? seg.start : seg.end;
+
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      const cx = "touches" in ev ? ev.touches[0].clientX : (ev as MouseEvent).clientX;
+      const dt = (cx - clientX) / pxPerSec;
+      const newVal = orig + dt;
+      onResizeEnd(seg.id, side, newVal);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove as EventListener);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove as EventListener);
+      window.removeEventListener("touchend", onUp);
+    };
+    window.addEventListener("mousemove", onMove as EventListener);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove as EventListener, { passive: true });
+    window.addEventListener("touchend", onUp);
+  }, [seg, pxPerSec, onResizeEnd]);
+
+  const currentLeft = tempLeft !== null ? tempLeft : left;
+
+  return (
+    <div
+      className={cn(
+        "absolute top-1 select-none",
+        dragging ? "z-30 opacity-80 shadow-xl" : "z-10"
+      )}
+      style={{ left: currentLeft, width, height: trackHeight - 8, cursor: dragging ? "grabbing" : "grab" }}
+      onMouseDown={e => {
+        if ((e.target as HTMLElement).dataset.handle) return;
+        e.preventDefault();
+        startDrag(e.clientX);
+      }}
+      onTouchStart={e => {
+        if ((e.target as HTMLElement).dataset.handle) return;
+        longPressRef.current = setTimeout(() => {
+          startDrag(e.touches[0].clientX);
+        }, 350);
+      }}
+      onTouchEnd={() => {
+        if (longPressRef.current) clearTimeout(longPressRef.current);
+      }}
+      onClick={e => {
+        e.stopPropagation();
+        // Short click → seek to start of clip
+        if (!dragging) onSeek(seg.start);
+      }}
+    >
+      {/* Main block */}
+      <div
+        className="w-full h-full rounded flex items-center overflow-hidden border border-white/10 shadow"
+        style={{ backgroundColor: color }}
+      >
+        {/* Left resize handle */}
+        <div
+          data-handle="left"
+          className="absolute left-0 top-0 h-full w-2.5 cursor-w-resize flex items-center justify-center z-20 hover:bg-black/20"
+          onMouseDown={e => startResize("left", e.clientX, e)}
+          onTouchStart={e => startResize("left", e.touches[0].clientX, e)}
+        >
+          <div className="w-0.5 h-4 bg-white/50 rounded pointer-events-none" />
+        </div>
+
+        {/* Label */}
+        <span className="text-[9px] text-white font-semibold truncate px-3 pointer-events-none select-none flex-1 text-center">
+          {index + 1}
+        </span>
+
+        {/* Delete btn */}
+        <button
+          data-handle="del"
+          className="absolute top-0.5 right-0.5 h-4 w-4 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:opacity-100 z-20 transition-opacity"
+          style={{ opacity: width > 40 ? undefined : 0, pointerEvents: width > 40 ? undefined : "none" }}
+          onMouseDown={e => { e.stopPropagation(); onDelete(seg.id); }}
+          onTouchEnd={e => { e.stopPropagation(); onDelete(seg.id); }}
+        >
+          <X className="h-2.5 w-2.5 text-white" />
+        </button>
+
+        {/* Right resize handle */}
+        <div
+          data-handle="right"
+          className="absolute right-0 top-0 h-full w-2.5 cursor-e-resize flex items-center justify-center z-20 hover:bg-black/20"
+          onMouseDown={e => startResize("right", e.clientX, e)}
+          onTouchStart={e => startResize("right", e.touches[0].clientX, e)}
+        >
+          <div className="w-0.5 h-4 bg-white/50 rounded pointer-events-none" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Timeline Lane ────────────────────────────────────────────────────────────
 
 function TimelineLane({
-  layer, duration, scale,
-  onToggleVisible, onDelete, onSeek
+  layer, segments, duration, scale, isVideoTrack, cutMode,
+  onToggleVisible, onDelete, onSeek,
+  onSegmentDragEnd, onSegmentResizeEnd, onSegmentDelete, onManualCut,
 }: {
-  layer: Layer; duration: number; scale: number; currentTime: number;
+  layer: Layer;
+  segments?: ClipSegment[];
+  duration: number;
+  scale: number;
+  currentTime: number;
+  isVideoTrack?: boolean;
+  cutMode?: boolean;
   onToggleVisible: (id: string) => void;
   onDelete: (id: string) => void;
   onSeek: (t: number) => void;
+  onSegmentDragEnd?: (id: string, newStart: number) => void;
+  onSegmentResizeEnd?: (id: string, side: "left" | "right", newVal: number) => void;
+  onSegmentDelete?: (id: string) => void;
+  onManualCut?: (at: number) => void;
 }) {
   const pxPerSec = scale * 80;
   const left = layer.start * pxPerSec;
   const width = Math.max(20, (layer.end - layer.start) * pxPerSec);
+  const trackHeight = 40;
 
   return (
-    <div className="flex items-center h-10 border-b border-border/30 group">
+    <div className="flex items-center border-b border-border/30 group" style={{ height: trackHeight }}>
+      {/* Label column */}
       <div className="w-32 shrink-0 flex items-center gap-1 px-2 border-r border-border/30 h-full bg-card/50">
         <button onClick={() => onToggleVisible(layer.id)} className="text-muted-foreground hover:text-foreground">
           {layer.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -194,20 +373,73 @@ function TimelineLane({
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
+
+      {/* Track body */}
       <div
-        className="relative flex-1 h-full overflow-hidden cursor-pointer"
+        className={cn(
+          "relative flex-1 h-full overflow-hidden",
+          cutMode ? "cursor-crosshair" : "cursor-pointer"
+        )}
         onClick={e => {
           const rect = e.currentTarget.getBoundingClientRect();
-          const t = ((e.clientX - rect.left) / rect.width) * duration;
-          onSeek(t);
+          const t = (e.clientX - rect.left) / pxPerSec;
+          if (cutMode && isVideoTrack && onManualCut) {
+            onManualCut(t);
+          } else {
+            onSeek(t);
+          }
         }}
       >
-        <div
-          className="absolute top-1 bottom-1 rounded flex items-center px-2"
-          style={{ left, width, backgroundColor: layer.color, opacity: layer.visible ? 0.9 : 0.3 }}
-        >
-          <span className="text-[9px] text-white font-medium truncate">{layer.label}</span>
-        </div>
+        {isVideoTrack && segments && segments.length > 0 ? (
+          // Render individual clip blocks
+          <>
+            {/* Dark "removed" background */}
+            <div className="absolute inset-0 bg-border/10" />
+            {/* Gap markers (silences) between segments */}
+            {segments.map((seg, i) => {
+              const prev = segments[i - 1];
+              const gapStart = prev ? prev.end : 0;
+              const gapEnd = seg.start;
+              if (gapEnd <= gapStart) return null;
+              return (
+                <div
+                  key={`gap-${seg.id}`}
+                  className="absolute top-0 bottom-0 bg-black/40 border-x border-destructive/20"
+                  style={{ left: gapStart * pxPerSec, width: Math.max(2, (gapEnd - gapStart) * pxPerSec) }}
+                />
+              );
+            })}
+            {/* Clip blocks */}
+            {segments.map((seg, i) => (
+              <VideoClipBlock
+                key={seg.id}
+                seg={seg}
+                index={i}
+                pxPerSec={pxPerSec}
+                trackHeight={trackHeight}
+                onDragEnd={onSegmentDragEnd!}
+                onResizeEnd={onSegmentResizeEnd!}
+                onSeek={onSeek}
+                onSplit={() => {}}
+                onDelete={onSegmentDelete!}
+              />
+            ))}
+            {/* Cut cursor line */}
+            {cutMode && (
+              <div className="absolute inset-0 flex items-center pointer-events-none">
+                <div className="w-full h-full border-2 border-dashed border-destructive/60 rounded opacity-60" />
+              </div>
+            )}
+          </>
+        ) : (
+          // Normal single-block layer
+          <div
+            className="absolute top-1 bottom-1 rounded flex items-center px-2"
+            style={{ left, width, backgroundColor: layer.color, opacity: layer.visible ? 0.9 : 0.3 }}
+          >
+            <span className="text-[9px] text-white font-medium truncate">{layer.label}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -269,6 +501,7 @@ const ViralCut = () => {
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingMsg, setProcessingMsg] = useState("");
+  const [cutMode, setCutMode] = useState(false); // manual cut scissors mode
 
   // ─ History (Undo) ─────────────────────────────────────────────────────────
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -521,7 +754,6 @@ const ViralCut = () => {
       toast({ title: "Sem vídeo", description: "Carregue um vídeo primeiro.", variant: "destructive" });
       return;
     }
-    // Save history before mutating
     pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setAutoCutLoading(true);
     setAutoCutProgress(0);
@@ -534,18 +766,19 @@ const ViralCut = () => {
       virtualDurationRef.current = virtDur;
       setVirtualDuration(virtDur);
 
+      // One "video" layer that acts as the container for the segments
       setLayers(prev => {
         const others = prev.filter(l => l.type !== "video");
         return [
           {
             id: "main-video",
             type: "video" as LayerType,
-            label: `${segs.length} clipes (${virtDur.toFixed(1)}s)`,
-            start: 0, end: virtDur,
+            label: `Vídeo • ${segs.length} clipes`,
+            start: 0, end: v.duration, // spans full real duration
             visible: true, locked: false,
             color: LAYER_COLORS.video,
           },
-          ...others
+          ...others,
         ];
       });
 
@@ -564,6 +797,82 @@ const ViralCut = () => {
       setAutoCutProgress(0);
     }
   };
+
+  // ─── Manual cut ───────────────────────────────────────────────────────────
+  const handleManualCut = useCallback((atRealTime: number) => {
+    if (!duration) return;
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+
+    const existing = cutSegments.length > 0
+      ? cutSegments
+      : [{ id: "clip-0", start: 0, end: duration }];
+
+    // Find which segment contains this timestamp
+    const idx = existing.findIndex(s => atRealTime > s.start && atRealTime < s.end);
+    if (idx === -1) return; // cut lands in a gap or outside
+
+    const seg = existing[idx];
+    const left: ClipSegment = { id: `clip-${Date.now()}-a`, start: seg.start, end: atRealTime };
+    const right: ClipSegment = { id: `clip-${Date.now()}-b`, start: atRealTime, end: seg.end };
+    const newSegs = [...existing.slice(0, idx), left, right, ...existing.slice(idx + 1)];
+    setCutSegments(newSegs);
+
+    const virtDur = newSegs.reduce((acc, s) => acc + (s.end - s.start), 0);
+    setVirtualDuration(virtDur);
+    virtualDurationRef.current = virtDur;
+
+    setLayers(prev => prev.map(l =>
+      l.id === "main-video"
+        ? { ...l, label: `Vídeo • ${newSegs.length} clipes` }
+        : l
+    ));
+
+    setCutMode(false);
+    toast({ title: `✂️ Corte manual em ${atRealTime.toFixed(2)}s` });
+  }, [cutSegments, layers, captions, duration, virtualDuration, pushHistory]);
+
+  // ─── Segment drag / resize ────────────────────────────────────────────────
+  const handleSegmentDragEnd = useCallback((id: string, newStart: number) => {
+    setCutSegments(prev => {
+      const seg = prev.find(s => s.id === id);
+      if (!seg) return prev;
+      const dur = seg.end - seg.start;
+      const clamped = Math.max(0, Math.min(duration - dur, newStart));
+      return prev.map(s => s.id === id ? { ...s, start: clamped, end: clamped + dur } : s);
+    });
+  }, [duration]);
+
+  const handleSegmentResizeEnd = useCallback((id: string, side: "left" | "right", newVal: number) => {
+    setCutSegments(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      if (side === "left") return { ...s, start: Math.max(0, Math.min(s.end - 0.1, newVal)) };
+      return { ...s, end: Math.max(s.start + 0.1, Math.min(duration, newVal)) };
+    }));
+  }, [duration]);
+
+  const handleSegmentDelete = useCallback((id: string) => {
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+    setCutSegments(prev => {
+      const next = prev.filter(s => s.id !== id);
+      // If none left, reset
+      if (next.length === 0) {
+        setVirtualDuration(0);
+        virtualDurationRef.current = duration;
+        return [];
+      }
+      const virtDur = next.reduce((acc, s) => acc + (s.end - s.start), 0);
+      setVirtualDuration(virtDur);
+      virtualDurationRef.current = virtDur;
+      return next;
+    });
+    setLayers(prev => prev.map(l =>
+      l.id === "main-video"
+        ? { ...l, label: `Vídeo • ${cutSegments.length - 1} clipes` }
+        : l
+    ));
+    toast({ title: "Clipe removido" });
+  }, [cutSegments, layers, captions, duration, virtualDuration, pushHistory]);
+
 
   // ─── Captions via Web Speech API ─────────────────────────────────────────
   const speechRecognitionRef = useRef<any>(null);
@@ -1311,6 +1620,20 @@ const ViralCut = () => {
             ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />{autoCutProgress}%</>
             : <><Scissors className="h-3.5 w-3.5" />Corte Auto</>}
         </Button>
+        <Button
+          size="sm"
+          variant={cutMode ? "default" : "ghost"}
+          className={cn(
+            "h-8 text-xs gap-1.5 px-2.5",
+            cutMode && "bg-destructive text-destructive-foreground hover:bg-destructive/80"
+          )}
+          onClick={() => setCutMode(m => !m)}
+          disabled={!videoSrc}
+          title="Modo corte manual: clique em um clipe na timeline para cortá-lo"
+        >
+          <Scissors className="h-3.5 w-3.5" />
+          {cutMode ? "Cortando..." : "Cortar"}
+        </Button>
         <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("captions")}>
           <Sparkles className="h-3.5 w-3.5" /> Legenda
         </Button>
@@ -1367,7 +1690,8 @@ const ViralCut = () => {
                   {/* Label offset */}
                   <div className="w-32 shrink-0 border-r border-border/30" />
                   <div className="relative flex-1">
-                    {Array.from({ length: Math.ceil(displayDuration) + 1 }).map((_, i) => (
+                    {/* Ticks based on real duration for the video track */}
+                    {Array.from({ length: Math.ceil((duration || displayDuration)) + 1 }).map((_, i) => (
                       <div
                         key={i}
                         className="absolute top-0 bottom-0 border-l border-border/20 flex items-end pb-0.5"
@@ -1434,18 +1758,31 @@ const ViralCut = () => {
                       style={{ left: 128 + displayTime * pxPerSec }}
                     />
                   )}
-                  {layers.map(layer => (
-                    <TimelineLane
-                      key={layer.id}
-                      layer={layer}
-                      duration={displayDuration}
-                      scale={timelineScale}
-                      currentTime={displayTime}
-                      onToggleVisible={toggleLayerVisible}
-                      onDelete={deleteLayer}
-                      onSeek={seekVirtual}
-                    />
-                  ))}
+                  {layers.map(layer => {
+                    const isVideoTrack = layer.id === "main-video";
+                    const segs = isVideoTrack && cutSegments.length > 0 ? cutSegments : undefined;
+                    // For video track, use real duration as the track width base
+                    const trackDur = isVideoTrack ? (duration || displayDuration) : displayDuration;
+                    return (
+                      <TimelineLane
+                        key={layer.id}
+                        layer={layer}
+                        segments={segs}
+                        duration={trackDur}
+                        scale={timelineScale}
+                        currentTime={displayTime}
+                        isVideoTrack={isVideoTrack}
+                        cutMode={cutMode}
+                        onToggleVisible={toggleLayerVisible}
+                        onDelete={deleteLayer}
+                        onSeek={seekVirtual}
+                        onSegmentDragEnd={handleSegmentDragEnd}
+                        onSegmentResizeEnd={handleSegmentResizeEnd}
+                        onSegmentDelete={handleSegmentDelete}
+                        onManualCut={handleManualCut}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1453,10 +1790,17 @@ const ViralCut = () => {
 
           {/* Zoom hint */}
           <div className="px-3 py-1 border-t border-border/20 shrink-0 flex items-center gap-3">
-            <span className="text-[8px] text-muted-foreground/50">Ctrl+scroll ou pinça para zoom • Arraste ▲ para navegar</span>
+            {cutMode ? (
+              <span className="text-[9px] text-destructive font-semibold flex items-center gap-1">
+                <Scissors className="h-3 w-3" />
+                Modo corte ativo — clique sobre um clipe para cortá-lo
+              </span>
+            ) : (
+              <span className="text-[8px] text-muted-foreground/50">Ctrl+scroll ou pinça para zoom • Arraste ▲ para navegar • Long-press para mover clipe</span>
+            )}
             {cutSegments.length > 0 && (
               <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5 ml-auto">
-                {cutSegments.length} cortes • {formatTime(displayDuration)}
+                {cutSegments.length} clipes • {formatTime(displayDuration)}
               </span>
             )}
           </div>
