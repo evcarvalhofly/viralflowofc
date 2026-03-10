@@ -13,9 +13,6 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-// Vite ?url imports so bundler resolves and serves the WASM assets correctly
-import ffmpegCoreJsURL from "@ffmpeg/core/dist/umd/ffmpeg-core.js?url";
-import ffmpegCoreWasmURL from "@ffmpeg/core/dist/umd/ffmpeg-core.wasm?url";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1327,17 +1324,23 @@ const ViralCut = () => {
   const loadFFmpeg = useCallback(async () => {
     if (ffmpegRef.current && ffmpegLoaded) return ffmpegRef.current;
     const ff = new FFmpeg();
+
+    // jsdelivr CDN — version pinned, files have no CORP restriction issues
+    // toBlobURL fetches the file and returns a same-origin blob: URL so the
+    // FFmpeg worker can importScripts() it without COEP problems.
+    const base = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
+
     try {
-      // Use Vite-resolved URLs (from ?url imports) converted to blob URLs
-      // so they satisfy COEP regardless of the serving headers
-      await ff.load({
-        coreURL: await toBlobURL(ffmpegCoreJsURL, "text/javascript"),
-        wasmURL: await toBlobURL(ffmpegCoreWasmURL, "application/wasm"),
-      });
+      const [coreURL, wasmURL] = await Promise.all([
+        toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
+        toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
+      ]);
+      await ff.load({ coreURL, wasmURL });
     } catch (e) {
       console.error("FFmpeg load failed:", e);
       throw new Error("Não foi possível carregar o FFmpeg. Verifique sua conexão e tente novamente.");
     }
+
     ffmpegRef.current = ff;
     setFfmpegLoaded(true);
     return ff;
