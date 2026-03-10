@@ -963,7 +963,6 @@ const ViralCut = () => {
     if (!duration || !sourceMedia) return;
     pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
 
-    // Find which clip contains this timeline position
     const idx = timelineClips.findIndex(
       c => c.kind === "video" && atTimelineTime > c.timelineStart && atTimelineTime < c.timelineEnd
     );
@@ -973,31 +972,14 @@ const ViralCut = () => {
     const ratio = (atTimelineTime - clip.timelineStart) / (clip.timelineEnd - clip.timelineStart);
     const sourceAtCut = clip.sourceStart + ratio * (clip.sourceEnd - clip.sourceStart);
 
-    const leftClip: TimelineClip = {
-      ...clip,
-      id: `clip-${Date.now()}-a`,
-      sourceEnd: sourceAtCut,
-      timelineEnd: atTimelineTime,
-    };
-    const rightClip: TimelineClip = {
-      ...clip,
-      id: `clip-${Date.now()}-b`,
-      sourceStart: sourceAtCut,
-      timelineStart: atTimelineTime,
-      color: clipColor(idx + 1),
-    };
+    const leftClip: TimelineClip = { ...clip, id: `clip-${Date.now()}-a`, sourceEnd: sourceAtCut, timelineEnd: atTimelineTime };
+    const rightClip: TimelineClip = { ...clip, id: `clip-${Date.now()}-b`, sourceStart: sourceAtCut, timelineStart: atTimelineTime, color: clipColor(idx + 1) };
 
-    const newClips = [
-      ...timelineClips.slice(0, idx),
-      leftClip,
-      rightClip,
-      ...timelineClips.slice(idx + 1),
-    ];
+    const newClips = [...timelineClips.slice(0, idx), leftClip, rightClip, ...timelineClips.slice(idx + 1)];
     setTimelineClips(newClips);
+    timelineClipsRef.current = newClips;
 
-    const total = newClips
-      .filter(c => c.kind === "video")
-      .reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
+    const total = newClips.filter(c => c.kind === "video").reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
     setVirtualDuration(total);
     virtualDurationRef.current = total;
 
@@ -1007,25 +989,33 @@ const ViralCut = () => {
 
   // ─── Clip drag / resize / delete ─────────────────────────────────────────
   const handleClipDragEnd = useCallback((id: string, newTimelineStart: number) => {
-    setTimelineClips(prev => moveClip(prev, id, newTimelineStart));
+    setTimelineClips(prev => {
+      const next = moveClip(prev, id, newTimelineStart);
+      timelineClipsRef.current = next;
+      return next;
+    });
   }, []);
 
   const handleClipResizeEnd = useCallback((id: string, side: "left" | "right", newTime: number) => {
-    setTimelineClips(prev => resizeClip(prev, id, side, newTime));
+    setTimelineClips(prev => {
+      const next = resizeClip(prev, id, side, newTime);
+      timelineClipsRef.current = next;
+      return next;
+    });
   }, []);
 
   const handleClipDelete = useCallback((id: string) => {
     pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setTimelineClips(prev => {
       const next = deleteClip(prev, id);
-      if (next.filter(c => c.kind === "video").length === 0) {
+      timelineClipsRef.current = next;
+      const videoOnly = next.filter(c => c.kind === "video");
+      if (videoOnly.length === 0) {
         setVirtualDuration(0);
         virtualDurationRef.current = duration;
         return next;
       }
-      const total = next
-        .filter(c => c.kind === "video")
-        .reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
+      const total = videoOnly.reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
       setVirtualDuration(total);
       virtualDurationRef.current = total;
       return next;
