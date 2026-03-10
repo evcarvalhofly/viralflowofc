@@ -1428,8 +1428,7 @@ const ViralCut = () => {
                         <button
                           onClick={() => {
                             pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
-                            // Reset to single full-duration clip
-                            setTimelineClips([{
+                            const resetClip: TimelineClip = {
                               id: "clip-main-reset",
                               sourceId: "source-main",
                               kind: "video",
@@ -1441,9 +1440,14 @@ const ViralCut = () => {
                               visible: true,
                               locked: false,
                               color: "hsl(262,83%,58%)",
-                            }]);
-                            setVirtualDuration(0);
-                            setVirtualTime(0);
+                            };
+                            setTimelineClips([resetClip]);
+                            timelineClipsRef.current = [resetClip];
+                            setVirtualDuration(duration);
+                            virtualDurationRef.current = duration;
+                            setTimelineTime(0);
+                            setSourceTime(0);
+                            if (videoRef.current) videoRef.current.currentTime = 0;
                           }}
                           className="text-[9px] text-destructive hover:underline"
                         >Desfazer cortes</button>
