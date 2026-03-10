@@ -706,11 +706,11 @@ const ViralCut = () => {
     setTimelineTime(clips.length > 0 ? sourceToTimelineTime(src, clips) : src);
   }, []);
 
-  // ─── RAF update loop ──────────────────────────────────────────────────────
+  // ─── RAF update loop (UI sync only — no gap-skip here) ───────────────────
   const captionsRef = useRef(captions);
   useEffect(() => { captionsRef.current = captions; }, [captions]);
 
-  // Use a ref to track playing state inside RAF to avoid stale closures
+  // Stable ref so RAF never reads stale playing state
   const playingRef = useRef(false);
   useEffect(() => { playingRef.current = playing; }, [playing]);
 
@@ -718,17 +718,14 @@ const ViralCut = () => {
     const v = videoRef.current;
     if (!v || !playingRef.current) return;
 
-    const src = v.currentTime;            // ← read source time from video
+    const src = v.currentTime;
     const clips = timelineClipsRef.current;
-
-    const tl = clips.length > 0
-      ? sourceToTimelineTime(src, clips)
-      : src;
+    const tl = clips.length > 0 ? sourceToTimelineTime(src, clips) : src;
 
     setSourceTime(src);
     setTimelineTime(tl);
 
-    // Captions keyed on timelineTime
+    // Captions
     setActiveCaptions(prev => {
       const next = captionsRef.current.filter(c => tl >= c.start && tl < c.end);
       if (next.length !== prev.length || next.some((c, i) => c.id !== prev[i]?.id)) return next;
@@ -749,41 +746,6 @@ const ViralCut = () => {
       }
     }
 
-    // ── Gap-skip and end-of-timeline logic ───────────────────────────────
-    const videoClips = clips
-      .filter(c => c.kind === "video" && c.visible)
-      .sort((a, b) => a.sourceStart - b.sourceStart);
-
-    if (videoClips.length > 0) {
-      const timelineEnd = Math.max(...videoClips.map(c => c.timelineEnd));
-
-      // Stop at end of timeline
-      if (tl >= timelineEnd - 0.05) {
-        v.pause();
-        playingRef.current = false;
-        setPlaying(false);
-        rafRef.current = 0;
-        return; // stop the RAF
-      }
-
-      // Skip over gaps between clips (source time not inside any clip)
-      if (videoClips.length > 1 && !v.paused) {
-        const inClip = videoClips.some(c => src >= c.sourceStart - 0.05 && src < c.sourceEnd);
-        if (!inClip) {
-          const nextClip = videoClips.find(c => c.sourceStart > src);
-          if (nextClip) {
-            v.currentTime = nextClip.sourceStart; // jump to next clip source start
-          } else {
-            v.pause();
-            playingRef.current = false;
-            setPlaying(false);
-            rafRef.current = 0;
-            return;
-          }
-        }
-      }
-    }
-
     rafRef.current = requestAnimationFrame(updateLoop);
   }, [chromaEnabled, chromaColor, chromaTolerance, chromaSmoothing]);
 
@@ -795,6 +757,55 @@ const ViralCut = () => {
     }
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing, updateLoop]);
+
+  // ─── Gap-skip via timeupdate event (reliable, outside RAF) ───────────────
+  // Runs on the video element's timeupdate — fires ~4x/sec while playing.
+  // Detects when currentTime is outside all clips and jumps to next clip.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const handleTimeUpdate = () => {
+      const clips = timelineClipsRef.current;
+      const videoClips = clips
+        .filter(c => c.kind === "video" && c.visible)
+        .sort((a, b) => a.sourceStart - b.sourceStart);
+
+      if (videoClips.length === 0 || v.paused) return;
+
+      const src = v.currentTime;
+
+      // Check end of last clip
+      const lastClip = videoClips[videoClips.length - 1];
+      if (src >= lastClip.sourceEnd - 0.05) {
+        v.pause();
+        setPlaying(false);
+        playingRef.current = false;
+        const tl = sourceToTimelineTime(src, videoClips);
+        setTimelineTime(tl);
+        setSourceTime(src);
+        return;
+      }
+
+      // Check if inside any clip
+      const inClip = videoClips.some(c => src >= c.sourceStart && src < c.sourceEnd);
+      if (!inClip) {
+        // Find next clip and jump to its start
+        const nextClip = videoClips.find(c => c.sourceStart > src);
+        if (nextClip) {
+          v.currentTime = nextClip.sourceStart;
+        } else {
+          v.pause();
+          setPlaying(false);
+          playingRef.current = false;
+        }
+      }
+    };
+
+    v.addEventListener("timeupdate", handleTimeUpdate);
+    return () => v.removeEventListener("timeupdate", handleTimeUpdate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoSrc]);
 
   useEffect(() => {
     const v = videoRef.current;
