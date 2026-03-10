@@ -1934,12 +1934,25 @@ const ViralCut = () => {
               onMouseDown={e => {
                 e.preventDefault();
                 const bar = e.currentTarget.parentElement!;
+                // FIX 3: Only update visual state during drag, real seek on mouseUp
+                let pendingVt = displayTime;
                 const onMove = (ev: MouseEvent) => {
                   const rect = bar.getBoundingClientRect();
-                  const vt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
-                  seekVirtual(vt);
+                  pendingVt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
+                  const clips = timelineClipsRef.current;
+                  const src = clips.length > 0
+                    ? (timelineToSourceTime(pendingVt, clips) ?? clips[0].sourceStart)
+                    : pendingVt;
+                  setTimelineTime(pendingVt);
+                  setSourceTime(src);
+                  if (playingRef.current && videoRef.current) {
+                    videoRef.current.pause();
+                    setPlaying(false);
+                    playingRef.current = false;
+                  }
                 };
                 const onUp = () => {
+                  if (videoRef.current) videoRef.current.currentTime = pendingVt;
                   window.removeEventListener("mousemove", onMove);
                   window.removeEventListener("mouseup", onUp);
                 };
@@ -1948,12 +1961,25 @@ const ViralCut = () => {
               }}
               onTouchStart={e => {
                 const bar = e.currentTarget.parentElement!;
+                // FIX 3: Same logic for touch
+                let pendingVt = displayTime;
                 const onMove = (ev: TouchEvent) => {
                   const rect = bar.getBoundingClientRect();
-                  const vt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
-                  seekVirtual(vt);
+                  pendingVt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
+                  const clips = timelineClipsRef.current;
+                  const src = clips.length > 0
+                    ? (timelineToSourceTime(pendingVt, clips) ?? clips[0].sourceStart)
+                    : pendingVt;
+                  setTimelineTime(pendingVt);
+                  setSourceTime(src);
+                  if (playingRef.current && videoRef.current) {
+                    videoRef.current.pause();
+                    setPlaying(false);
+                    playingRef.current = false;
+                  }
                 };
                 const onEnd = () => {
+                  if (videoRef.current) videoRef.current.currentTime = pendingVt;
                   window.removeEventListener("touchmove", onMove);
                   window.removeEventListener("touchend", onEnd);
                 };
