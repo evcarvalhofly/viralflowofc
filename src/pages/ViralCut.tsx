@@ -210,7 +210,7 @@ const ViralCut = () => {
               <span className="hidden sm:inline text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
                 {fmtDuration(totalKeptDuration(state.keepSegments))} mantido
                 {savedTime > 0 && (
-                  <span className="text-green-400 ml-1">
+                  <span className="text-primary ml-1">
                     (−{fmtDuration(savedTime)})
                   </span>
                 )}
