@@ -472,42 +472,11 @@ const ViralCut = () => {
   };
 
   // ─── Captions via Web Speech API ─────────────────────────────────────────
-  const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptRaw, setTranscriptRaw] = useState("");
-
-  const handleGenerateCaptions = async () => {
-    const v = videoRef.current;
-    if (!v || !videoSrc) {
-      toast({ title: "Carregue um vídeo primeiro.", variant: "destructive" });
-      return;
-    }
-
-    // Se já temos palavras com timestamps (de transcrição anterior), regenera com novo modo
-    if (transcriptWords.length > 0) {
-      const blocks = splitCaptionsFromTranscript(transcriptWords, captionMode);
-      applyCaptures(blocks);
-      return;
-    }
-
-    // Transcrição via Web Speech API
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      toast({
-        title: "Transcrição não suportada",
-        description: "Seu navegador não suporta Web Speech API. Use Chrome ou Edge.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setCaptionLoading(true);
-    setIsTranscribing(true);
-    setTranscriptRaw("");
-    const words: Array<{ text: string; start: number; end: number }> = [];
-    let wordIndex = 0;
-
-    const recognition = new SpeechRecognition();
+...
+    const recognition = new SR();
     speechRecognitionRef.current = recognition;
     recognition.continuous = true;
     recognition.interimResults = true;
