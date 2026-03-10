@@ -321,12 +321,12 @@ const ViralCut = () => {
                     {
                       label: 'Removido',
                       value: fmtDuration(savedTime),
-                      color: 'text-red-400',
+                      color: 'text-destructive',
                     },
                     {
                       label: 'Final',
                       value: fmtDuration(totalKeptDuration(state.keepSegments)),
-                      color: 'text-green-400',
+                      color: 'text-primary',
                     },
                   ].map((item) => (
                     <div
