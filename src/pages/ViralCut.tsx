@@ -27,6 +27,8 @@ interface Layer {
   locked: boolean;
   color: string;
   content?: string;
+  // For video layers that are individual cut segments
+  segmentIndex?: number;
 }
 
 interface CaptionBlock {
@@ -60,6 +62,13 @@ const LAYER_COLORS: Record<LayerType, string> = {
   text: "hsl(160,70%,40%)",
   audio: "hsl(210,80%,50%)",
 };
+
+// ─── Clip segment colors for visual differentiation ──────────────────────────
+const CLIP_HUE_STEP = 37;
+function clipColor(index: number) {
+  const hue = (262 + index * CLIP_HUE_STEP) % 360;
+  return `hsl(${hue},70%,52%)`;
+}
 
 // ─── Silence Detection (Web Audio API) ────────────────────────────────────────
 
