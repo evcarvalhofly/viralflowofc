@@ -874,8 +874,9 @@ const ViralCut = () => {
   }, [cutSegments, layers, captions, duration, virtualDuration, pushHistory]);
 
 
-  // ─── Captions via Web Speech API ─────────────────────────────────────────
+  // ─── Captions via Web Speech API (áudio do vídeo) ────────────────────────
   const speechRecognitionRef = useRef<any>(null);
+  const audioCtxCaptionRef = useRef<AudioContext | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptRaw, setTranscriptRaw] = useState("");
 
@@ -886,6 +887,7 @@ const ViralCut = () => {
       return;
     }
 
+    // If we already have transcribed words, just re-split them
     if (transcriptWords.length > 0) {
       pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
       const blocks = splitCaptionsFromTranscript(transcriptWords, captionMode);
@@ -909,64 +911,99 @@ const ViralCut = () => {
     setTranscriptRaw("");
     const words: Array<{ text: string; start: number; end: number }> = [];
 
-    const recognition = new SR();
-    speechRecognitionRef.current = recognition;
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "pt-BR";
-    recognition.maxAlternatives = 1;
+    try {
+      // ── Route video audio → MediaStream → SpeechRecognition ──────────────
+      // Each call creates a fresh AudioContext to avoid "already connected" errors
+      if (audioCtxCaptionRef.current) {
+        audioCtxCaptionRef.current.close();
+      }
+      const audioCtx = new AudioContext();
+      audioCtxCaptionRef.current = audioCtx;
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          const transcript = result[0].transcript.trim();
-          const parts = transcript.split(/\s+/).filter(Boolean);
-          const now = v.currentTime;
-          const blockDur = parts.length > 0 ? 0.35 : 0;
-          parts.forEach((word, j) => {
-            const wStart = now - blockDur * (parts.length - j);
-            const wEnd = wStart + 0.3;
-            words.push({ text: word.toUpperCase(), start: Math.max(0, wStart), end: wEnd });
-          });
-          setTranscriptRaw(prev => prev + " " + transcript);
+      const source = audioCtx.createMediaElementSource(v);
+      const dest = audioCtx.createMediaStreamDestination();
+
+      // Keep audio audible while transcribing
+      source.connect(audioCtx.destination);
+      source.connect(dest);
+
+      const recognition = new SR();
+      speechRecognitionRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "pt-BR";
+      recognition.maxAlternatives = 1;
+
+      // Feed the video's audio stream to recognition
+      (recognition as any).stream = dest.stream;
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            const transcript = result[0].transcript.trim();
+            const parts = transcript.split(/\s+/).filter(Boolean);
+            const now = v.currentTime;
+            const blockDur = parts.length > 0 ? 0.35 : 0;
+            parts.forEach((word, j) => {
+              const wStart = now - blockDur * (parts.length - j);
+              const wEnd = wStart + 0.3;
+              words.push({ text: word.toUpperCase(), start: Math.max(0, wStart), end: wEnd });
+            });
+            setTranscriptRaw(prev => prev + " " + transcript);
+          }
         }
-      }
-    };
+      };
 
-    recognition.onerror = () => {
-      setIsTranscribing(false);
+      recognition.onerror = (e: any) => {
+        console.error("SpeechRecognition error", e);
+        setIsTranscribing(false);
+        setCaptionLoading(false);
+        audioCtx.close();
+      };
+
+      recognition.onend = () => {
+        setIsTranscribing(false);
+        setCaptionLoading(false);
+        audioCtx.close();
+        if (words.length > 0) {
+          setTranscriptWords(words);
+          const blocks = splitCaptionsFromTranscript(words, captionMode);
+          applyCaptures(blocks);
+          toast({ title: `🎬 Transcrição concluída`, description: `${blocks.length} legendas geradas a partir do vídeo` });
+        } else {
+          toast({ title: "Nenhuma fala detectada", description: "Verifique se o vídeo possui áudio com fala.", variant: "destructive" });
+        }
+      };
+
+      // Start recognition then play video from the beginning
+      recognition.start();
+      v.currentTime = 0;
+      setVirtualTime(0);
+      await v.play();
+      setPlaying(true);
+
+      const onEnded = () => {
+        recognition.stop();
+        v.removeEventListener("ended", onEnded);
+      };
+      v.addEventListener("ended", onEnded);
+
+    } catch (err) {
+      console.error("Caption error:", err);
       setCaptionLoading(false);
-    };
-
-    recognition.onend = () => {
       setIsTranscribing(false);
-      setCaptionLoading(false);
-      if (words.length > 0) {
-        setTranscriptWords(words);
-        const blocks = splitCaptionsFromTranscript(words, captionMode);
-        applyCaptures(blocks);
-        toast({ title: `🎙️ Transcrição concluída`, description: `${blocks.length} legendas geradas` });
-      } else {
-        toast({ title: "Nenhuma fala detectada", description: "Verifique o áudio do vídeo.", variant: "destructive" });
-      }
-    };
-
-    recognition.start();
-    v.currentTime = 0;
-    setVirtualTime(0);
-    await v.play();
-    setPlaying(true);
-
-    const onEnded = () => {
-      recognition.stop();
-      v.removeEventListener("ended", onEnded);
-    };
-    v.addEventListener("ended", onEnded);
+      toast({
+        title: "Erro ao acessar o áudio do vídeo",
+        description: "Tente recarregar o vídeo e tente novamente.",
+        variant: "destructive"
+      });
+    }
   };
 
   const stopTranscription = () => {
     speechRecognitionRef.current?.stop();
+    audioCtxCaptionRef.current?.close();
     videoRef.current?.pause();
     setPlaying(false);
     setIsTranscribing(false);
