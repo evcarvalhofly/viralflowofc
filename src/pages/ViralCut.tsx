@@ -723,7 +723,13 @@ const ViralCut = () => {
     const tl = clips.length > 0 ? sourceToTimelineTime(src, clips) : src;
 
     setSourceTime(src);
-    setTimelineTime(tl);
+    // FIX 4: Prevent playhead from jumping back in time during gap transitions
+    setTimelineTime(prev => {
+      if (!playingRef.current || tl > prev || Math.abs(tl - prev) > 0.5) {
+        return tl;
+      }
+      return prev;
+    });
 
     // Captions
     setActiveCaptions(prev => {
