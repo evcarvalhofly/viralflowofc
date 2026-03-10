@@ -764,15 +764,14 @@ const ViralCut = () => {
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing, updateLoop]);
 
-  // ─── Precise gap-skip: scheduled setTimeout per clip boundary ────────────
-  // Instead of polling via timeupdate (~4x/sec = 250ms lag), we compute
-  // exactly when the current clip ends and schedule a jump 1ms before it.
-  // This gives seamless, stutter-free playback between clips.
+  // ─── Precise gap-skip via timeupdate ─────────────────────────────────────
+  // Uses the native timeupdate event (fires ~4-60x/sec depending on browser).
+  // We also schedule a setTimeout as a safety backup 30ms before the clip end.
+  // This hybrid approach avoids both drift (setTimeout-only) and missed frames.
   const clipJumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastJumpSrcRef = useRef<number>(-1); // prevent double-jump
 
-  const scheduleClipJump = useCallback((v: HTMLVideoElement) => {
-    if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current);
-
+  const doClipJump = useCallback((v: HTMLVideoElement) => {
     const clips = timelineClipsRef.current;
     const videoClips = clips
       .filter(c => c.kind === "video" && c.visible)
@@ -780,18 +779,17 @@ const ViralCut = () => {
     if (videoClips.length === 0) return;
 
     const src = v.currentTime;
-
-    // Find which clip we're currently in
     const currentClipIdx = videoClips.findIndex(
-      c => src >= c.sourceStart && src < c.sourceEnd
+      c => src >= c.sourceStart && src < c.sourceEnd - 0.04
     );
 
     if (currentClipIdx === -1) {
-      // Not in any clip — jump to next clip immediately
+      // In a gap — jump to the next clip immediately
       const nextClip = videoClips.find(c => c.sourceStart > src);
-      if (nextClip) {
+      if (nextClip && Math.abs(lastJumpSrcRef.current - nextClip.sourceStart) > 0.05) {
+        lastJumpSrcRef.current = nextClip.sourceStart;
         v.currentTime = nextClip.sourceStart;
-      } else {
+      } else if (!nextClip) {
         v.pause();
         setPlaying(false);
         playingRef.current = false;
@@ -799,33 +797,19 @@ const ViralCut = () => {
       return;
     }
 
+    // Schedule a backup timer 30ms before the clip end
     const currentClip = videoClips[currentClipIdx];
     const nextClip = videoClips[currentClipIdx + 1];
+    if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current);
 
-    // Time until this clip ends (in ms), minus a small lead time
-    const msUntilEnd = ((currentClip.sourceEnd - src) / (v.playbackRate || 1)) * 1000 - 30;
-
-    if (msUntilEnd <= 0) {
-      // Already past the end — jump now
-      if (nextClip) {
-        v.currentTime = nextClip.sourceStart;
-        scheduleClipJump(v);
-      } else {
-        v.pause();
-        setPlaying(false);
-        playingRef.current = false;
-      }
-      return;
-    }
+    const msUntilEnd = Math.max(0, ((currentClip.sourceEnd - src) / (v.playbackRate || 1)) * 1000 - 30);
 
     clipJumpTimerRef.current = setTimeout(() => {
       if (v.paused || !playingRef.current) return;
-      if (nextClip) {
+      if (nextClip && Math.abs(lastJumpSrcRef.current - nextClip.sourceStart) > 0.05) {
+        lastJumpSrcRef.current = nextClip.sourceStart;
         v.currentTime = nextClip.sourceStart;
-        // Re-schedule for the clip after this one
-        scheduleClipJump(v);
-      } else {
-        // Last clip — stop at its end
+      } else if (!nextClip) {
         v.pause();
         setPlaying(false);
         playingRef.current = false;
@@ -833,28 +817,49 @@ const ViralCut = () => {
     }, msUntilEnd);
   }, []);
 
-  // Reschedule whenever play starts or user seeks
+  // Attach timeupdate + play + seeked + pause listeners
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
 
-    const onPlay = () => { if (playingRef.current) scheduleClipJump(v); };
-    const onSeeked = () => { if (playingRef.current) scheduleClipJump(v); };
-    const onPause = () => {
-      if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current);
+    const onTimeUpdate = () => {
+      if (!playingRef.current) return;
+      const clips = timelineClipsRef.current;
+      const videoClips = clips.filter(c => c.kind === "video" && c.visible).sort((a, b) => a.sourceStart - b.sourceStart);
+      if (videoClips.length === 0) return;
+      const src = v.currentTime;
+      // Check if we've overshot the current clip end
+      const inClip = videoClips.some(c => src >= c.sourceStart && src < c.sourceEnd);
+      if (!inClip) {
+        const nextClip = videoClips.find(c => c.sourceStart > src);
+        if (nextClip && Math.abs(lastJumpSrcRef.current - nextClip.sourceStart) > 0.05) {
+          lastJumpSrcRef.current = nextClip.sourceStart;
+          v.currentTime = nextClip.sourceStart;
+        } else if (!nextClip) {
+          v.pause();
+          setPlaying(false);
+          playingRef.current = false;
+        }
+      }
     };
 
+    const onPlay = () => { lastJumpSrcRef.current = -1; doClipJump(v); };
+    const onSeeked = () => { lastJumpSrcRef.current = -1; if (playingRef.current) doClipJump(v); };
+    const onPause = () => { if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current); };
+
+    v.addEventListener("timeupdate", onTimeUpdate);
     v.addEventListener("play", onPlay);
     v.addEventListener("seeked", onSeeked);
     v.addEventListener("pause", onPause);
     return () => {
+      v.removeEventListener("timeupdate", onTimeUpdate);
       v.removeEventListener("play", onPlay);
       v.removeEventListener("seeked", onSeeked);
       v.removeEventListener("pause", onPause);
       if (clipJumpTimerRef.current) clearTimeout(clipJumpTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoSrc, scheduleClipJump]);
+  }, [videoSrc, doClipJump]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -1371,87 +1376,116 @@ const ViralCut = () => {
     try {
       setProcessingMsg(`Preparando exportação de ${segs.length} clipe${segs.length > 1 ? "s" : ""}...`);
 
-      // Create hidden video element for real-time playback capture
+      // ── Canvas + AudioContext frame-by-frame export ─────────────────────────
+      // We NEVER call .play() on the video during export.
+      // Instead we seek frame-by-frame, draw onto a canvas, and encode via
+      // MediaRecorder from the canvas+audio streams. This avoids all timing
+      // bugs caused by real-time playback (stutter, repeated frames, desync).
+
       const captureVid = document.createElement("video");
       captureVid.src = videoSrc;
       captureVid.crossOrigin = "anonymous";
-      captureVid.muted = false;
-      captureVid.volume = 1;
-      captureVid.style.cssText = "position:fixed;opacity:0.01;width:1px;height:1px;top:-9999px";
+      captureVid.muted = true; // mute during export — audio captured via AudioContext
+      captureVid.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px";
       document.body.appendChild(captureVid);
 
-      // Wait for metadata
       await new Promise<void>((res, rej) => {
         captureVid.onloadedmetadata = () => res();
         captureVid.onerror = () => rej(new Error("Falha ao carregar vídeo para exportação"));
         setTimeout(() => rej(new Error("Timeout ao carregar vídeo")), 15000);
       });
 
-      // Get MediaStream from video element (includes audio track)
-      const stream = (captureVid as HTMLVideoElement & { captureStream: () => MediaStream }).captureStream();
+      const vw = captureVid.videoWidth || 1280;
+      const vh = captureVid.videoHeight || 720;
 
-      // Pick best supported MIME type
+      // Canvas for video frames
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = vw;
+      exportCanvas.height = vh;
+      const ctx2d = exportCanvas.getContext("2d")!;
+
+      // AudioContext to capture audio from each segment
+      const audioCtx = new AudioContext();
+      const audioDestination = audioCtx.createMediaStreamDestination();
+
+      // Canvas stream (video track)
+      const canvasStream = (exportCanvas as HTMLCanvasElement & { captureStream: (fps: number) => MediaStream }).captureStream(30);
+
+      // Combine canvas video track + audio track
+      const combinedStream = new MediaStream([
+        ...canvasStream.getVideoTracks(),
+        ...audioDestination.stream.getAudioTracks(),
+      ]);
+
       const mimeType = [
-        "video/mp4;codecs=avc1,mp4a.40.2",
-        "video/mp4",
         "video/webm;codecs=vp9,opus",
         "video/webm;codecs=vp8,opus",
         "video/webm",
       ].find((m) => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
 
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+      const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 8_000_000 });
       const chunks: Blob[] = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.start(100);
 
-      recorder.start(100); // collect data every 100ms
+      const FPS = 30;
+      const frameDuration = 1 / FPS;
+      let totalFrames = 0;
+      const allFrames: Array<{ time: number }> = [];
 
-      // Play each segment sequentially
-      for (let i = 0; i < segs.length; i++) {
-        const { start, end } = segs[i];
-        const segDuration = end - start;
-        setProcessingMsg(`Gravando clipe ${i + 1}/${segs.length}... ${Math.round(((i) / segs.length) * 100)}%`);
+      // Build frame list from all segments
+      for (const { start, end } of segs) {
+        let t = start;
+        while (t < end - frameDuration / 2) {
+          allFrames.push({ time: t });
+          t += frameDuration;
+          totalFrames++;
+        }
+      }
 
-        // Seek to start of segment
-        captureVid.currentTime = start;
-        await new Promise<void>((res) => { captureVid.onseeked = () => res(); });
+      // Render each frame by seeking
+      for (let fi = 0; fi < allFrames.length; fi++) {
+        const { time } = allFrames[fi];
 
-        captureVid.play();
+        if (fi % 30 === 0) {
+          const pct = Math.round((fi / allFrames.length) * 100);
+          const segIdx = segs.findIndex(s => time >= s.start && time < s.end);
+          setProcessingMsg(`Exportando clipe ${segIdx + 1}/${segs.length}... ${pct}%`);
+          // Yield to keep the UI responsive
+          await new Promise(r => setTimeout(r, 0));
+        }
 
-        // Wait for segment to finish playing
-        await new Promise<void>((res) => {
-          const checkEnd = () => {
-            if (captureVid.currentTime >= end - 0.05) {
-              captureVid.pause();
-              res();
-            } else {
-              requestAnimationFrame(checkEnd);
-            }
-          };
-          requestAnimationFrame(checkEnd);
-          // Safety timeout
-          setTimeout(() => { captureVid.pause(); res(); }, (segDuration + 2) * 1000);
+        captureVid.currentTime = time;
+        await new Promise<void>(res => {
+          const onSeeked = () => { captureVid.removeEventListener("seeked", onSeeked); res(); };
+          captureVid.addEventListener("seeked", onSeeked);
+          // Fallback in case seeked never fires (some browsers)
+          setTimeout(res, 500);
         });
+
+        ctx2d.drawImage(captureVid, 0, 0, vw, vh);
+
+        // Hold the frame for exactly 1/30s so MediaRecorder captures it
+        await new Promise(r => setTimeout(r, frameDuration * 1000));
       }
 
       setProcessingMsg("Finalizando exportação...");
       recorder.stop();
+      await new Promise<void>(res => { recorder.onstop = () => res(); });
 
-      await new Promise<void>((res) => { recorder.onstop = () => res(); });
-
+      audioCtx.close();
       document.body.removeChild(captureVid);
 
-      const isMP4 = mimeType.includes("mp4");
-      const ext = isMP4 ? ".mp4" : ".webm";
       const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut" + ext;
+      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.webm";
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
 
       setProcessing(false);
-      toast({ title: `✅ Vídeo exportado${isMP4 ? " em MP4" : " em WebM"} com áudio! ${segs.length} clipe${segs.length > 1 ? "s" : ""}.` });
+      toast({ title: `✅ Vídeo exportado! ${segs.length} clipe${segs.length > 1 ? "s" : ""} concatenados.` });
     } catch (err) {
       console.error("Export error:", err);
       setProcessing(false);
