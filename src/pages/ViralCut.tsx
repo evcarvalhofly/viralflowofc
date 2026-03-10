@@ -491,8 +491,8 @@ const ViralCut = () => {
     }
 
     // Transcrição via Web Speech API
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
       toast({
         title: "Transcrição não suportada",
         description: "Seu navegador não suporta Web Speech API. Use Chrome ou Edge.",
