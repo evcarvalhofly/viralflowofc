@@ -866,6 +866,7 @@ const ViralCut = () => {
   }, [virtualDuration, duration]);
 
   // ─ Playhead drag (timeline time) ─────────────────────────────────────────
+  // FIX 1: Only update visual state during drag; do the real seek on mouseUp
   const handleTimelineMouseMove = useCallback((e: MouseEvent) => {
     if (!playheadDragging.current || !timelineRulerRef.current) return;
     const rect = timelineRulerRef.current.getBoundingClientRect();
@@ -873,13 +874,35 @@ const ViralCut = () => {
     const pxPerSec = timelineScale * 80;
     const displayDur = virtualDurationRef.current > 0 ? virtualDurationRef.current : 0;
     if (displayDur <= 0 || pxPerSec <= 0) return;
+
     const tl = Math.max(0, Math.min(displayDur, relX / pxPerSec));
-    seekTimeline(tl);                    // ← always timeline seek
-  }, [timelineScale, seekTimeline]);
+
+    // Only update visual state during drag to avoid lag
+    const clips = timelineClipsRef.current;
+    const src = clips.length > 0
+      ? (timelineToSourceTime(tl, clips) ?? clips[0].sourceStart)
+      : tl;
+
+    setTimelineTime(tl);
+    setSourceTime(src);
+
+    // Pause video during drag if playing
+    if (playingRef.current && videoRef.current) {
+      videoRef.current.pause();
+      setPlaying(false);
+      playingRef.current = false;
+    }
+  }, [timelineScale]);
 
   const handleTimelineMouseUp = useCallback(() => {
+    if (playheadDragging.current) {
+      // FIX 1: Perform the real seek only on mouse release
+      if (videoRef.current) {
+        videoRef.current.currentTime = sourceTime;
+      }
+    }
     playheadDragging.current = false;
-  }, []);
+  }, [sourceTime]);
 
   useEffect(() => {
     window.addEventListener("mousemove", handleTimelineMouseMove);
