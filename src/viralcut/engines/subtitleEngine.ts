@@ -5,7 +5,7 @@ export interface TranscriberWord {
   timestamp: [number, number];
 }
 
-// ─── SRT helpers ────────────────────────────────────────────────────────────
+// ─── SRT helpers ─────────────────────────────────────────────────────────────
 
 function formatSrtTime(sec: number): string {
   const ms = Math.floor((sec % 1) * 1000);
@@ -30,15 +30,11 @@ export function toSrt(subs: SubtitleItem[]): string {
     .join('\n');
 }
 
-// ─── Block builder ───────────────────────────────────────────────────────────
+// ─── Block builder ────────────────────────────────────────────────────────────
 
-/**
- * Groups timed words into subtitle blocks of N words each.
- * Each word must have a valid [start, end] pair.
- */
 export function buildSubtitleBlocks(
   words: TranscriberWord[],
-  wordsPerBlock = 3
+  wordsPerBlock = 4
 ): SubtitleItem[] {
   const blocks: SubtitleItem[] = [];
 
@@ -62,70 +58,24 @@ export function buildSubtitleBlocks(
   return blocks;
 }
 
-// ─── Audio decoder ───────────────────────────────────────────────────────────
+// ─── Audio decoder ────────────────────────────────────────────────────────────
 
-/**
- * Decodes a video/audio File to mono Float32Array at 16 kHz for Whisper.
- */
-async function fileToAudioData(file: File): Promise<Float32Array> {
+export async function fileToAudioData(file: File): Promise<Float32Array> {
   const arrayBuffer = await file.arrayBuffer();
   const audioCtx = new AudioContext({ sampleRate: 16000 });
   try {
     const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-    // Mix down to mono by taking channel 0
     return decoded.getChannelData(0);
   } finally {
     audioCtx.close();
   }
 }
 
-// ─── Pipeline singleton ──────────────────────────────────────────────────────
+// ─── Chunk normalizer ─────────────────────────────────────────────────────────
 
-let _pipeline: any = null;
-
-async function getOrCreatePipeline(onProgress?: (label: string) => void) {
-  if (_pipeline) {
-    console.log('[subtitleEngine] Reusing cached pipeline');
-    return _pipeline;
-  }
-
-  const { pipeline, env } = await import('@huggingface/transformers');
-  (env as any).allowRemoteModels = true;
-  (env as any).useBrowserCache = true;
-  (env as any).allowLocalModels = false;
-
-  onProgress?.('Carregando modelo Whisper…');
-  console.log('[subtitleEngine] Creating Whisper pipeline…');
-
-  _pipeline = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', {
-    progress_callback: (info: any) => {
-      if (info?.status === 'downloading' || info?.status === 'progress') {
-        const pct = info.progress != null ? Math.round(info.progress) : 0;
-        onProgress?.(`Baixando modelo: ${pct}%`);
-      } else if (info?.status === 'initiate') {
-        onProgress?.('Inicializando modelo…');
-      } else if (info?.status === 'done') {
-        onProgress?.('Modelo pronto!');
-      } else if (info?.status === 'ready') {
-        onProgress?.('Modelo carregado. Transcrevendo…');
-      }
-    },
-  });
-
-  console.log('[subtitleEngine] Pipeline ready');
-  return _pipeline;
-}
-
-// ─── Chunk normalizer ────────────────────────────────────────────────────────
-
-/**
- * Given Whisper sentence-level chunks (each with a [start, end] timestamp and text),
- * distributes words evenly within that chunk's time range.
- *
- * This is the RELIABLE path: whisper-tiny in the browser almost always returns
- * sentence-level chunks even when return_timestamps:'word' is requested.
- */
-function chunksToTimedWords(chunks: Array<{ text: string; timestamp: [number, number | null] }>): TranscriberWord[] {
+export function chunksToTimedWords(
+  chunks: Array<{ text: string; timestamp: [number, number | null] }>
+): TranscriberWord[] {
   const words: TranscriberWord[] = [];
 
   for (const chunk of chunks) {
@@ -138,7 +88,6 @@ function chunksToTimedWords(chunks: Array<{ text: string; timestamp: [number, nu
     const chunkWords = chunk.text.trim().split(/\s+/).filter(Boolean);
     if (!chunkWords.length) continue;
 
-    // Estimate end: use model's value if valid, else chunkStart + 0.4s per word
     const chunkEnd =
       typeof rawEnd === 'number' && rawEnd > chunkStart
         ? rawEnd
@@ -160,10 +109,7 @@ function chunksToTimedWords(chunks: Array<{ text: string; timestamp: [number, nu
   return words;
 }
 
-/**
- * Fallback: no chunks at all. Spread all words evenly across the full audio duration.
- */
-function textToTimedWords(text: string, audioDuration: number): TranscriberWord[] {
+export function textToTimedWords(text: string, audioDuration: number): TranscriberWord[] {
   const allWords = text.trim().split(/\s+/).filter(Boolean);
   if (!allWords.length) return [];
 
@@ -176,10 +122,10 @@ function textToTimedWords(text: string, audioDuration: number): TranscriberWord[
   }));
 }
 
-// ─── Main export ─────────────────────────────────────────────────────────────
+// ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
- * Transcribes a video/audio File using Whisper-tiny in-browser.
+ * Transcribes a video/audio File using Whisper-tiny in a Web Worker.
  * Returns subtitle blocks ready for the overlay.
  */
 export async function transcribeFile(
@@ -187,8 +133,6 @@ export async function transcribeFile(
   onProgress?: (label: string) => void
 ): Promise<SubtitleItem[]> {
   console.log('[subtitleEngine] Start:', file.name, file.size);
-
-  const transcriber = await getOrCreatePipeline(onProgress);
 
   onProgress?.('Decodificando áudio…');
 
@@ -201,47 +145,20 @@ export async function transcribeFile(
     throw new Error('Não foi possível decodificar o áudio. Verifique se o arquivo tem áudio.');
   }
 
-  onProgress?.('Transcrevendo com Whisper…');
+  const audioDuration = audioData.length / 16000;
 
-  // Smaller chunks = more precise per-segment timestamps from whisper-tiny
-  let result: any;
-  try {
-    result = await transcriber(audioData, {
-      return_timestamps: true,
-      chunk_length_s: 15,     // smaller window → tighter timestamps
-      stride_length_s: 3,
-      language: 'portuguese',
-      task: 'transcribe',
-    });
-  } catch (err) {
-    console.warn('[subtitleEngine] First attempt failed, retrying without language…', err);
-    onProgress?.('Retentando transcrição…');
-    try {
-      result = await transcriber(audioData, {
-        return_timestamps: true,
-        chunk_length_s: 15,
-        stride_length_s: 3,
-      });
-    } catch (err2) {
-      console.error('[subtitleEngine] Retry failed:', err2);
-      throw new Error('Erro na transcrição. Verifique se o vídeo tem áudio audível.');
-    }
-  }
+  // Run Whisper in a Web Worker to avoid blocking the UI
+  const raw = await runWorker(audioData, 'portuguese', onProgress);
 
-  // Normalize result (pipeline may wrap in array)
-  const raw = Array.isArray(result) ? result[0] : result;
   console.log('[subtitleEngine] Raw text:', String(raw?.text ?? '').slice(0, 300));
   console.log('[subtitleEngine] Chunks:', raw?.chunks?.length ?? 0, raw?.chunks?.[0]);
 
-  const audioDuration = audioData.length / 16000;
   let words: TranscriberWord[] = [];
 
   if (raw?.chunks && Array.isArray(raw.chunks) && raw.chunks.length > 0) {
-    // Primary path: sentence-level chunks with timestamps
     words = chunksToTimedWords(raw.chunks);
     console.log('[subtitleEngine] Words from chunks:', words.length);
   } else if (typeof raw?.text === 'string' && raw.text.trim()) {
-    // Fallback: no chunks, evenly distribute across full audio
     console.warn('[subtitleEngine] No chunks — distributing words evenly');
     words = textToTimedWords(raw.text, audioDuration);
     console.log('[subtitleEngine] Words from text split:', words.length);
@@ -261,6 +178,43 @@ export async function transcribeFile(
   return blocks;
 }
 
+// ─── Worker runner ────────────────────────────────────────────────────────────
+
+function runWorker(
+  audioData: Float32Array,
+  language: string,
+  onProgress?: (label: string) => void
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    // Vite handles ?worker with type module correctly
+    const worker = new Worker(
+      new URL('./workers/transcriber.worker.ts', import.meta.url),
+      { type: 'module' }
+    );
+
+    worker.onmessage = (e: MessageEvent) => {
+      const { type, label, raw, message } = e.data;
+      if (type === 'progress') {
+        onProgress?.(label);
+      } else if (type === 'result') {
+        worker.terminate();
+        resolve(raw);
+      } else if (type === 'error') {
+        worker.terminate();
+        reject(new Error(message));
+      }
+    };
+
+    worker.onerror = (err) => {
+      worker.terminate();
+      reject(new Error(err.message));
+    };
+
+    // Transfer the buffer to avoid copying (faster)
+    worker.postMessage({ audioData, language }, [audioData.buffer]);
+  });
+}
+
 export function resetPipeline() {
-  _pipeline = null;
+  // No-op: pipeline lives in the worker which is created per-run
 }
