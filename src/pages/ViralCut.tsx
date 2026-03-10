@@ -1620,6 +1620,20 @@ const ViralCut = () => {
             ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />{autoCutProgress}%</>
             : <><Scissors className="h-3.5 w-3.5" />Corte Auto</>}
         </Button>
+        <Button
+          size="sm"
+          variant={cutMode ? "default" : "ghost"}
+          className={cn(
+            "h-8 text-xs gap-1.5 px-2.5",
+            cutMode && "bg-destructive text-destructive-foreground hover:bg-destructive/80"
+          )}
+          onClick={() => setCutMode(m => !m)}
+          disabled={!videoSrc}
+          title="Modo corte manual: clique em um clipe na timeline para cortá-lo"
+        >
+          <Scissors className="h-3.5 w-3.5" />
+          {cutMode ? "Cortando..." : "Cortar"}
+        </Button>
         <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 px-2.5" onClick={() => setActiveTab("captions")}>
           <Sparkles className="h-3.5 w-3.5" /> Legenda
         </Button>
