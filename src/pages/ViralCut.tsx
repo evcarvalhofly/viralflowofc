@@ -2135,7 +2135,7 @@ const ViralCut = () => {
                     {/* ── Video track (real clips) ── */}
                     <VideoTrackLane
                       clips={videoClips}
-                      duration={duration || displayDuration}
+                      duration={displayDuration} {/* FIX 5: Always use virtual timeline duration */}
                       scale={timelineScale}
                       cutMode={cutMode}
                       onSeek={seekVirtual}
