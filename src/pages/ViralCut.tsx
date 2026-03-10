@@ -754,7 +754,6 @@ const ViralCut = () => {
       toast({ title: "Sem vídeo", description: "Carregue um vídeo primeiro.", variant: "destructive" });
       return;
     }
-    // Save history before mutating
     pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setAutoCutLoading(true);
     setAutoCutProgress(0);
@@ -767,18 +766,19 @@ const ViralCut = () => {
       virtualDurationRef.current = virtDur;
       setVirtualDuration(virtDur);
 
+      // One "video" layer that acts as the container for the segments
       setLayers(prev => {
         const others = prev.filter(l => l.type !== "video");
         return [
           {
             id: "main-video",
             type: "video" as LayerType,
-            label: `${segs.length} clipes (${virtDur.toFixed(1)}s)`,
-            start: 0, end: virtDur,
+            label: `Vídeo • ${segs.length} clipes`,
+            start: 0, end: v.duration, // spans full real duration
             visible: true, locked: false,
             color: LAYER_COLORS.video,
           },
-          ...others
+          ...others,
         ];
       });
 
@@ -797,6 +797,82 @@ const ViralCut = () => {
       setAutoCutProgress(0);
     }
   };
+
+  // ─── Manual cut ───────────────────────────────────────────────────────────
+  const handleManualCut = useCallback((atRealTime: number) => {
+    if (!duration) return;
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+
+    const existing = cutSegments.length > 0
+      ? cutSegments
+      : [{ id: "clip-0", start: 0, end: duration }];
+
+    // Find which segment contains this timestamp
+    const idx = existing.findIndex(s => atRealTime > s.start && atRealTime < s.end);
+    if (idx === -1) return; // cut lands in a gap or outside
+
+    const seg = existing[idx];
+    const left: ClipSegment = { id: `clip-${Date.now()}-a`, start: seg.start, end: atRealTime };
+    const right: ClipSegment = { id: `clip-${Date.now()}-b`, start: atRealTime, end: seg.end };
+    const newSegs = [...existing.slice(0, idx), left, right, ...existing.slice(idx + 1)];
+    setCutSegments(newSegs);
+
+    const virtDur = newSegs.reduce((acc, s) => acc + (s.end - s.start), 0);
+    setVirtualDuration(virtDur);
+    virtualDurationRef.current = virtDur;
+
+    setLayers(prev => prev.map(l =>
+      l.id === "main-video"
+        ? { ...l, label: `Vídeo • ${newSegs.length} clipes` }
+        : l
+    ));
+
+    setCutMode(false);
+    toast({ title: `✂️ Corte manual em ${atRealTime.toFixed(2)}s` });
+  }, [cutSegments, layers, captions, duration, virtualDuration, pushHistory]);
+
+  // ─── Segment drag / resize ────────────────────────────────────────────────
+  const handleSegmentDragEnd = useCallback((id: string, newStart: number) => {
+    setCutSegments(prev => {
+      const seg = prev.find(s => s.id === id);
+      if (!seg) return prev;
+      const dur = seg.end - seg.start;
+      const clamped = Math.max(0, Math.min(duration - dur, newStart));
+      return prev.map(s => s.id === id ? { ...s, start: clamped, end: clamped + dur } : s);
+    });
+  }, [duration]);
+
+  const handleSegmentResizeEnd = useCallback((id: string, side: "left" | "right", newVal: number) => {
+    setCutSegments(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      if (side === "left") return { ...s, start: Math.max(0, Math.min(s.end - 0.1, newVal)) };
+      return { ...s, end: Math.max(s.start + 0.1, Math.min(duration, newVal)) };
+    }));
+  }, [duration]);
+
+  const handleSegmentDelete = useCallback((id: string) => {
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+    setCutSegments(prev => {
+      const next = prev.filter(s => s.id !== id);
+      // If none left, reset
+      if (next.length === 0) {
+        setVirtualDuration(0);
+        virtualDurationRef.current = duration;
+        return [];
+      }
+      const virtDur = next.reduce((acc, s) => acc + (s.end - s.start), 0);
+      setVirtualDuration(virtDur);
+      virtualDurationRef.current = virtDur;
+      return next;
+    });
+    setLayers(prev => prev.map(l =>
+      l.id === "main-video"
+        ? { ...l, label: `Vídeo • ${cutSegments.length - 1} clipes` }
+        : l
+    ));
+    toast({ title: "Clipe removido" });
+  }, [cutSegments, layers, captions, duration, virtualDuration, pushHistory]);
+
 
   // ─── Captions via Web Speech API ─────────────────────────────────────────
   const speechRecognitionRef = useRef<any>(null);
