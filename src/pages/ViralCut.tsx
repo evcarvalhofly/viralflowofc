@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Upload, Scissors, Type, Layers, Wand2, Download, Play, Pause,
-  Square, SkipBack, SkipForward, Volume2, VolumeX, ZoomIn, ZoomOut,
-  Film, Music, AlignCenter, Sparkles, Trash2, Eye, EyeOff,
-  ChevronRight, ChevronLeft, Loader2, CheckCircle, AlertCircle, X,
-  Maximize2, Minimize2, RotateCcw, Move, ChevronUp, ChevronDown
+  SkipBack, SkipForward, Volume2, VolumeX, ZoomIn, ZoomOut,
+  Film, Music, Sparkles, Trash2, Eye, EyeOff,
+  ChevronRight, ChevronLeft, Loader2, X,
+  RotateCcw, ChevronUp, ChevronDown, Mic, MicOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -14,20 +14,21 @@ import { useToast } from "@/hooks/use-toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ClipSegment = { id: string; start: number; end: number; label?: string };
+/** Um segmento de vídeo "a manter" após corte automático */
+type ClipSegment = { id: string; start: number; end: number };
+
 type LayerType = "video" | "overlay" | "text" | "audio";
 
 interface Layer {
   id: string;
   type: LayerType;
   label: string;
-  start: number;        // seconds
-  end: number;          // seconds
+  start: number;
+  end: number;
   visible: boolean;
   locked: boolean;
   color: string;
-  content?: string;     // text content or url
-  x?: number; y?: number; scale?: number; opacity?: number; rotation?: number;
+  content?: string;
 }
 
 interface CaptionBlock {
@@ -35,7 +36,6 @@ interface CaptionBlock {
   text: string;
   start: number;
   end: number;
-  words?: string[];
 }
 
 type AutoCutLevel = "suave" | "medio" | "agressivo";
@@ -54,11 +54,10 @@ const LAYER_COLORS: Record<LayerType, string> = {
   audio: "hsl(210,80%,50%)",
 };
 
-// ─── Silence Detection (Web Audio API) ───────────────────────────────────────
+// ─── Silence Detection (Web Audio API) ────────────────────────────────────────
 
 async function detectSilenceSegments(
   videoEl: HTMLVideoElement,
-  threshold: number,
   minDuration: number,
   onProgress: (p: number) => void
 ): Promise<ClipSegment[]> {
@@ -83,13 +82,11 @@ async function detectSilenceSegments(
     rms.push(Math.sqrt(sum / windowSamples));
   }
 
-  const dbThreshold = Math.pow(10, -30 / 20); // -30dB
-  const segments: ClipSegment[] = [];
+  const dbThreshold = Math.pow(10, -30 / 20);
   let inSilence = false;
   let silenceStart = 0;
   const margin_before = 0.1;
   const margin_after = 0.12;
-
   const keepRanges: Array<{ start: number; end: number }> = [];
   let lastKeepEnd = 0;
 
@@ -110,29 +107,31 @@ async function detectSilenceSegments(
   });
   keepRanges.push({ start: lastKeepEnd, end: duration });
 
-  keepRanges.forEach((r, i) => {
-    if (r.end - r.start > 0.1) {
-      segments.push({ id: `clip-${i}`, start: r.start, end: r.end });
-    }
-  });
+  const segments = keepRanges
+    .filter(r => r.end - r.start > 0.1)
+    .map((r, i) => ({ id: `clip-${i}`, start: r.start, end: r.end }));
 
   onProgress(100);
   audioCtx.close();
   return segments.length > 0 ? segments : [{ id: "clip-0", start: 0, end: duration }];
 }
 
-// ─── Simple Caption Generator (word split, no real ASR) ──────────────────────
+// ─── Caption splitter ─────────────────────────────────────────────────────────
 
-function generateMockCaptions(text: string, duration: number, mode: CaptionWordMode): CaptionBlock[] {
-  const words = text.trim().split(/\s+/);
+function splitCaptionsFromTranscript(
+  words: Array<{ text: string; start: number; end: number }>,
+  mode: CaptionWordMode
+): CaptionBlock[] {
   const blocks: CaptionBlock[] = [];
   let i = 0;
-  let blockIdx = 0;
   while (i < words.length) {
     const chunk = words.slice(i, i + mode);
-    const start = (i / words.length) * duration;
-    const end = ((i + mode) / words.length) * duration;
-    blocks.push({ id: `cap-${blockIdx++}`, text: chunk.join(" "), start, end, words: chunk });
+    blocks.push({
+      id: `cap-${i}`,
+      text: chunk.map(w => w.text).join(" "),
+      start: chunk[0].start,
+      end: chunk[chunk.length - 1].end,
+    });
     i += mode;
   }
   return blocks;
@@ -141,12 +140,13 @@ function generateMockCaptions(text: string, duration: number, mode: CaptionWordM
 // ─── Timeline Lane ────────────────────────────────────────────────────────────
 
 function TimelineLane({
-  layer, duration, scale,
-  onToggleVisible, onDelete
+  layer, duration, scale, currentTime,
+  onToggleVisible, onDelete, onSeek
 }: {
-  layer: Layer; duration: number; scale: number;
+  layer: Layer; duration: number; scale: number; currentTime: number;
   onToggleVisible: (id: string) => void;
   onDelete: (id: string) => void;
+  onSeek: (t: number) => void;
 }) {
   const pxPerSec = scale * 80;
   const left = layer.start * pxPerSec;
@@ -154,7 +154,6 @@ function TimelineLane({
 
   return (
     <div className="flex items-center h-10 border-b border-border/30 group">
-      {/* Lane header */}
       <div className="w-32 shrink-0 flex items-center gap-1 px-2 border-r border-border/30 h-full bg-card/50">
         <button onClick={() => onToggleVisible(layer.id)} className="text-muted-foreground hover:text-foreground">
           {layer.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -164,10 +163,16 @@ function TimelineLane({
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
-      {/* Track area */}
-      <div className="relative flex-1 h-full overflow-hidden">
+      <div
+        className="relative flex-1 h-full overflow-hidden cursor-pointer"
+        onClick={e => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const t = ((e.clientX - rect.left) / rect.width) * duration;
+          onSeek(t);
+        }}
+      >
         <div
-          className="absolute top-1 bottom-1 rounded cursor-grab active:cursor-grabbing flex items-center px-2"
+          className="absolute top-1 bottom-1 rounded flex items-center px-2"
           style={{ left, width, backgroundColor: layer.color, opacity: layer.visible ? 0.9 : 0.3 }}
         >
           <span className="text-[9px] text-white font-medium truncate">{layer.label}</span>
@@ -177,7 +182,7 @@ function TimelineLane({
   );
 }
 
-// ─── Chroma Key Canvas ────────────────────────────────────────────────────────
+// ─── Chroma Key ───────────────────────────────────────────────────────────────
 
 function applyChromaKey(
   ctx: CanvasRenderingContext2D,
@@ -187,17 +192,16 @@ function applyChromaKey(
   smoothing: number
 ) {
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
     const dist = Math.sqrt(
-      Math.pow(r - color[0], 2) + Math.pow(g - color[1], 2) + Math.pow(b - color[2], 2)
+      Math.pow(d[i] - color[0], 2) +
+      Math.pow(d[i + 1] - color[1], 2) +
+      Math.pow(d[i + 2] - color[2], 2)
     );
-    if (dist < tolerance) {
-      data[i + 3] = 0;
-    } else if (dist < tolerance + smoothing) {
-      data[i + 3] = Math.round(((dist - tolerance) / smoothing) * 255);
-    }
+    if (dist < tolerance) d[i + 3] = 0;
+    else if (dist < tolerance + smoothing)
+      d[i + 3] = Math.round(((dist - tolerance) / smoothing) * 255);
   }
   ctx.putImageData(imageData, 0, 0);
 }
@@ -209,10 +213,11 @@ const ViralCut = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const overlayInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
-  const animFrameRef = useRef<number>(0);
+  const rafRef = useRef<number>(0);
+  const segmentIndexRef = useRef<number>(0);
 
+  // ─ State ──────────────────────────────────────────────────────────────────
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoName, setVideoName] = useState("Sem vídeo");
   const [duration, setDuration] = useState(0);
@@ -220,6 +225,13 @@ const ViralCut = () => {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState([80]);
+
+  // Segmentos de corte (o que o player vai respeitar)
+  const [cutSegments, setCutSegments] = useState<ClipSegment[]>([]);
+  // Tempo virtual = posição na "linha do tempo editada"
+  const virtualDurationRef = useRef(0);
+  const [virtualDuration, setVirtualDuration] = useState(0);
+  const [virtualTime, setVirtualTime] = useState(0);
 
   const [layers, setLayers] = useState<Layer[]>([]);
   const [captions, setCaptions] = useState<CaptionBlock[]>([]);
@@ -230,18 +242,18 @@ const ViralCut = () => {
   const [autoCutLevel, setAutoCutLevel] = useState<AutoCutLevel>("medio");
   const [autoCutLoading, setAutoCutLoading] = useState(false);
   const [autoCutProgress, setAutoCutProgress] = useState(0);
-  const [cutSegments, setCutSegments] = useState<ClipSegment[]>([]);
 
   const [chromaEnabled, setChromaEnabled] = useState(false);
   const [chromaColor, setChromaColor] = useState("#00ff00");
   const [chromaTolerance, setChromaTolerance] = useState([80]);
   const [chromaSmoothing, setChromaSmoothing] = useState([20]);
 
-  const [captionText, setCaptionText] = useState("");
   const [captionMode, setCaptionMode] = useState<CaptionWordMode>(2);
   const [captionStyle, setCaptionStyle] = useState({
     color: "#ffffff", size: 32, shadow: true, bg: true, posY: 80
   });
+  const [captionLoading, setCaptionLoading] = useState(false);
+  const [transcriptWords, setTranscriptWords] = useState<Array<{ text: string; start: number; end: number }>>([]);
 
   const [addTextValue, setAddTextValue] = useState("Seu texto aqui");
   const [filterBrightness, setFilterBrightness] = useState([100]);
@@ -253,47 +265,53 @@ const ViralCut = () => {
   const [processing, setProcessing] = useState(false);
   const [processingMsg, setProcessingMsg] = useState("");
 
-  // ─── Video event handlers ────────────────────────────────────────────────
-
-  const handleVideoLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setVideoSrc(url);
-    setVideoName(file.name);
-    setCutSegments([]);
-    setCaptions([]);
-    setLayers([]);
-    toast({ title: "Vídeo carregado!", description: file.name });
+  const videoStyle = {
+    filter: `brightness(${filterBrightness[0]}%) contrast(${filterContrast[0]}%) saturate(${filterSaturation[0]}%)`,
   };
 
-  const handleMetadata = () => {
+  // ─── Segmented playback ────────────────────────────────────────────────────
+  // Mapeia tempo virtual → tempo real do vídeo
+  const virtualToReal = useCallback((vt: number, segs: ClipSegment[]): number => {
+    if (segs.length === 0) return vt;
+    let acc = 0;
+    for (const seg of segs) {
+      const len = seg.end - seg.start;
+      if (vt <= acc + len) return seg.start + (vt - acc);
+      acc += len;
+    }
+    return segs[segs.length - 1].end;
+  }, []);
+
+  const realToVirtual = useCallback((rt: number, segs: ClipSegment[]): number => {
+    if (segs.length === 0) return rt;
+    let acc = 0;
+    for (const seg of segs) {
+      if (rt >= seg.start && rt <= seg.end) return acc + (rt - seg.start);
+      acc += seg.end - seg.start;
+    }
+    return acc;
+  }, []);
+
+  // RAF loop: sincroniza preview e avança entre segmentos
+  const updateLoop = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    setDuration(v.duration);
-    setLayers([{
-      id: "main-video",
-      type: "video",
-      label: videoName.replace(/\.[^.]+$/, ""),
-      start: 0,
-      end: v.duration,
-      visible: true,
-      locked: false,
-      color: LAYER_COLORS.video,
-    }]);
-  };
+    const segs = cutSegments.length > 0 ? cutSegments : null;
 
-  const handleTimeUpdate = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    setCurrentTime(v.currentTime);
+    const rt = v.currentTime;
+    const vt = segs ? realToVirtual(rt, segs) : rt;
+    setCurrentTime(rt);
+    setVirtualTime(vt);
 
-    // Update active captions
-    const active = captions.filter(c => v.currentTime >= c.start && v.currentTime < c.end);
-    setActiveCaptions(active);
+    // atualiza legendas
+    setActiveCaptions(prev => {
+      const next = captions.filter(c => rt >= c.start && rt < c.end);
+      if (next.length !== prev.length || next.some((c, i) => c.id !== prev[i]?.id)) return next;
+      return prev;
+    });
 
     // Chroma key frame
-    if (chromaEnabled && canvasRef.current) {
+    if (chromaEnabled && canvasRef.current && !v.paused) {
       const ctx = canvasRef.current.getContext("2d");
       if (ctx) {
         canvasRef.current.width = v.videoWidth || 640;
@@ -305,8 +323,74 @@ const ViralCut = () => {
         applyChromaKey(ctx, canvasRef.current, [r, g, b], chromaTolerance[0], chromaSmoothing[0]);
       }
     }
+
+    // Segmented playback: pular para o próximo segmento se estiver fora dos keepRanges
+    if (segs && !v.paused) {
+      // Verifica se o tempo atual está dentro de algum segmento
+      const inSegment = segs.some(s => rt >= s.start && rt < s.end);
+      if (!inSegment) {
+        // Encontra o próximo segmento
+        const next = segs.find(s => s.start > rt);
+        if (next) {
+          v.currentTime = next.start;
+        } else {
+          v.pause();
+          setPlaying(false);
+        }
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(updateLoop);
+  }, [cutSegments, captions, chromaEnabled, chromaColor, chromaTolerance, chromaSmoothing, realToVirtual]);
+
+  useEffect(() => {
+    if (playing) {
+      rafRef.current = requestAnimationFrame(updateLoop);
+    } else {
+      cancelAnimationFrame(rafRef.current);
+    }
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [playing, updateLoop]);
+
+  // ─── Volume ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v) v.volume = volume[0] / 100;
+  }, [volume]);
+
+  // ─── Video load ───────────────────────────────────────────────────────────
+  const handleVideoLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setVideoSrc(url);
+    setVideoName(file.name);
+    setCutSegments([]);
+    setCaptions([]);
+    setTranscriptWords([]);
+    setLayers([]);
+    setPlaying(false);
+    toast({ title: "Vídeo carregado!", description: file.name });
   };
 
+  const handleMetadata = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    const dur = v.duration;
+    setDuration(dur);
+    virtualDurationRef.current = dur;
+    setVirtualDuration(dur);
+    setLayers([{
+      id: "main-video",
+      type: "video",
+      label: videoName.replace(/\.[^.]+$/, ""),
+      start: 0, end: dur,
+      visible: true, locked: false,
+      color: LAYER_COLORS.video,
+    }]);
+  };
+
+  // ─── Playback controls ────────────────────────────────────────────────────
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -314,11 +398,15 @@ const ViralCut = () => {
     else { v.play(); setPlaying(true); }
   };
 
-  const seekTo = (t: number) => {
+  // Seek por tempo virtual
+  const seekVirtual = (vt: number) => {
     const v = videoRef.current;
     if (!v) return;
-    v.currentTime = t;
-    setCurrentTime(t);
+    const segs = cutSegments.length > 0 ? cutSegments : null;
+    const rt = segs ? virtualToReal(vt, segs) : vt;
+    v.currentTime = rt;
+    setCurrentTime(rt);
+    setVirtualTime(vt);
   };
 
   const toggleMute = () => {
@@ -328,14 +416,7 @@ const ViralCut = () => {
     setMuted(!muted);
   };
 
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.volume = volume[0] / 100;
-  }, [volume]);
-
-  // ─── Auto-cut ────────────────────────────────────────────────────────────
-
+  // ─── Auto-cut ─────────────────────────────────────────────────────────────
   const handleAutoCut = async () => {
     const v = videoRef.current;
     if (!v || !videoSrc) {
@@ -346,143 +427,285 @@ const ViralCut = () => {
     setAutoCutProgress(0);
     try {
       const minDur = SILENCE_THRESHOLDS[autoCutLevel];
-      const segs = await detectSilenceSegments(v, -30, minDur, setAutoCutProgress);
+      const segs = await detectSilenceSegments(v, minDur, setAutoCutProgress);
       setCutSegments(segs);
-      // Update the video layer
+
+      // Calcula duração virtual total
+      const virtDur = segs.reduce((acc, s) => acc + (s.end - s.start), 0);
+      virtualDurationRef.current = virtDur;
+      setVirtualDuration(virtDur);
+
+      // Atualiza a ÚNICA faixa de vídeo principal — um único bloco na timeline
+      // representando o tempo virtual resultante
       setLayers(prev => {
-        const without = prev.filter(l => l.type !== "video" || l.id === "main-video");
+        const others = prev.filter(l => l.type !== "video");
         return [
-          ...without.filter(l => l.id !== "main-video"),
-          ...segs.map((s, i) => ({
-            id: `clip-${s.id}-${i}`,
+          {
+            id: "main-video",
             type: "video" as LayerType,
-            label: `Clipe ${i + 1} (${s.start.toFixed(1)}s–${s.end.toFixed(1)}s)`,
-            start: s.start,
-            end: s.end,
+            label: `${segs.length} clipes (${virtDur.toFixed(1)}s)`,
+            start: 0,
+            end: virtDur,
             visible: true,
             locked: false,
             color: LAYER_COLORS.video,
-          }))
+          },
+          ...others
         ];
       });
-      toast({ title: `✂️ ${segs.length} clipes detectados`, description: `Nível: ${autoCutLevel}` });
+
+      // Volta para o início do primeiro segmento
+      if (v && segs.length > 0) {
+        v.currentTime = segs[0].start;
+        setCurrentTime(segs[0].start);
+        setVirtualTime(0);
+      }
+
+      toast({ title: `✂️ ${segs.length} clipes detectados`, description: `Silêncios removidos • Nível: ${autoCutLevel}` });
     } catch (err) {
-      toast({ title: "Erro no corte automático", description: "Tente novamente.", variant: "destructive" });
+      console.error(err);
+      toast({ title: "Erro no corte automático", variant: "destructive" });
     } finally {
       setAutoCutLoading(false);
       setAutoCutProgress(0);
     }
   };
 
-  // ─── Captions ────────────────────────────────────────────────────────────
+  // ─── Captions via Web Speech API ─────────────────────────────────────────
+  const speechRecognitionRef = useRef<any>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptRaw, setTranscriptRaw] = useState("");
 
-  const handleGenerateCaptions = () => {
-    if (!captionText.trim() || !duration) {
-      toast({ title: "Digite um texto para legendar", variant: "destructive" });
+  const handleGenerateCaptions = async () => {
+    const v = videoRef.current;
+    if (!v || !videoSrc) {
+      toast({ title: "Carregue um vídeo primeiro.", variant: "destructive" });
       return;
     }
-    const blocks = generateMockCaptions(captionText, duration, captionMode);
+
+    if (transcriptWords.length > 0) {
+      const blocks = splitCaptionsFromTranscript(transcriptWords, captionMode);
+      applyCaptures(blocks);
+      return;
+    }
+
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast({
+        title: "Transcrição não suportada",
+        description: "Use Chrome ou Edge para transcrição automática.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setCaptionLoading(true);
+    setIsTranscribing(true);
+    setTranscriptRaw("");
+    const words: Array<{ text: string; start: number; end: number }> = [];
+
+    const recognition = new SR();
+    speechRecognitionRef.current = recognition;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "pt-BR";
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          const transcript = result[0].transcript.trim();
+          const parts = transcript.split(/\s+/).filter(Boolean);
+          const now = v.currentTime;
+          const blockDur = parts.length > 0 ? 0.35 : 0;
+          parts.forEach((word, j) => {
+            const wStart = now - blockDur * (parts.length - j);
+            const wEnd = wStart + 0.3;
+            words.push({ text: word.toUpperCase(), start: Math.max(0, wStart), end: wEnd });
+          });
+          setTranscriptRaw(prev => prev + " " + transcript);
+        }
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsTranscribing(false);
+      setCaptionLoading(false);
+    };
+
+    recognition.onend = () => {
+      setIsTranscribing(false);
+      setCaptionLoading(false);
+      if (words.length > 0) {
+        setTranscriptWords(words);
+        const blocks = splitCaptionsFromTranscript(words, captionMode);
+        applyCaptures(blocks);
+        toast({ title: `🎙️ Transcrição concluída`, description: `${blocks.length} legendas geradas` });
+      } else {
+        toast({ title: "Nenhuma fala detectada", description: "Verifique o áudio do vídeo.", variant: "destructive" });
+      }
+    };
+
+    // Reproduz o vídeo e ativa reconhecimento
+    recognition.start();
+    v.currentTime = 0;
+    setVirtualTime(0);
+    await v.play();
+    setPlaying(true);
+
+    // Para quando o vídeo terminar
+    const onEnded = () => {
+      recognition.stop();
+      v.removeEventListener("ended", onEnded);
+    };
+    v.addEventListener("ended", onEnded);
+  };
+
+  const stopTranscription = () => {
+    speechRecognitionRef.current?.stop();
+    videoRef.current?.pause();
+    setPlaying(false);
+    setIsTranscribing(false);
+    setCaptionLoading(false);
+  };
+
+  const applyCaptures = (blocks: CaptionBlock[]) => {
     setCaptions(blocks);
     setLayers(prev => {
-      const without = prev.filter(l => l.type !== "text" || !l.id.startsWith("caption-"));
+      const without = prev.filter(l => !(l.type === "text" && l.id.startsWith("caption-")));
       return [
         ...without,
         ...blocks.map(b => ({
           id: `caption-${b.id}`,
           type: "text" as LayerType,
           label: b.text,
-          start: b.start,
-          end: b.end,
-          visible: true,
-          locked: false,
+          start: b.start, end: b.end,
+          visible: true, locked: false,
           color: LAYER_COLORS.text,
           content: b.text,
         }))
       ];
     });
-    toast({ title: `📝 ${blocks.length} legendas geradas` });
   };
 
-  // ─── Add Text Layer ───────────────────────────────────────────────────────
-
+  // ─── Texto ────────────────────────────────────────────────────────────────
   const handleAddText = () => {
     if (!addTextValue.trim() || !duration) {
       toast({ title: "Carregue um vídeo primeiro", variant: "destructive" });
       return;
     }
-    const layer: Layer = {
+    setLayers(prev => [...prev, {
       id: `text-${Date.now()}`,
       type: "text",
       label: addTextValue,
       start: currentTime,
       end: Math.min(currentTime + 5, duration),
-      visible: true,
-      locked: false,
+      visible: true, locked: false,
       color: LAYER_COLORS.text,
       content: addTextValue,
-    };
-    setLayers(prev => [...prev, layer]);
+    }]);
     toast({ title: "Texto adicionado à timeline" });
   };
 
-  // ─── Add Audio Layer ──────────────────────────────────────────────────────
-
+  // ─── Áudio extra ─────────────────────────────────────────────────────────
   const handleAudioLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !duration) return;
-    const layer: Layer = {
+    setLayers(prev => [...prev, {
       id: `audio-${Date.now()}`,
       type: "audio",
       label: file.name.replace(/\.[^.]+$/, ""),
-      start: 0,
-      end: duration,
-      visible: true,
-      locked: false,
+      start: 0, end: duration,
+      visible: true, locked: false,
       color: LAYER_COLORS.audio,
       content: URL.createObjectURL(file),
-    };
-    setLayers(prev => [...prev, layer]);
+    }]);
     toast({ title: "🎵 Áudio adicionado" });
   };
 
   // ─── Layer actions ────────────────────────────────────────────────────────
-
   const toggleLayerVisible = (id: string) =>
     setLayers(prev => prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
 
   const deleteLayer = (id: string) =>
     setLayers(prev => prev.filter(l => l.id !== id));
 
-  // ─── Mock Export ──────────────────────────────────────────────────────────
-
-  const handleExport = () => {
+  // ─── Export (canvas render) ───────────────────────────────────────────────
+  const handleExport = async () => {
     if (!videoSrc) {
-      toast({ title: "Sem vídeo", description: "Carregue um vídeo primeiro.", variant: "destructive" });
+      toast({ title: "Sem vídeo", variant: "destructive" });
       return;
     }
+
     setProcessing(true);
-    setProcessingMsg("Preparando exportação...");
-    const steps = [
-      "Aplicando cortes...",
-      "Processando camadas...",
-      "Renderizando legendas...",
-      "Codificando MP4...",
-      "Finalizando...",
-    ];
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i < steps.length) { setProcessingMsg(steps[i++]); }
-      else {
-        clearInterval(interval);
-        setProcessing(false);
-        // Actually download the original for now (FFmpeg wasm needs COOP headers)
-        const a = document.createElement("a");
-        a.href = videoSrc;
-        a.download = `viralcut-export.mp4`;
-        a.click();
-        toast({ title: "✅ Vídeo exportado!" });
+    setProcessingMsg("Preparando exportação via canvas...");
+
+    // Para a reprodução atual
+    videoRef.current?.pause();
+    setPlaying(false);
+
+    // Se não há cortes, apenas baixa o original
+    if (cutSegments.length === 0) {
+      const a = document.createElement("a");
+      a.href = videoSrc;
+      a.download = `viralcut-export.mp4`;
+      a.click();
+      setProcessing(false);
+      toast({ title: "✅ Vídeo exportado (sem cortes aplicados)" });
+      return;
+    }
+
+    // Com cortes: usa MediaRecorder + canvas para renderizar os segmentos
+    const v = document.createElement("video");
+    v.src = videoSrc;
+    v.muted = true;
+    v.load();
+    await new Promise(res => v.addEventListener("loadedmetadata", res, { once: true }));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = v.videoWidth || 1280;
+    canvas.height = v.videoHeight || 720;
+    const ctx = canvas.getContext("2d")!;
+
+    const stream = canvas.captureStream(30);
+    const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = e => chunks.push(e.data);
+
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "viralcut-export.webm";
+      a.click();
+      URL.revokeObjectURL(url);
+      setProcessing(false);
+      toast({ title: "✅ Vídeo exportado com cortes aplicados!" });
+    };
+
+    recorder.start();
+    setProcessingMsg("Renderizando segmentos...");
+
+    // Renderiza cada segmento frame a frame
+    for (let si = 0; si < cutSegments.length; si++) {
+      const seg = cutSegments[si];
+      setProcessingMsg(`Renderizando clipe ${si + 1}/${cutSegments.length}...`);
+      v.currentTime = seg.start;
+      await new Promise(res => v.addEventListener("seeked", res, { once: true }));
+
+      while (v.currentTime < seg.end) {
+        ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+        // Aplica filtros CSS via canvas (brightness/contrast/saturation)
+        // Simplificado: apenas desenha o frame
+        await new Promise(res => setTimeout(res, 1000 / 30));
+        v.currentTime = Math.min(v.currentTime + 1 / 30, seg.end);
+        await new Promise(res => v.addEventListener("seeked", res, { once: true }));
       }
-    }, 700);
+    }
+
+    recorder.stop();
   };
 
   const formatTime = (s: number) => {
@@ -492,22 +715,19 @@ const ViralCut = () => {
     return `${m}:${sec.toString().padStart(2, "0")}.${ms}`;
   };
 
-  const videoStyle = {
-    filter: `brightness(${filterBrightness[0]}%) contrast(${filterContrast[0]}%) saturate(${filterSaturation[0]}%)`,
-  };
-
-  const captionFontSize = captionStyle.size;
-
   // ─── Render ───────────────────────────────────────────────────────────────
+
+  const displayDuration = virtualDuration > 0 ? virtualDuration : duration;
+  const displayTime = virtualTime;
 
   return (
     <div className="flex flex-col h-full bg-[hsl(220,25%,8%)] text-foreground overflow-hidden select-none">
 
-      {/* ── Top Bar ─────────────────────────────────────────────── */}
+      {/* ── Top Bar ─────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40 bg-[hsl(220,25%,10%)] shrink-0 flex-wrap">
         <div className="flex items-center gap-1.5 mr-2">
           <Scissors className="h-4 w-4 text-primary" />
-          <span className="text-sm font-bold font-display text-primary">ViralCut</span>
+          <span className="text-sm font-bold text-primary">ViralCut</span>
           {videoName !== "Sem vídeo" && (
             <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{videoName}</span>
           )}
@@ -519,35 +739,32 @@ const ViralCut = () => {
         <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
           onClick={handleAutoCut} disabled={!videoSrc || autoCutLoading}>
           {autoCutLoading
-            ? <Loader2 className="h-3 w-3 animate-spin" />
-            : <Scissors className="h-3 w-3" />}
-          Corte Auto
+            ? <><Loader2 className="h-3 w-3 animate-spin" />{autoCutProgress}%</>
+            : <><Scissors className="h-3 w-3" />Corte Auto</>}
         </Button>
         <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-          onClick={() => setActiveTab("captions")}>
+          onClick={() => { setActiveTab("captions"); }}>
           <Sparkles className="h-3 w-3" /> Legenda
         </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-          onClick={() => setActiveTab("text")}>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setActiveTab("text")}>
           <Type className="h-3 w-3" /> Texto
         </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-          onClick={() => setActiveTab("chroma")} >
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setActiveTab("chroma")}>
           <Layers className="h-3 w-3" /> Chroma
         </Button>
-        <Button size="sm" className="h-7 text-xs gap-1 ml-auto" onClick={handleExport}>
-          <Download className="h-3 w-3" /> Exportar
+        <Button size="sm" className="h-7 text-xs gap-1 ml-auto" onClick={handleExport} disabled={!videoSrc || processing}>
+          {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+          Exportar
         </Button>
       </div>
 
       <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoLoad} />
-      <input ref={overlayInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={() => {}} />
       <input ref={audioInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioLoad} />
 
-      {/* ── Main Body ───────────────────────────────────────────── */}
+      {/* ── Main Body ───────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ── Left Sidebar ─────────────────────────────────────── */}
+        {/* ── Left Sidebar ─────────────────────────────────────────── */}
         <div className={cn(
           "shrink-0 border-r border-border/40 bg-[hsl(220,25%,10%)] flex flex-col overflow-hidden transition-all duration-200",
           leftCollapsed ? "w-8" : "w-52"
@@ -561,12 +778,12 @@ const ViralCut = () => {
 
           {!leftCollapsed && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0">
-              <TabsList className="grid grid-cols-3 h-auto mx-2 mt-2 shrink-0 text-[10px] gap-0.5 bg-muted/50">
+              <TabsList className="grid grid-cols-3 h-auto mx-2 mt-2 shrink-0 gap-0.5 bg-muted/50">
                 <TabsTrigger value="upload" className="text-[9px] py-1 px-1">Mídia</TabsTrigger>
                 <TabsTrigger value="captions" className="text-[9px] py-1 px-1">Legenda</TabsTrigger>
                 <TabsTrigger value="text" className="text-[9px] py-1 px-1">Texto</TabsTrigger>
               </TabsList>
-              <TabsList className="grid grid-cols-3 h-auto mx-2 mt-1 shrink-0 text-[10px] gap-0.5 bg-muted/50">
+              <TabsList className="grid grid-cols-3 h-auto mx-2 mt-1 shrink-0 gap-0.5 bg-muted/50">
                 <TabsTrigger value="chroma" className="text-[9px] py-1 px-1">Chroma</TabsTrigger>
                 <TabsTrigger value="filters" className="text-[9px] py-1 px-1">Filtros</TabsTrigger>
                 <TabsTrigger value="audio" className="text-[9px] py-1 px-1">Áudio</TabsTrigger>
@@ -574,7 +791,7 @@ const ViralCut = () => {
 
               <div className="flex-1 overflow-y-auto p-2 space-y-3 min-h-0">
 
-                {/* ─ Upload ─ */}
+                {/* ─ Upload / AutoCut ─ */}
                 <TabsContent value="upload" className="mt-0 space-y-2">
                   <button
                     onClick={() => fileInputRef.current?.click()}
@@ -590,7 +807,7 @@ const ViralCut = () => {
                     </div>
                   )}
                   <div className="pt-1 space-y-1.5">
-                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Corte Automático</p>
+                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Nível de corte</p>
                     <div className="grid grid-cols-3 gap-1">
                       {(["suave", "medio", "agressivo"] as AutoCutLevel[]).map(lvl => (
                         <button
@@ -612,29 +829,52 @@ const ViralCut = () => {
                       }
                     </Button>
                     {cutSegments.length > 0 && (
-                      <p className="text-[10px] text-primary text-center">{cutSegments.length} clipes detectados</p>
+                      <div className="bg-primary/10 border border-primary/30 rounded p-2 space-y-0.5">
+                        <p className="text-[10px] text-primary font-medium">{cutSegments.length} segmentos ativos</p>
+                        <p className="text-[9px] text-muted-foreground">Preview reproduz apenas as partes com fala</p>
+                        <button
+                          onClick={() => { setCutSegments([]); setVirtualDuration(duration); setVirtualTime(0); }}
+                          className="text-[9px] text-destructive hover:underline"
+                        >Desfazer cortes</button>
+                      </div>
                     )}
                   </div>
                 </TabsContent>
 
                 {/* ─ Captions ─ */}
                 <TabsContent value="captions" className="mt-0 space-y-2">
-                  <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Texto para legendar</p>
-                  <textarea
-                    value={captionText}
-                    onChange={e => setCaptionText(e.target.value)}
-                    placeholder="Cole o texto da fala aqui..."
-                    className="w-full text-xs bg-background border border-border rounded p-2 h-24 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
+                  <div className="bg-card/60 border border-border/60 rounded p-2 space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Mic className="h-3 w-3 text-primary" />
+                      <p className="text-[10px] font-medium text-foreground">Transcrição pelo áudio</p>
+                    </div>
+                    <p className="text-[9px] text-muted-foreground leading-relaxed">
+                      O vídeo será reproduzido e o áudio transcrito em tempo real via reconhecimento de voz do navegador.
+                    </p>
+                  </div>
+
+                  {transcriptWords.length > 0 && (
+                    <div className="bg-primary/10 border border-primary/30 rounded p-2">
+                      <p className="text-[9px] text-primary">{transcriptWords.length} palavras transcritas</p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5 line-clamp-3">{transcriptRaw.trim()}</p>
+                    </div>
+                  )}
+
                   <div>
                     <p className="text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Palavras por bloco</p>
                     <div className="grid grid-cols-3 gap-1">
                       {([1, 2, 3] as CaptionWordMode[]).map(n => (
                         <button
                           key={n}
-                          onClick={() => setCaptionMode(n)}
+                          onClick={() => {
+                            setCaptionMode(n);
+                            if (transcriptWords.length > 0) {
+                              const blocks = splitCaptionsFromTranscript(transcriptWords, n);
+                              applyCaptures(blocks);
+                            }
+                          }}
                           className={cn(
-                            "text-[10px] py-1 rounded border transition-colors",
+                            "text-[9px] py-1 rounded border transition-colors",
                             captionMode === n
                               ? "bg-primary border-primary text-primary-foreground"
                               : "border-border text-muted-foreground hover:border-primary"
@@ -643,14 +883,19 @@ const ViralCut = () => {
                       ))}
                     </div>
                   </div>
+
                   <div className="space-y-1">
                     <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Estilo</p>
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] text-muted-foreground w-12">Cor</label>
-                      <input type="color" value={captionStyle.color}
-                        onChange={e => setCaptionStyle(s => ({ ...s, color: e.target.value }))}
-                        className="h-5 w-8 cursor-pointer rounded border-0 bg-transparent" />
-                    </div>
+                    {[
+                      { label: "Cor", type: "color" as const },
+                    ].map(() => (
+                      <div key="cor" className="flex items-center gap-2">
+                        <label className="text-[10px] text-muted-foreground w-12">Cor</label>
+                        <input type="color" value={captionStyle.color}
+                          onChange={e => setCaptionStyle(s => ({ ...s, color: e.target.value }))}
+                          className="h-5 w-8 cursor-pointer rounded border-0 bg-transparent" />
+                      </div>
+                    ))}
                     <div className="flex items-center gap-2">
                       <label className="text-[10px] text-muted-foreground w-12">Tam</label>
                       <Slider value={[captionStyle.size]} onValueChange={v => setCaptionStyle(s => ({ ...s, size: v[0] }))}
@@ -676,11 +921,29 @@ const ViralCut = () => {
                       >BG</button>
                     </div>
                   </div>
-                  <Button size="sm" className="w-full h-7 text-xs" onClick={handleGenerateCaptions} disabled={!videoSrc}>
-                    <Sparkles className="h-3 w-3 mr-1" />Gerar legendas
-                  </Button>
+
+                  {isTranscribing ? (
+                    <Button size="sm" variant="destructive" className="w-full h-7 text-xs" onClick={stopTranscription}>
+                      <MicOff className="h-3 w-3 mr-1" />Parar transcrição
+                    </Button>
+                  ) : (
+                    <Button size="sm" className="w-full h-7 text-xs" onClick={handleGenerateCaptions} disabled={!videoSrc || captionLoading}>
+                      {captionLoading
+                        ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Transcrevendo...</>
+                        : <><Mic className="h-3 w-3 mr-1" />{transcriptWords.length > 0 ? "Regen. legendas" : "Gerar legendas"}</>
+                      }
+                    </Button>
+                  )}
+
+                  {isTranscribing && (
+                    <div className="bg-destructive/10 border border-destructive/30 rounded p-2 flex items-center gap-2">
+                      <div className="h-2 w-2 bg-destructive rounded-full animate-pulse" />
+                      <p className="text-[9px] text-destructive">Reproduzindo e transcrevendo...</p>
+                    </div>
+                  )}
+
                   {captions.length > 0 && (
-                    <p className="text-[10px] text-primary text-center">{captions.length} blocos gerados</p>
+                    <p className="text-[10px] text-primary text-center">{captions.length} legendas ativas</p>
                   )}
                 </TabsContent>
 
@@ -713,23 +976,16 @@ const ViralCut = () => {
                       className="h-5 w-10 cursor-pointer rounded border-0 bg-transparent" />
                     <span className="text-[9px] text-muted-foreground">{chromaColor}</span>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] text-muted-foreground w-16">Tolerância</label>
-                      <Slider value={chromaTolerance} onValueChange={setChromaTolerance} min={10} max={200} step={5} className="flex-1" />
-                      <span className="text-[10px] w-6 text-right">{chromaTolerance[0]}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] text-muted-foreground w-16">Suavização</label>
-                      <Slider value={chromaSmoothing} onValueChange={setChromaSmoothing} min={0} max={100} step={5} className="flex-1" />
-                      <span className="text-[10px] w-6 text-right">{chromaSmoothing[0]}</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] text-muted-foreground w-16">Tolerância</label>
+                    <Slider value={chromaTolerance} onValueChange={setChromaTolerance} min={10} max={200} step={5} className="flex-1" />
+                    <span className="text-[10px] w-6 text-right">{chromaTolerance[0]}</span>
                   </div>
-                  {chromaEnabled && (
-                    <div className="bg-primary/10 border border-primary/30 rounded p-2">
-                      <p className="text-[9px] text-primary">Chroma key ativo. Ajuste a cor e a tolerância conforme necessário.</p>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] text-muted-foreground w-16">Suavização</label>
+                    <Slider value={chromaSmoothing} onValueChange={setChromaSmoothing} min={0} max={100} step={5} className="flex-1" />
+                    <span className="text-[10px] w-6 text-right">{chromaSmoothing[0]}</span>
+                  </div>
                 </TabsContent>
 
                 {/* ─ Filters ─ */}
@@ -771,7 +1027,7 @@ const ViralCut = () => {
           )}
         </div>
 
-        {/* ── Center: Preview ────────────────────────────────────── */}
+        {/* ── Center: Preview ───────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           <div className="flex-1 flex items-center justify-center bg-black relative min-h-0 overflow-hidden">
             {!videoSrc ? (
@@ -786,33 +1042,28 @@ const ViralCut = () => {
               </div>
             ) : (
               <div className="relative max-h-full max-w-full flex items-center justify-center w-full h-full">
-                {chromaEnabled
-                  ? <canvas ref={canvasRef} className="max-h-full max-w-full object-contain" style={videoStyle} />
-                  : (
-                    <video
-                      ref={videoRef}
-                      src={videoSrc}
-                      onLoadedMetadata={handleMetadata}
-                      onTimeUpdate={handleTimeUpdate}
-                      onEnded={() => setPlaying(false)}
-                      className="max-h-full max-w-full object-contain"
-                      style={videoStyle}
-                      playsInline
-                    />
-                  )
-                }
-                {/* Hidden video for chroma processing */}
+                {/* Vídeo sempre presente (hidden quando chroma ativo) */}
+                <video
+                  ref={videoRef}
+                  src={videoSrc}
+                  onLoadedMetadata={handleMetadata}
+                  onEnded={() => setPlaying(false)}
+                  className={cn("max-h-full max-w-full object-contain", chromaEnabled && "hidden")}
+                  style={videoStyle}
+                  playsInline
+                />
+                {/* Canvas para chroma key */}
                 {chromaEnabled && (
-                  <video
-                    ref={videoRef}
-                    src={videoSrc}
-                    onLoadedMetadata={handleMetadata}
-                    onTimeUpdate={handleTimeUpdate}
-                    onEnded={() => setPlaying(false)}
-                    className="hidden"
-                    playsInline
-                  />
+                  <canvas ref={canvasRef} className="max-h-full max-w-full object-contain" style={videoStyle} />
                 )}
+
+                {/* Indicador de cortes ativos */}
+                {cutSegments.length > 0 && (
+                  <div className="absolute top-2 right-2 bg-primary/80 text-primary-foreground text-[9px] px-2 py-0.5 rounded-full">
+                    ✂️ {cutSegments.length} cortes ativos
+                  </div>
+                )}
+
                 {/* Caption overlay */}
                 {activeCaptions.map(cap => (
                   <div
@@ -821,10 +1072,10 @@ const ViralCut = () => {
                     style={{
                       bottom: `${100 - captionStyle.posY}%`,
                       color: captionStyle.color,
-                      fontSize: captionFontSize,
+                      fontSize: captionStyle.size,
                       fontWeight: 900,
-                      textShadow: captionStyle.shadow ? "0 2px 8px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,1)" : undefined,
-                      backgroundColor: captionStyle.bg ? "rgba(0,0,0,0.5)" : undefined,
+                      textShadow: captionStyle.shadow ? "0 2px 8px rgba(0,0,0,0.9)" : undefined,
+                      backgroundColor: captionStyle.bg ? "rgba(0,0,0,0.55)" : undefined,
                       letterSpacing: "0.05em",
                       textTransform: "uppercase",
                     }}
@@ -838,37 +1089,42 @@ const ViralCut = () => {
 
           {/* Player controls */}
           <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-3 py-2 flex items-center gap-2">
-            <button onClick={() => seekTo(0)} className="text-muted-foreground hover:text-foreground">
+            <button onClick={() => seekVirtual(0)} className="text-muted-foreground hover:text-foreground">
               <SkipBack className="h-4 w-4" />
             </button>
             <button onClick={togglePlay} className="h-7 w-7 rounded-full bg-primary flex items-center justify-center hover:bg-primary/80 transition-colors">
               {playing ? <Pause className="h-3.5 w-3.5 text-primary-foreground" /> : <Play className="h-3.5 w-3.5 text-primary-foreground ml-0.5" />}
             </button>
-            <button onClick={() => seekTo(duration)} className="text-muted-foreground hover:text-foreground">
+            <button onClick={() => seekVirtual(displayDuration)} className="text-muted-foreground hover:text-foreground">
               <SkipForward className="h-4 w-4" />
             </button>
 
-            {/* Seek bar */}
-            <div className="flex-1 relative h-1.5 bg-border rounded-full cursor-pointer group"
+            {/* Seek bar — mostra tempo virtual */}
+            <div className="flex-1 relative h-1.5 bg-border rounded-full cursor-pointer"
               onClick={e => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                const t = ((e.clientX - rect.left) / rect.width) * duration;
-                seekTo(t);
+                const vt = ((e.clientX - rect.left) / rect.width) * displayDuration;
+                seekVirtual(vt);
               }}>
               <div className="absolute h-full bg-primary rounded-full transition-none"
-                style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%" }} />
-              {/* Cut segments */}
-              {cutSegments.map(s => (
-                <div key={s.id} className="absolute top-0 h-full bg-yellow-400/40 rounded"
-                  style={{
-                    left: `${(s.start / duration) * 100}%`,
-                    width: `${((s.end - s.start) / duration) * 100}%`
-                  }} />
-              ))}
+                style={{ width: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%" }} />
+              {/* Marcadores de segmentos na barra */}
+              {cutSegments.length > 0 && (() => {
+                let acc = 0;
+                return cutSegments.map((s, i) => {
+                  const left = (acc / displayDuration) * 100;
+                  const w = ((s.end - s.start) / displayDuration) * 100;
+                  acc += s.end - s.start;
+                  return (
+                    <div key={s.id} className="absolute top-0 h-full bg-yellow-400/30 border-l border-yellow-400/60"
+                      style={{ left: `${left}%`, width: `${w}%` }} />
+                  );
+                });
+              })()}
             </div>
 
             <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatTime(displayTime)} / {formatTime(displayDuration)}
             </span>
 
             <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground">
@@ -881,13 +1137,18 @@ const ViralCut = () => {
         </div>
       </div>
 
-      {/* ── Timeline ──────────────────────────────────────────────── */}
+      {/* ── Timeline ─────────────────────────────────────────────────── */}
       <div className={cn(
         "shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 flex flex-col overflow-hidden transition-all duration-200",
         bottomCollapsed ? "h-8" : "h-44"
       )}>
         <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30 shrink-0">
           <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Timeline</span>
+          {cutSegments.length > 0 && (
+            <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5">
+              {cutSegments.length} cortes • {formatTime(displayDuration)} editado
+            </span>
+          )}
           <div className="flex items-center gap-1 ml-auto">
             <button onClick={() => setTimelineScale(s => Math.max(0.25, s - 0.25))} className="text-muted-foreground hover:text-foreground">
               <ZoomOut className="h-3 w-3" />
@@ -912,7 +1173,7 @@ const ViralCut = () => {
               <div className="min-w-max">
                 {/* Time ruler */}
                 <div className="flex h-5 border-b border-border/30 pl-32">
-                  {Array.from({ length: Math.ceil(duration) + 1 }).map((_, i) => (
+                  {Array.from({ length: Math.ceil(displayDuration) + 1 }).map((_, i) => (
                     <div key={i} className="relative shrink-0 border-l border-border/30"
                       style={{ width: timelineScale * 80 }}>
                       <span className="absolute top-0.5 left-1 text-[8px] text-muted-foreground">{i}s</span>
@@ -923,16 +1184,18 @@ const ViralCut = () => {
                 <div className="relative">
                   <div
                     className="absolute top-0 bottom-0 w-px bg-primary z-10 pointer-events-none"
-                    style={{ left: 128 + (currentTime * timelineScale * 80) }}
+                    style={{ left: 128 + (displayTime * timelineScale * 80) }}
                   />
                   {layers.map(layer => (
                     <TimelineLane
                       key={layer.id}
                       layer={layer}
-                      duration={duration}
+                      duration={displayDuration}
                       scale={timelineScale}
+                      currentTime={displayTime}
                       onToggleVisible={toggleLayerVisible}
                       onDelete={deleteLayer}
+                      onSeek={seekVirtual}
                     />
                   ))}
                 </div>
@@ -942,12 +1205,15 @@ const ViralCut = () => {
         )}
       </div>
 
-      {/* ── Processing overlay ────────────────────────────────────── */}
+      {/* ── Processing overlay ──────────────────────────────────────── */}
       {processing && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
           <div className="bg-card border border-border rounded-xl p-6 flex flex-col items-center gap-4 min-w-56">
             <Loader2 className="h-8 w-8 text-primary animate-spin" />
             <p className="text-sm font-medium">{processingMsg}</p>
+            <p className="text-xs text-muted-foreground text-center">
+              Os segmentos estão sendo renderizados via canvas
+            </p>
           </div>
         </div>
       )}
