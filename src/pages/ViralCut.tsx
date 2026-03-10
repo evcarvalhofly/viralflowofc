@@ -1456,7 +1456,7 @@ const ViralCut = () => {
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center border-2 border-dashed border-primary/40 group-hover:border-primary transition-colors">
                   <Film className="h-7 w-7 text-primary/50 group-hover:text-primary transition-colors" />
                 </div>
-                <p className="text-sm text-muted-foreground">Clique para carregar um vídeo</p>
+                <p className="text-sm text-muted-foreground text-center">Clique para carregar um vídeo</p>
               </div>
             ) : (
               <div className="relative max-h-full max-w-full flex items-center justify-center w-full h-full">
