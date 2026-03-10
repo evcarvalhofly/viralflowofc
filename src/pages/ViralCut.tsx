@@ -1709,7 +1709,7 @@ const ViralCut = () => {
       {/* ── Timeline ─────────────────────────────────────────────────── */}
       {!bottomCollapsed && (
         <div
-          className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/30 flex flex-col overflow-hidden h-44"
+          className="flex-1 min-h-0 bg-[hsl(220,25%,9%)] border-t border-border/30 flex flex-col overflow-hidden"
           onWheel={handleTimelineWheel}
           onTouchStart={handleTimelineTouchStart}
           onTouchMove={handleTimelineTouchMove}
