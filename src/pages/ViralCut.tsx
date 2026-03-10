@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { Scissors, X, RotateCcw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Scissors, X, RotateCcw, CheckCircle2, AlertCircle, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 import { ViralCutState, AutoCutMode, SubtitleOptions, Segment, SilenceRange, SubtitleItem } from '@/viralcut/types';
@@ -49,6 +49,7 @@ const ViralCut = () => {
   const [state, setState] = useState<ViralCutState>(DEFAULT_STATE);
   const [currentTime, setCurrentTime] = useState(0);
   const [embedSubtitles, setEmbedSubtitles] = useState(false);
+  const [showMobilePanel, setShowMobilePanel] = useState(false);
   const abortRef = useRef(false);
 
   const patch = (partial: Partial<ViralCutState>) =>
@@ -56,17 +57,10 @@ const ViralCut = () => {
 
   // ── Upload ────────────────────────────────────────────────────
   const handleFile = useCallback((file: File) => {
-    // Revoke old URLs
     if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
     if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
-
     const videoUrl = URL.createObjectURL(file);
-    patch({
-      ...DEFAULT_STATE,
-      file,
-      videoUrl,
-      step: 'ready',
-    });
+    patch({ ...DEFAULT_STATE, file, videoUrl, step: 'ready' });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -74,18 +68,18 @@ const ViralCut = () => {
     if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
     setState(DEFAULT_STATE);
     setCurrentTime(0);
+    setShowMobilePanel(false);
   };
 
   // ── Auto Cut ─────────────────────────────────────────────────
   const handleAutoCut = async () => {
     if (!state.file) return;
     abortRef.current = false;
-
+    setShowMobilePanel(false);
     patch({ step: 'analyzing', progress: 0, progressLabel: 'Analisando áudio…', error: null });
 
     try {
       const config = getAutoCutConfig(state.mode);
-
       const silences = await detectSilences(state.file, {
         threshold: config.threshold,
         minSilenceMs: config.minSilenceMs,
@@ -110,17 +104,14 @@ const ViralCut = () => {
         progressLabel: `${silences.length} silêncio(s) detectado(s)`,
       });
     } catch (err: any) {
-      patch({
-        step: 'ready',
-        error: err?.message ?? 'Erro ao analisar áudio',
-        progress: 0,
-      });
+      patch({ step: 'ready', error: err?.message ?? 'Erro ao analisar áudio', progress: 0 });
     }
   };
 
   // ── Subtitles ─────────────────────────────────────────────────
   const handleGenerateSubtitles = async () => {
     if (!state.file) return;
+    setShowMobilePanel(false);
     patch({ step: 'transcribing', progress: 0, progressLabel: 'Preparando transcrição…', error: null });
 
     try {
@@ -146,6 +137,7 @@ const ViralCut = () => {
   // ── Export ────────────────────────────────────────────────────
   const handleExport = async () => {
     if (!state.file || !state.keepSegments.length) return;
+    setShowMobilePanel(false);
     patch({ step: 'exporting', progress: 0, progressLabel: 'Iniciando exportação…', error: null });
 
     try {
@@ -160,17 +152,9 @@ const ViralCut = () => {
       });
 
       downloadBlob(blob, `viralcut-${Date.now()}.mp4`);
-      patch({
-        step: 'analyzed',
-        progress: 100,
-        progressLabel: 'Exportação concluída!',
-      });
+      patch({ step: 'analyzed', progress: 100, progressLabel: 'Exportação concluída!' });
     } catch (err: any) {
-      patch({
-        step: 'analyzed',
-        error: err?.message ?? 'Erro durante exportação',
-        progress: 0,
-      });
+      patch({ step: 'analyzed', error: err?.message ?? 'Erro durante exportação', progress: 0 });
     }
   };
 
@@ -192,10 +176,28 @@ const ViralCut = () => {
       ? state.duration - totalKeptDuration(state.keepSegments)
       : 0;
 
+  const controlPanelProps = {
+    mode: state.mode,
+    onModeChange: (m: AutoCutMode) => patch({ mode: m }),
+    onAutoCut: handleAutoCut,
+    onGenerateSubtitles: handleGenerateSubtitles,
+    onExport: handleExport,
+    subtitleOptions: state.subtitleOptions,
+    onSubtitleOptionsChange: handleSubtitleOptionsChange,
+    hasVideo,
+    hasSegments,
+    hasSubtitles,
+    isAnalyzing,
+    isTranscribing,
+    isExporting,
+    embedSubtitles,
+    onEmbedSubtitlesChange: setEmbedSubtitles,
+  };
+
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-border bg-card/50">
+      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border bg-card/50">
         <div className="flex items-center gap-2">
           <Scissors className="h-5 w-5 text-primary" />
           <span className="font-bold text-foreground text-base">ViralCut</span>
@@ -205,36 +207,45 @@ const ViralCut = () => {
         </div>
 
         {hasVideo && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {hasSegments && (
               <span className="hidden sm:inline text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
                 {fmtDuration(totalKeptDuration(state.keepSegments))} mantido
                 {savedTime > 0 && (
-                  <span className="text-primary ml-1">
-                    (−{fmtDuration(savedTime)})
-                  </span>
+                  <span className="text-primary ml-1">(−{fmtDuration(savedTime)})</span>
                 )}
               </span>
             )}
+            {/* Mobile tools button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowMobilePanel(true)}
+              disabled={isBusy}
+              className="lg:hidden h-8 px-2.5 gap-1.5"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span className="text-xs">Ferramentas</span>
+            </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleReset}
               disabled={isBusy}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground h-8 px-2"
             >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Novo vídeo
+              <RotateCcw className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Novo vídeo</span>
             </Button>
           </div>
         )}
       </div>
 
       {/* Body */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {!hasVideo ? (
           /* ── Upload screen ── */
-          <div className="flex flex-col items-center justify-center h-full p-8 max-w-xl mx-auto">
+          <div className="flex flex-col items-center justify-center h-full p-6 max-w-xl mx-auto overflow-y-auto">
             <div className="mb-6 text-center">
               <h1 className="text-2xl font-bold text-foreground mb-2">
                 Edição automática inteligente
@@ -247,123 +258,122 @@ const ViralCut = () => {
           </div>
         ) : (
           /* ── Editor layout ── */
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-0 h-full">
-            {/* Left: player + timeline */}
-            <div className="flex flex-col gap-4 p-4 min-w-0 overflow-y-auto">
-              {/* Error banner */}
-              {state.error && (
-                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{state.error}</span>
-                  <button
-                    className="ml-auto"
-                    onClick={() => patch({ error: null })}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+          <div className="h-full flex flex-col lg:flex-row overflow-hidden">
+
+            {/* ── Main content (player + timeline) ── */}
+            <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-y-auto">
+              <div className="flex flex-col gap-3 p-3 sm:p-4">
+                {/* Banners */}
+                {state.error && (
+                  <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2.5 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 min-w-0 text-xs sm:text-sm">{state.error}</span>
+                    <button onClick={() => patch({ error: null })}>
+                      <X className="h-4 w-4 shrink-0" />
+                    </button>
+                  </div>
+                )}
+
+                {state.progressLabel && !isBusy && !state.error && (
+                  <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/30 px-3 py-2.5 text-sm text-primary">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 min-w-0 text-xs sm:text-sm">{state.progressLabel}</span>
+                    <button onClick={() => patch({ progressLabel: '' })}>
+                      <X className="h-4 w-4 shrink-0" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Processing overlay */}
+                {isBusy && (
+                  <ProcessingOverlay
+                    label={state.progressLabel}
+                    progress={state.progress}
+                  />
+                )}
+
+                {/* Preview player — always rendered, just hidden when busy to preserve state */}
+                <div className={isBusy ? 'hidden' : undefined}>
+                  <PreviewPlayer
+                    videoUrl={state.videoUrl!}
+                    subtitles={state.subtitles}
+                    subtitleOptions={state.subtitleOptions}
+                    keepSegments={state.keepSegments}
+                    onTimeUpdate={setCurrentTime}
+                    onDurationChange={(d) => patch({ duration: d })}
+                  />
                 </div>
-              )}
 
-              {/* Success banner */}
-              {state.progressLabel && !isBusy && !state.error && (
-                <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-primary">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  <span>{state.progressLabel}</span>
-                  <button
-                    className="ml-auto"
-                    onClick={() => patch({ progressLabel: '' })}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                {/* Timeline */}
+                {!isBusy && (
+                  <Timeline
+                    audioUrl={state.videoUrl!}
+                    silences={state.silences}
+                    keepSegments={state.keepSegments}
+                    currentTime={currentTime}
+                    duration={state.duration}
+                  />
+                )}
+
+                {/* Stats row */}
+                {hasSegments && !isBusy && (
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    {[
+                      { label: 'Original', value: fmtDuration(state.duration), color: 'text-muted-foreground' },
+                      { label: 'Removido', value: fmtDuration(savedTime), color: 'text-destructive' },
+                      { label: 'Final', value: fmtDuration(totalKeptDuration(state.keepSegments)), color: 'text-primary' },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-xl bg-card border border-border py-2.5 px-2">
+                        <p className={`text-base sm:text-lg font-bold ${item.color}`}>{item.value}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Mobile: inline control panel at bottom (visible only on mobile when panel is NOT open as sheet) */}
+                <div className="lg:hidden pb-2">
+                  <ControlPanel {...controlPanelProps} />
                 </div>
-              )}
-
-              {/* Processing overlay */}
-              {isBusy && (
-                <ProcessingOverlay
-                  label={state.progressLabel}
-                  progress={state.progress}
-                />
-              )}
-
-              {/* Preview player */}
-              {!isBusy && (
-                <PreviewPlayer
-                  videoUrl={state.videoUrl!}
-                  subtitles={state.subtitles}
-                  subtitleOptions={state.subtitleOptions}
-                  keepSegments={state.keepSegments}
-                  onTimeUpdate={setCurrentTime}
-                  onDurationChange={(d) => patch({ duration: d })}
-                />
-              )}
-
-              {/* Timeline */}
-              {!isBusy && (
-                <Timeline
-                  audioUrl={state.videoUrl!}
-                  silences={state.silences}
-                  keepSegments={state.keepSegments}
-                  currentTime={currentTime}
-                  duration={state.duration}
-                />
-              )}
-
-              {/* Stats row */}
-              {hasSegments && !isBusy && (
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  {[
-                    {
-                      label: 'Original',
-                      value: fmtDuration(state.duration),
-                      color: 'text-muted-foreground',
-                    },
-                    {
-                      label: 'Removido',
-                      value: fmtDuration(savedTime),
-                      color: 'text-destructive',
-                    },
-                    {
-                      label: 'Final',
-                      value: fmtDuration(totalKeptDuration(state.keepSegments)),
-                      color: 'text-primary',
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-xl bg-card border border-border py-3 px-2"
-                    >
-                      <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{item.label}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+              </div>
             </div>
 
-            {/* Right: control panel */}
-            <div className="border-l border-border bg-card/30 p-4 overflow-y-auto">
-              <ControlPanel
-                mode={state.mode}
-                onModeChange={(m) => patch({ mode: m })}
-                onAutoCut={handleAutoCut}
-                onGenerateSubtitles={handleGenerateSubtitles}
-                onExport={handleExport}
-                subtitleOptions={state.subtitleOptions}
-                onSubtitleOptionsChange={handleSubtitleOptionsChange}
-                hasVideo={hasVideo}
-                hasSegments={hasSegments}
-                hasSubtitles={hasSubtitles}
-                isAnalyzing={isAnalyzing}
-                isTranscribing={isTranscribing}
-                isExporting={isExporting}
-                embedSubtitles={embedSubtitles}
-                onEmbedSubtitlesChange={setEmbedSubtitles}
-              />
+            {/* ── Desktop sidebar ── */}
+            <div className="hidden lg:flex lg:w-[300px] xl:w-[320px] shrink-0 flex-col border-l border-border bg-card/30 overflow-y-auto">
+              <div className="p-4">
+                <ControlPanel {...controlPanelProps} />
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* ── Mobile bottom sheet overlay ── */}
+      {showMobilePanel && hasVideo && (
+        <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowMobilePanel(false)}
+          />
+          {/* Sheet */}
+          <div className="relative z-10 bg-card border-t border-border rounded-t-2xl max-h-[80vh] flex flex-col">
+            {/* Handle */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+              <span className="text-sm font-semibold text-foreground">Ferramentas</span>
+              <button
+                onClick={() => setShowMobilePanel(false)}
+                className="text-muted-foreground hover:text-foreground p-1"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4">
+              <ControlPanel {...controlPanelProps} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
