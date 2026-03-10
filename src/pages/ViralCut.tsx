@@ -1,16 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Upload, Scissors, Type, Layers, Wand2, Download, Play, Pause,
+  Upload, Scissors, Type, Layers, Download, Play, Pause,
   SkipBack, SkipForward, Volume2, VolumeX, ZoomIn, ZoomOut,
-  Film, Music, Sparkles, Trash2, Eye, EyeOff,
+  Music, Sparkles, Trash2, Eye, EyeOff,
   ChevronRight, ChevronLeft, Loader2, X,
-  RotateCcw, ChevronUp, ChevronDown, Mic, MicOff, Undo2
+  ChevronUp, ChevronDown, Mic, Undo2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
