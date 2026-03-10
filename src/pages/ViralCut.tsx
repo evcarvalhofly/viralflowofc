@@ -710,9 +710,13 @@ const ViralCut = () => {
   const captionsRef = useRef(captions);
   useEffect(() => { captionsRef.current = captions; }, [captions]);
 
+  // Use a ref to track playing state inside RAF to avoid stale closures
+  const playingRef = useRef(false);
+  useEffect(() => { playingRef.current = playing; }, [playing]);
+
   const updateLoop = useCallback(() => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || !playingRef.current) return;
 
     const src = v.currentTime;            // ← read source time from video
     const clips = timelineClipsRef.current;
@@ -745,28 +749,38 @@ const ViralCut = () => {
       }
     }
 
-    // Skip over silences: if source position is not inside any clip, jump to next clip
-    if (clips.length > 1 && !v.paused) {
-      const videoClips = clips
-        .filter(c => c.kind === "video" && c.visible)
-        .sort((a, b) => a.sourceStart - b.sourceStart);
+    // ── Gap-skip and end-of-timeline logic ───────────────────────────────
+    const videoClips = clips
+      .filter(c => c.kind === "video" && c.visible)
+      .sort((a, b) => a.sourceStart - b.sourceStart);
 
-      const inClip = videoClips.some(c => src >= c.sourceStart && src < c.sourceEnd);
-      if (!inClip) {
-        const nextClip = videoClips.find(c => c.sourceStart > src);
-        if (nextClip) {
-          v.currentTime = nextClip.sourceStart; // ← source time
-        } else {
-          v.pause();
-          setPlaying(false);
-        }
-      }
-
-      // Stop at timeline end
+    if (videoClips.length > 0) {
       const timelineEnd = Math.max(...videoClips.map(c => c.timelineEnd));
+
+      // Stop at end of timeline
       if (tl >= timelineEnd - 0.05) {
         v.pause();
+        playingRef.current = false;
         setPlaying(false);
+        rafRef.current = 0;
+        return; // stop the RAF
+      }
+
+      // Skip over gaps between clips (source time not inside any clip)
+      if (videoClips.length > 1 && !v.paused) {
+        const inClip = videoClips.some(c => src >= c.sourceStart - 0.05 && src < c.sourceEnd);
+        if (!inClip) {
+          const nextClip = videoClips.find(c => c.sourceStart > src);
+          if (nextClip) {
+            v.currentTime = nextClip.sourceStart; // jump to next clip source start
+          } else {
+            v.pause();
+            playingRef.current = false;
+            setPlaying(false);
+            rafRef.current = 0;
+            return;
+          }
+        }
       }
     }
 
