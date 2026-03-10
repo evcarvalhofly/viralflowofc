@@ -1004,6 +1004,48 @@ const ViralCut = () => {
     });
   }, []);
 
+  // ─── Reset main media (called when video is fully removed) ───────────────
+  const resetMainMediaState = useCallback(() => {
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      v.removeAttribute("src");
+      v.load();
+    }
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    cancelAnimationFrame(rafRef.current);
+
+    setPlaying(false);
+    setMuted(false);
+    setTimelineTime(0);
+    setSourceTime(0);
+    setDuration(0);
+    setVirtualDuration(0);
+    virtualDurationRef.current = 0;
+
+    setVideoSrc(null);
+    setVideoName("Sem vídeo");
+    setSourceMedia(null);
+    setVideoFile(null);
+
+    setCaptions([]);
+    setActiveCaptions([]);
+    setTranscriptWords([]);
+    setTranscriptRaw("");
+
+    setTimelineClips([]);
+    timelineClipsRef.current = [];
+
+    setLayers(prev => prev.filter(l => l.type !== "video"));
+    setHistory([]);
+  }, []);
+
   const handleClipDelete = useCallback((id: string) => {
     pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     const nextClips = deleteClip(timelineClipsRef.current, id);
