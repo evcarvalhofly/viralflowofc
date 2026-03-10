@@ -1847,6 +1847,9 @@ const ViralCut = () => {
         </div>
       )}
 
+      {/* Close bottom panel wrapper */}
+      </div>
+
       {/* ── Processing overlay ──────────────────────────────────────── */}
       {processing && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
