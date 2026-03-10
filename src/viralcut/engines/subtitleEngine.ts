@@ -188,7 +188,7 @@ function runWorker(
   return new Promise((resolve, reject) => {
     // Vite handles ?worker with type module correctly
     const worker = new Worker(
-      new URL('./workers/transcriber.worker.ts', import.meta.url),
+      new URL('../workers/transcriber.worker.ts', import.meta.url),
       { type: 'module' }
     );
 
