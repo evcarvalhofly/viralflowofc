@@ -119,6 +119,9 @@ const ViralCut = () => {
         patch({ progressLabel: label, progress: 30 });
       });
 
+      // Auto-enable embed when subtitles are freshly generated
+      setEmbedSubtitles(true);
+
       patch({
         step: state.keepSegments.length ? 'analyzed' : 'ready',
         subtitles,
