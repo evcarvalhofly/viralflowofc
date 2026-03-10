@@ -262,7 +262,7 @@ export function ControlPanel({
         )}
 
         <Button
-          className="w-full bg-green-600 hover:bg-green-500 text-white"
+          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
           onClick={onExport}
           disabled={!hasSegments || isExporting || isAnalyzing || isTranscribing}
         >

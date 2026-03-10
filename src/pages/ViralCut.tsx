@@ -266,7 +266,7 @@ const ViralCut = () => {
 
               {/* Success banner */}
               {state.progressLabel && !isBusy && !state.error && (
-                <div className="flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/30 px-4 py-3 text-sm text-green-400">
+                <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-primary">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
                   <span>{state.progressLabel}</span>
                   <button
