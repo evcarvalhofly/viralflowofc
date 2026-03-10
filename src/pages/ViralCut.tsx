@@ -1,34 +1,34 @@
 /**
  * ViralCut — lightweight editor
- * Two features only: Auto-cut (silence removal) + Captions (Web Speech API)
+ * Features: Auto-cut (silence removal) + Captions (Web Speech API)
  *
- * Preview: native video.play() with requestAnimationFrame for smooth playhead.
- *          Gap-skip uses a single accurate setTimeout per clip (no timeupdate conflicts).
+ * Preview: native video.play() with requestAnimationFrame.
+ *          Gap-skip uses a SINGLE setTimeout + isJumping guard to prevent double-fire.
  *
- * Export:  Real-time play-through via captureStream() + MediaRecorder.
- *          FAR faster than frame-by-frame canvas encoding.
- *          Audio is captured live from the source video element — no AudioContext hacks.
+ * Export:  FFmpeg.wasm — trims + concatenates segments offline (no real-time playback).
+ *          Silent, fast, correct.
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Upload, Scissors, Sparkles, Download, Play, Pause,
+  Upload, Scissors, Download, Play, Pause,
   Volume2, VolumeX, ZoomIn, ZoomOut, Loader2, X,
   ChevronDown, ChevronUp, Mic, MicOff, Undo2, RotateCcw,
+  Settings2, ChevronLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Clip {
   id: string;
-  /** real time in source file */
   srcStart: number;
   srcEnd: number;
-  /** position in the edited (virtual) timeline */
   tlStart: number;
   tlEnd: number;
 }
@@ -36,7 +36,7 @@ interface Clip {
 interface Caption {
   id: string;
   text: string;
-  start: number; // timeline time
+  start: number;
   end: number;
 }
 
@@ -75,9 +75,9 @@ async function detectSilence(
   const sr = audio.sampleRate;
   const win = Math.floor(sr * 0.05);
   const threshold = Math.pow(10, -30 / 20);
-
   const marginBefore = 0.1;
   const marginAfter = 0.12;
+
   const keeps: Array<{ start: number; end: number }> = [];
   let lastEnd = 0;
   let silStart = 0;
@@ -88,7 +88,6 @@ async function detectSilence(
     for (let j = i; j < Math.min(i + win, data.length); j++) sum += data[j] * data[j];
     const rms = Math.sqrt(sum / win);
     const t = i / sr;
-
     if (rms < threshold && !inSil) { inSil = true; silStart = t; }
     if (rms >= threshold && inSil) {
       inSil = false;
@@ -102,30 +101,21 @@ async function detectSilence(
   }
   keeps.push({ start: lastEnd, end: dur });
   onProgress(100);
-
   const result = keeps.filter(k => k.end - k.start > 0.1);
   return result.length > 0 ? result : [{ start: 0, end: dur }];
 }
 
-// ─── Build clip array from segments ──────────────────────────────────────────
+// ─── Build clips ──────────────────────────────────────────────────────────────
 
 function buildClips(segs: Array<{ start: number; end: number }>): Clip[] {
   let cursor = 0;
   return segs.map((seg, i) => {
     const dur = seg.end - seg.start;
-    const clip: Clip = {
-      id: `c${i}`,
-      srcStart: seg.start,
-      srcEnd: seg.end,
-      tlStart: cursor,
-      tlEnd: cursor + dur,
-    };
+    const clip: Clip = { id: `c${i}`, srcStart: seg.start, srcEnd: seg.end, tlStart: cursor, tlEnd: cursor + dur };
     cursor += dur;
     return clip;
   });
 }
-
-// ─── Time converters ──────────────────────────────────────────────────────────
 
 function tlToSrc(tl: number, clips: Clip[]): number | null {
   for (const c of clips) {
@@ -142,33 +132,30 @@ function srcToTl(src: number, clips: Clip[]): number {
   return last ? last.tlEnd : src;
 }
 
-// ─── Clip block (timeline) ────────────────────────────────────────────────────
+// ─── ClipBlock ────────────────────────────────────────────────────────────────
 
 const CLIP_COLORS = [
   "hsl(262,70%,52%)", "hsl(299,70%,45%)", "hsl(210,80%,48%)",
   "hsl(160,65%,38%)", "hsl(25,85%,50%)", "hsl(340,75%,50%)",
 ];
 
-function ClipBlock({
-  clip, idx, pxPerSec, onDelete,
-}: {
+function ClipBlock({ clip, idx, pxPerSec, onDelete }: {
   clip: Clip; idx: number; pxPerSec: number; onDelete: (id: string) => void;
 }) {
   const left = clip.tlStart * pxPerSec;
   const width = Math.max(8, (clip.tlEnd - clip.tlStart) * pxPerSec);
   const color = CLIP_COLORS[idx % CLIP_COLORS.length];
-
   return (
     <div
-      className="absolute top-1 bottom-1 rounded flex items-center overflow-hidden border border-white/10 shadow group"
+      className="absolute top-1 bottom-1 rounded flex items-center overflow-hidden border border-white/10 shadow group cursor-pointer"
       style={{ left, width, backgroundColor: color }}
     >
       <span className="text-[9px] text-white font-bold px-2 flex-1 text-center truncate pointer-events-none select-none">
         {idx + 1}
       </span>
-      {width > 32 && (
+      {width > 28 && (
         <button
-          className="absolute right-1 top-0.5 h-4 w-4 rounded-full bg-black/50 items-center justify-center opacity-0 group-hover:opacity-100 flex z-10"
+          className="absolute right-0.5 top-0.5 h-4 w-4 rounded-full bg-black/60 items-center justify-center opacity-0 group-hover:opacity-100 flex z-10"
           onMouseDown={e => { e.stopPropagation(); onDelete(clip.id); }}
         >
           <X className="h-2.5 w-2.5 text-white" />
@@ -176,6 +163,77 @@ function ClipBlock({
       )}
     </div>
   );
+}
+
+// ─── FFmpeg export (offline, fast) ───────────────────────────────────────────
+
+async function exportWithFFmpeg(
+  videoFile: File,
+  segs: Array<{ start: number; end: number }>,
+  onProgress: (pct: number, msg: string) => void,
+): Promise<Blob> {
+  const ffmpeg = new FFmpeg();
+
+  // Load FFmpeg core from CDN
+  onProgress(2, "Carregando FFmpeg...");
+  const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+  });
+
+  onProgress(10, "Carregando vídeo...");
+  await ffmpeg.writeFile("input.mp4", await fetchFile(videoFile));
+
+  // Trim each segment
+  const segFiles: string[] = [];
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    const outName = `seg${i}.mp4`;
+    const pct = 10 + Math.round((i / segs.length) * 70);
+    onProgress(pct, `Cortando clipe ${i + 1}/${segs.length}...`);
+
+    await ffmpeg.exec([
+      "-ss", String(seg.start.toFixed(3)),
+      "-i", "input.mp4",
+      "-t", String((seg.end - seg.start).toFixed(3)),
+      "-c", "copy",          // stream copy — fast, no re-encode
+      "-avoid_negative_ts", "1",
+      outName,
+    ]);
+    segFiles.push(outName);
+  }
+
+  onProgress(82, "Concatenando clipes...");
+
+  const toBlob = (fileData: Awaited<ReturnType<typeof ffmpeg.readFile>>, mime: string) => {
+    // Copy bytes into a plain ArrayBuffer to satisfy TypeScript / avoid SharedArrayBuffer issues
+    const u8 = fileData as Uint8Array;
+    const plain = new Uint8Array(u8.byteLength);
+    plain.set(u8);
+    return new Blob([plain.buffer as ArrayBuffer], { type: mime });
+  };
+
+  if (segFiles.length === 1) {
+    const data = await ffmpeg.readFile(segFiles[0]);
+    return toBlob(data, "video/mp4");
+  }
+
+  // Write concat list
+  const concatList = segFiles.map(f => `file '${f}'`).join("\n");
+  await ffmpeg.writeFile("list.txt", concatList);
+
+  await ffmpeg.exec([
+    "-f", "concat",
+    "-safe", "0",
+    "-i", "list.txt",
+    "-c", "copy",
+    "output.mp4",
+  ]);
+
+  onProgress(96, "Finalizando...");
+  const data = await ffmpeg.readFile("output.mp4");
+  return toBlob(data, "video/mp4");
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -186,18 +244,20 @@ export default function ViralCut() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rafRef = useRef<number>(0);
   const clipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard: prevents seeked from re-scheduling while a jump is in flight
+  const isJumpingRef = useRef(false);
 
-  // ── Media state ────────────────────────────────────────────────────────────
+  // ── Media ──────────────────────────────────────────────────────────────────
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoName, setVideoName] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [duration, setDuration] = useState(0);
 
-  // ── Playback state ─────────────────────────────────────────────────────────
+  // ── Playback ───────────────────────────────────────────────────────────────
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(80);
-  const [tlTime, setTlTime] = useState(0);       // visual playhead (timeline time)
+  const [tlTime, setTlTime] = useState(0);
   const playingRef = useRef(false);
   useEffect(() => { playingRef.current = playing; }, [playing]);
 
@@ -206,9 +266,7 @@ export default function ViralCut() {
   const clipsRef = useRef<Clip[]>([]);
   useEffect(() => { clipsRef.current = clips; }, [clips]);
 
-  const tlDuration = clips.length > 0
-    ? clips[clips.length - 1].tlEnd
-    : duration;
+  const tlDuration = clips.length > 0 ? clips[clips.length - 1].tlEnd : duration;
 
   // ── Cut controls ───────────────────────────────────────────────────────────
   const [cutLevel, setCutLevel] = useState<CutLevel>("medio");
@@ -235,6 +293,7 @@ export default function ViralCut() {
   const [scale, setScale] = useState(1);
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const [undoClips, setUndoClips] = useState<Clip[] | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pxPerSec = scale * 80;
 
   // ─── Video load ────────────────────────────────────────────────────────────
@@ -250,6 +309,7 @@ export default function ViralCut() {
     setCaptions([]);
     setTlTime(0);
     setPlaying(false);
+    playingRef.current = false;
     e.target.value = "";
   };
 
@@ -268,7 +328,10 @@ export default function ViralCut() {
     if (v) { v.volume = volume / 100; v.muted = muted; }
   }, [volume, muted]);
 
-  // ─── RAF loop — updates playhead ───────────────────────────────────────────
+  // ─── RAF loop ─────────────────────────────────────────────────────────────
+  const captionsRef = useRef(captions);
+  useEffect(() => { captionsRef.current = captions; }, [captions]);
+
   const rafLoop = useCallback(() => {
     const v = videoRef.current;
     if (!v || !playingRef.current) return;
@@ -276,14 +339,10 @@ export default function ViralCut() {
     const cs = clipsRef.current;
     const tl = cs.length > 0 ? srcToTl(src, cs) : src;
     setTlTime(tl);
-
-    // Update active caption
-    const tlDur = cs.length > 0 ? cs[cs.length - 1].tlEnd : v.duration;
-    const cap = captions.find(c => tl >= c.start && tl < c.end) ?? null;
+    const cap = captionsRef.current.find(c => tl >= c.start && tl < c.end) ?? null;
     setActiveCaption(cap);
-
     rafRef.current = requestAnimationFrame(rafLoop);
-  }, [captions]);
+  }, []);
 
   useEffect(() => {
     if (playing) rafRef.current = requestAnimationFrame(rafLoop);
@@ -291,22 +350,20 @@ export default function ViralCut() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing, rafLoop]);
 
-  // ─── Clip-skip logic ───────────────────────────────────────────────────────
-  // Called once per clip when play starts or a seek happens.
-  // Schedules a single precise timer to jump to the next clip boundary.
-
+  // ─── Clip-skip — single timer + isJumping guard ───────────────────────────
   const scheduleNextJump = useCallback((v: HTMLVideoElement) => {
     if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
     const cs = clipsRef.current;
     if (cs.length === 0) return;
 
     const src = v.currentTime;
-    const clipIdx = cs.findIndex(c => src >= c.srcStart && src < c.srcEnd);
+    const clipIdx = cs.findIndex(c => src >= c.srcStart && src < c.srcEnd - 0.01);
 
     if (clipIdx === -1) {
-      // In a gap — jump immediately to next clip
+      // In a gap — jump immediately
       const next = cs.find(c => c.srcStart > src);
       if (next) {
+        isJumpingRef.current = true;
         v.currentTime = next.srcStart;
       } else {
         v.pause(); setPlaying(false); playingRef.current = false;
@@ -316,30 +373,47 @@ export default function ViralCut() {
 
     const cur = cs[clipIdx];
     const next = cs[clipIdx + 1];
-    const remaining = (cur.srcEnd - src) / (v.playbackRate || 1);
-    // Schedule 40ms early to avoid overshoot
-    const delay = Math.max(0, remaining * 1000 - 40);
+    const remaining = (cur.srcEnd - src) / Math.max(0.1, v.playbackRate);
+    // Schedule 50ms early so we don't overshoot into the gap
+    const delay = Math.max(0, remaining * 1000 - 50);
 
     clipTimerRef.current = setTimeout(() => {
       if (!playingRef.current || v.paused) return;
       if (next) {
+        isJumpingRef.current = true;
         v.currentTime = next.srcStart;
-        // scheduleNextJump will be called again from the seeked handler
+        // onSeeked will reschedule after the seek completes
       } else {
-        v.pause(); setPlaying(false); playingRef.current = false;
+        v.pause();
+        setPlaying(false);
+        playingRef.current = false;
         setTlTime(cs[cs.length - 1].tlEnd);
       }
     }, delay);
   }, []);
 
-  // Attach video event listeners
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
 
-    const onPlay = () => scheduleNextJump(v);
-    const onSeeked = () => { if (playingRef.current) scheduleNextJump(v); };
-    const onPause = () => { if (clipTimerRef.current) clearTimeout(clipTimerRef.current); };
+    const onPlay = () => {
+      isJumpingRef.current = false;
+      scheduleNextJump(v);
+    };
+    const onSeeked = () => {
+      // Only reschedule if this seeked was triggered by our jump logic
+      if (isJumpingRef.current) {
+        isJumpingRef.current = false;
+        if (playingRef.current) {
+          // Small delay to let the video stabilise before rescheduling
+          setTimeout(() => scheduleNextJump(v), 30);
+        }
+      }
+    };
+    const onPause = () => {
+      if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
+      isJumpingRef.current = false;
+    };
     const onEnded = () => { setPlaying(false); playingRef.current = false; };
 
     v.addEventListener("play", onPlay);
@@ -356,18 +430,27 @@ export default function ViralCut() {
   }, [scheduleNextJump, videoSrc]);
 
   // ─── Seek ──────────────────────────────────────────────────────────────────
-
   const seek = useCallback((tl: number) => {
     const v = videoRef.current;
     if (!v) return;
     const cs = clipsRef.current;
     const src = cs.length > 0 ? (tlToSrc(tl, cs) ?? cs[0].srcStart) : tl;
+    // Manual seek is NOT a jump — clear the flag so onSeeked doesn't reschedule
+    isJumpingRef.current = false;
+    if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
     v.currentTime = src;
     setTlTime(tl);
-  }, []);
+    // If playing, reschedule after seek settles
+    if (playingRef.current) {
+      const onS = () => {
+        v.removeEventListener("seeked", onS);
+        scheduleNextJump(v);
+      };
+      v.addEventListener("seeked", onS);
+    }
+  }, [scheduleNextJump]);
 
   // ─── Play / pause ──────────────────────────────────────────────────────────
-
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -376,8 +459,8 @@ export default function ViralCut() {
       setPlaying(false);
     } else {
       const cs = clipsRef.current;
-      // If playhead is at the very end, rewind to first clip start
       if (cs.length > 0 && tlTime >= cs[cs.length - 1].tlEnd - 0.05) {
+        isJumpingRef.current = false;
         v.currentTime = cs[0].srcStart;
         setTlTime(cs[0].tlStart);
       }
@@ -387,7 +470,6 @@ export default function ViralCut() {
   };
 
   // ─── Auto-cut ──────────────────────────────────────────────────────────────
-
   const handleAutoCut = async () => {
     if (!videoSrc || duration <= 0) {
       toast({ title: "Carregue um vídeo primeiro", variant: "destructive" });
@@ -398,7 +480,6 @@ export default function ViralCut() {
     setCutPct(0);
     videoRef.current?.pause();
     setPlaying(false);
-
     try {
       const segs = await detectSilence(videoSrc, duration, SILENCE_THRESHOLDS[cutLevel], setCutPct);
       const newClips = buildClips(segs);
@@ -420,36 +501,33 @@ export default function ViralCut() {
     setClips([full]);
     clipsRef.current = [full];
     setTlTime(0);
-    videoRef.current!.currentTime = 0;
+    if (videoRef.current) videoRef.current.currentTime = 0;
     toast({ title: "Cortes desfeitos" });
   };
 
   const handleDeleteClip = useCallback((id: string) => {
-    setUndoClips(clips);
+    setUndoClips(prev => prev ?? clipsRef.current);
     setClips(prev => {
       const next = prev.filter(c => c.id !== id);
       if (next.length === 0) {
-        // reset
         const full: Clip = { id: "c0", srcStart: 0, srcEnd: duration, tlStart: 0, tlEnd: duration };
         clipsRef.current = [full];
         return [full];
       }
-      // re-pack timeline positions
       let cursor = 0;
       const repacked = next.map(c => {
-        const dur = c.srcEnd - c.srcStart;
-        const nc = { ...c, tlStart: cursor, tlEnd: cursor + dur };
-        cursor += dur;
+        const d = c.srcEnd - c.srcStart;
+        const nc = { ...c, tlStart: cursor, tlEnd: cursor + d };
+        cursor += d;
         return nc;
       });
       clipsRef.current = repacked;
       return repacked;
     });
     toast({ title: "Clipe removido" });
-  }, [clips, duration]);
+  }, [duration]);
 
-  // ─── Captions via Web Speech API ──────────────────────────────────────────
-
+  // ─── Captions ──────────────────────────────────────────────────────────────
   const startTranscription = async () => {
     const v = videoRef.current;
     if (!v || !videoSrc) { toast({ title: "Carregue um vídeo primeiro", variant: "destructive" }); return; }
@@ -471,7 +549,11 @@ export default function ViralCut() {
         if (event.results[i].isFinal) {
           const words = event.results[i][0].transcript.trim().split(/\s+/).filter(Boolean);
           words.forEach((w: string, wi: number) => {
-            wordTimingsRef.current.push({ text: w, start: Math.max(0, vt - words.length * 0.4 + wi * 0.4), end: vt - words.length * 0.4 + (wi + 1) * 0.4 });
+            wordTimingsRef.current.push({
+              text: w,
+              start: Math.max(0, vt - words.length * 0.4 + wi * 0.4),
+              end: vt - words.length * 0.4 + (wi + 1) * 0.4,
+            });
           });
         }
       }
@@ -483,7 +565,6 @@ export default function ViralCut() {
       setCaptionTranscribing(false);
       const wt = wordTimingsRef.current;
       if (wt.length === 0) { toast({ title: "Nenhuma fala detectada", variant: "destructive" }); return; }
-      // Split into blocks
       const blocks: Caption[] = [];
       for (let i = 0; i < wt.length; i += wordMode) {
         const chunk = wt.slice(i, i + wordMode);
@@ -495,7 +576,6 @@ export default function ViralCut() {
 
     recognition.onerror = () => { setCaptionTranscribing(false); };
 
-    // rewind and play from source start
     v.currentTime = clipsRef.current.length > 0 ? clipsRef.current[0].srcStart : 0;
     setTlTime(0);
     recognition.start();
@@ -510,10 +590,7 @@ export default function ViralCut() {
     setCaptionTranscribing(false);
   };
 
-  // ─── Export — real-time play-through via captureStream ────────────────────
-  // Strategy: create a hidden video, play each segment in sequence, record with MediaRecorder.
-  // This is MUCH faster than frame-by-frame (real-time speed) and keeps perfect audio sync.
-
+  // ─── Export via FFmpeg.wasm (offline, no playback) ────────────────────────
   const handleExport = async () => {
     if (!videoSrc || !videoFile) { toast({ title: "Sem vídeo", variant: "destructive" }); return; }
     const segs = clips.length > 0
@@ -522,92 +599,23 @@ export default function ViralCut() {
 
     setExporting(true);
     setExportPct(0);
-    setExportMsg("Preparando exportação...");
+    setExportMsg("Preparando...");
     videoRef.current?.pause();
     setPlaying(false);
 
     try {
-      // Create a hidden video for export (separate from the preview)
-      const ev = document.createElement("video");
-      ev.src = videoSrc;
-      ev.crossOrigin = "anonymous";
-      ev.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;pointer-events:none";
-      document.body.appendChild(ev);
-
-      await new Promise<void>((res, rej) => {
-        ev.onloadedmetadata = () => res();
-        ev.onerror = () => rej(new Error("Falha ao carregar vídeo"));
-        setTimeout(() => rej(new Error("Timeout")), 20_000);
+      const blob = await exportWithFFmpeg(videoFile, segs, (pct, msg) => {
+        setExportPct(pct);
+        setExportMsg(msg);
       });
 
-      // Capture stream directly from the video element (includes audio!)
-      const stream: MediaStream = (ev as any).captureStream
-        ? (ev as any).captureStream()
-        : (ev as any).mozCaptureStream();
-
-      const mimeType = [
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8,opus",
-        "video/webm",
-      ].find(m => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
-
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 });
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-      recorder.start(250);
-
-      const totalDur = segs.reduce((a, s) => a + (s.end - s.start), 0);
-      let elapsed = 0;
-
-      for (let si = 0; si < segs.length; si++) {
-        const seg = segs[si];
-        const segDur = seg.end - seg.start;
-        setExportMsg(`Exportando clipe ${si + 1}/${segs.length}...`);
-
-        // Seek to segment start
-        ev.currentTime = seg.start;
-        await new Promise<void>(res => {
-          const onSeeked = () => { ev.removeEventListener("seeked", onSeeked); res(); };
-          ev.addEventListener("seeked", onSeeked);
-          setTimeout(res, 3000);
-        });
-
-        // Play this segment and wait for it to finish
-        await ev.play();
-
-        await new Promise<void>(res => {
-          const startTime = performance.now();
-          const tick = () => {
-            const played = (performance.now() - startTime) / 1000;
-            const pct = Math.round(((elapsed + played) / totalDur) * 100);
-            setExportPct(Math.min(99, pct));
-
-            if (ev.currentTime >= seg.end - 0.05 || played >= segDur) {
-              ev.pause();
-              elapsed += segDur;
-              res();
-            } else {
-              requestAnimationFrame(tick);
-            }
-          };
-          requestAnimationFrame(tick);
-        });
-      }
-
-      setExportMsg("Finalizando...");
-      recorder.stop();
-      await new Promise<void>(res => { recorder.onstop = () => res(); });
-      document.body.removeChild(ev);
-
       setExportPct(100);
-      const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.webm";
+      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.mp4";
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
-
       toast({ title: `✅ Exportado! ${segs.length} clipe${segs.length > 1 ? "s" : ""} concatenados.` });
     } catch (err) {
       toast({ title: "Erro na exportação", description: String(err), variant: "destructive" });
@@ -630,43 +638,50 @@ export default function ViralCut() {
 
       {/* ── Top Bar ──────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40 bg-[hsl(220,25%,10%)] shrink-0">
+        {/* Mobile sidebar toggle */}
+        <button
+          className="md:hidden text-muted-foreground hover:text-foreground mr-1"
+          onClick={() => setSidebarOpen(s => !s)}
+        >
+          <Settings2 className="h-4 w-4" />
+        </button>
+
         <Scissors className="h-4 w-4 text-primary shrink-0" />
         <span className="text-sm font-bold text-primary shrink-0">ViralCut</span>
-        {videoName && <span className="text-[10px] text-muted-foreground truncate max-w-[120px] hidden sm:block">{videoName}</span>}
+        {videoName && <span className="text-[10px] text-muted-foreground truncate max-w-[100px] hidden sm:block">{videoName}</span>}
 
-        <div className="flex items-center gap-1.5 ml-auto flex-wrap">
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => fileInputRef.current?.click()}>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 px-2" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-3 w-3" />
             <span className="hidden sm:inline">Vídeo</span>
           </Button>
 
           <Button
-            size="sm" variant="outline" className="h-7 text-xs gap-1"
+            size="sm" variant="outline" className="h-7 text-xs gap-1 px-2"
             onClick={handleAutoCut}
             disabled={!hasVideo || cutting}
           >
             {cutting
-              ? <><Loader2 className="h-3 w-3 animate-spin" />{cutPct}%</>
+              ? <><Loader2 className="h-3 w-3 animate-spin" /><span className="hidden sm:inline">{cutPct}%</span></>
               : <><Scissors className="h-3 w-3" /><span className="hidden sm:inline">Corte Auto</span></>}
           </Button>
 
+          {clips.length > 1 && undoClips && (
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
+              setClips(undoClips); clipsRef.current = undoClips; setUndoClips(null);
+              toast({ title: "↩ Desfeito" });
+            }}>
+              <Undo2 className="h-3 w-3" />
+            </Button>
+          )}
           {clips.length > 1 && (
-            <>
-              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => { setUndoClips(null); handleResetCuts(); }}>
-                <RotateCcw className="h-3 w-3" />
-              </Button>
-              {undoClips && (
-                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => {
-                  if (undoClips) { setClips(undoClips); clipsRef.current = undoClips; setUndoClips(null); toast({ title: "↩ Desfeito" }); }
-                }}>
-                  <Undo2 className="h-3 w-3" />
-                </Button>
-              )}
-            </>
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setUndoClips(null); handleResetCuts(); }}>
+              <RotateCcw className="h-3 w-3" />
+            </Button>
           )}
 
           <Button
-            size="sm" className="h-7 text-xs gap-1"
+            size="sm" className="h-7 text-xs gap-1 px-2"
             onClick={handleExport}
             disabled={!hasVideo || exporting}
           >
@@ -679,17 +694,37 @@ export default function ViralCut() {
       <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoLoad} />
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
 
-        {/* ── Left sidebar ─────────────────────────────────────────────── */}
-        <div className="w-52 shrink-0 border-r border-border/40 bg-[hsl(220,25%,10%)] flex flex-col overflow-y-auto">
+        {/* ── Mobile sidebar overlay ───────────────────────────────────── */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/60 z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* ── Sidebar ──────────────────────────────────────────────────── */}
+        <div className={cn(
+          "shrink-0 border-r border-border/40 bg-[hsl(220,25%,10%)] flex flex-col overflow-y-auto z-50 transition-transform duration-200",
+          "w-52",
+          // Desktop: always visible
+          "hidden md:flex",
+          // Mobile: absolute overlay
+          sidebarOpen && "!flex fixed inset-y-0 left-0 top-auto bottom-0 h-full",
+        )}>
+          {/* Mobile close */}
+          <div className="md:hidden flex items-center justify-between px-3 pt-3 pb-1">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Configurações</span>
+            <button onClick={() => setSidebarOpen(false)}><ChevronLeft className="h-4 w-4" /></button>
+          </div>
+
           <div className="p-3 space-y-4">
-
-            {/* Auto-cut section */}
+            {/* Auto-cut */}
             <div className="space-y-2">
               <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">Corte Automático</p>
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => { fileInputRef.current?.click(); setSidebarOpen(false); }}
                 className="w-full border-2 border-dashed border-border hover:border-primary rounded-lg p-3 flex flex-col items-center gap-1.5 transition-colors group"
               >
                 <Upload className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
@@ -717,7 +752,7 @@ export default function ViralCut() {
                 ))}
               </div>
 
-              <Button size="sm" className="w-full h-8 text-xs" onClick={handleAutoCut} disabled={!hasVideo || cutting}>
+              <Button size="sm" className="w-full h-8 text-xs" onClick={() => { handleAutoCut(); setSidebarOpen(false); }} disabled={!hasVideo || cutting}>
                 {cutting
                   ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />{cutPct}%</>
                   : <><Scissors className="h-3 w-3 mr-1" />Cortar silêncio</>}
@@ -732,11 +767,12 @@ export default function ViralCut() {
               )}
             </div>
 
+            {/* Captions */}
             <div className="border-t border-border/40 pt-3 space-y-2">
               <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">Legendas</p>
-              <div className="bg-card/40 rounded p-2 space-y-1">
+              <div className="bg-card/40 rounded p-2">
                 <p className="text-[9px] text-muted-foreground leading-relaxed">
-                  Reproduz o vídeo e transcreve o áudio em tempo real via reconhecimento de voz.
+                  Transcreve o áudio em tempo real via reconhecimento de voz.
                 </p>
               </div>
 
@@ -780,7 +816,7 @@ export default function ViralCut() {
                   <MicOff className="h-3 w-3 mr-1" />Parar transcrição
                 </Button>
               ) : (
-                <Button size="sm" className="w-full h-8 text-xs" onClick={startTranscription} disabled={!hasVideo || captionTranscribing}>
+                <Button size="sm" className="w-full h-8 text-xs" onClick={() => { startTranscription(); setSidebarOpen(false); }} disabled={!hasVideo || captionTranscribing}>
                   <Mic className="h-3 w-3 mr-1" />{captions.length > 0 ? "Retranscrever" : "Gerar legendas"}
                 </Button>
               )}
@@ -802,7 +838,7 @@ export default function ViralCut() {
           </div>
         </div>
 
-        {/* ── Preview + controls ────────────────────────────────────────── */}
+        {/* ── Preview + controls + timeline ────────────────────────────── */}
         <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
 
           {/* Preview area */}
@@ -815,7 +851,7 @@ export default function ViralCut() {
                 <div className="h-16 w-16 rounded-full border-2 border-dashed border-border group-hover:border-primary flex items-center justify-center transition-colors">
                   <Upload className="h-7 w-7 group-hover:text-primary transition-colors" />
                 </div>
-                <p className="text-sm">Clique para carregar um vídeo</p>
+                <p className="text-sm text-center px-4">Toque para carregar um vídeo</p>
               </div>
             ) : (
               <>
@@ -845,7 +881,6 @@ export default function ViralCut() {
                     </span>
                   </div>
                 )}
-                {/* Click-to-play overlay icon */}
                 {!playing && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="h-14 w-14 rounded-full bg-black/50 flex items-center justify-center">
@@ -858,41 +893,45 @@ export default function ViralCut() {
           </div>
 
           {/* Controls bar */}
-          <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-3 py-2 flex items-center gap-3">
+          <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-3 py-2 flex items-center gap-2">
             <button onClick={togglePlay} disabled={!hasVideo} className="text-foreground hover:text-primary disabled:opacity-40 shrink-0">
               {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
             </button>
 
             {/* Progress bar */}
             <div
-              className="flex-1 relative h-2.5 bg-muted/40 rounded-full cursor-pointer group"
+              className="flex-1 relative h-3 bg-muted/40 rounded-full cursor-pointer group"
               onClick={e => {
                 if (!displayDuration) return;
                 const rect = e.currentTarget.getBoundingClientRect();
                 seek(Math.max(0, Math.min(displayDuration, ((e.clientX - rect.left) / rect.width) * displayDuration)));
               }}
             >
+              <div className="absolute inset-y-0 left-0 bg-primary rounded-full transition-none" style={{ width: `${progressPct}%` }} />
               <div
-                className="absolute inset-y-0 left-0 bg-primary rounded-full transition-none"
-                style={{ width: `${progressPct}%` }}
-              />
-              {/* Thumb */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3.5 w-3.5 bg-primary rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-4 w-4 bg-primary rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity touch-none"
                 style={{ left: `${progressPct}%` }}
                 onMouseDown={e => {
                   e.stopPropagation();
                   const bar = e.currentTarget.parentElement!;
                   const onMove = (ev: MouseEvent) => {
-                    const rect = bar.getBoundingClientRect();
-                    seek(Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration)));
+                    const r = bar.getBoundingClientRect();
+                    seek(Math.max(0, Math.min(displayDuration, ((ev.clientX - r.left) / r.width) * displayDuration)));
                   };
-                  const onUp = () => {
-                    window.removeEventListener("mousemove", onMove);
-                    window.removeEventListener("mouseup", onUp);
-                  };
+                  const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                   window.addEventListener("mousemove", onMove);
                   window.addEventListener("mouseup", onUp);
+                }}
+                onTouchStart={e => {
+                  e.stopPropagation();
+                  const bar = e.currentTarget.parentElement!;
+                  const onMove = (ev: TouchEvent) => {
+                    const r = bar.getBoundingClientRect();
+                    seek(Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - r.left) / r.width) * displayDuration)));
+                  };
+                  const onEnd = () => { window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onEnd); };
+                  window.addEventListener("touchmove", onMove, { passive: true });
+                  window.addEventListener("touchend", onEnd);
                 }}
               />
             </div>
@@ -910,24 +949,24 @@ export default function ViralCut() {
           </div>
 
           {/* Timeline toolbar */}
-          <div className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 px-2 py-1 flex items-center gap-1.5">
-            <span className="text-[9px] text-muted-foreground uppercase tracking-widest">Zoom</span>
-            <button onClick={() => setScale(s => Math.max(0.25, Math.round((s - 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
+          <div className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 px-2 py-1.5 flex items-center gap-1.5">
+            <span className="text-[9px] text-muted-foreground uppercase tracking-widest hidden sm:block">Zoom</span>
+            <button onClick={() => setScale(s => Math.max(0.25, Math.round((s - 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground p-0.5">
               <ZoomOut className="h-3.5 w-3.5" />
             </button>
             <span className="text-[9px] text-muted-foreground w-6 text-center">{scale}x</span>
-            <button onClick={() => setScale(s => Math.min(8, Math.round((s + 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
+            <button onClick={() => setScale(s => Math.min(8, Math.round((s + 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground p-0.5">
               <ZoomIn className="h-3.5 w-3.5" />
             </button>
 
             {clips.length > 1 && (
-              <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5 ml-2">
+              <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5 ml-1">
                 {clips.length} clips
               </span>
             )}
 
             <button
-              className="text-muted-foreground hover:text-foreground ml-auto"
+              className="text-muted-foreground hover:text-foreground ml-auto p-0.5"
               onClick={() => setTimelineCollapsed(c => !c)}
             >
               {timelineCollapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -936,24 +975,42 @@ export default function ViralCut() {
 
           {/* Timeline */}
           {!timelineCollapsed && hasVideo && (
-            <div className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/30 overflow-x-auto" style={{ height: 64 }}>
-              <div className="relative" style={{ width: Math.max(300, displayDuration * pxPerSec + 32), height: 64 }}>
-
+            <div
+              className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/30 overflow-x-auto overflow-y-hidden"
+              style={{ height: 72 }}
+              onWheel={e => {
+                if (e.ctrlKey) {
+                  e.preventDefault();
+                  setScale(s => Math.max(0.25, Math.min(8, s - e.deltaY * 0.002)));
+                }
+              }}
+            >
+              <div
+                className="relative"
+                style={{ width: Math.max(300, displayDuration * pxPerSec + 48), height: 72 }}
+              >
                 {/* Time ticks */}
-                <div className="absolute top-0 left-0 right-0 h-5 border-b border-border/30">
+                <div className="absolute top-0 left-0 right-0 h-5 border-b border-border/30 pointer-events-none">
                   {Array.from({ length: Math.max(1, Math.ceil(displayDuration) + 1) }).map((_, i) => (
                     <div
                       key={i}
                       className="absolute top-0 bottom-0 flex items-end pb-0.5"
                       style={{ left: i * pxPerSec, borderLeft: "1px solid hsl(var(--border)/0.2)" }}
                     >
-                      <span className="text-[7px] text-muted-foreground pl-0.5">{i}s</span>
+                      <span className="text-[7px] text-muted-foreground pl-0.5 select-none">{i}s</span>
                     </div>
                   ))}
                 </div>
 
-                {/* Clip blocks */}
-                <div className="absolute top-5 left-0 right-0 bottom-0">
+                {/* Clip track */}
+                <div
+                  className="absolute top-5 left-0 right-0 bottom-0 cursor-pointer"
+                  onClick={e => {
+                    if (!displayDuration) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    seek(Math.max(0, Math.min(displayDuration, (e.clientX - rect.left) / pxPerSec)));
+                  }}
+                >
                   {clips.map((clip, idx) => (
                     <ClipBlock
                       key={clip.id}
@@ -967,21 +1024,15 @@ export default function ViralCut() {
                   {/* Playhead */}
                   {displayDuration > 0 && (
                     <div
-                      className="absolute top-0 bottom-0 w-px bg-primary z-20 pointer-events-none"
+                      className="absolute top-0 bottom-0 w-0.5 bg-primary z-20 pointer-events-none"
                       style={{ left: displayTime * pxPerSec }}
-                    />
+                    >
+                      {/* Playhead handle (triangle) */}
+                      <div className="absolute -top-0.5 -left-1.5 w-3 h-2.5 bg-primary"
+                        style={{ clipPath: "polygon(50% 100%, 0 0, 100% 0)" }} />
+                    </div>
                   )}
                 </div>
-
-                {/* Clickable seek on track */}
-                <div
-                  className="absolute top-5 left-0 right-0 bottom-0 z-0"
-                  onClick={e => {
-                    if (!displayDuration) return;
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    seek(Math.max(0, Math.min(displayDuration, (e.clientX - rect.left) / pxPerSec)));
-                  }}
-                />
               </div>
             </div>
           )}
@@ -990,14 +1041,14 @@ export default function ViralCut() {
 
       {/* ── Export overlay ─────────────────────────────────────────────── */}
       {exporting && (
-        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center">
-          <div className="bg-card border border-border rounded-xl p-6 flex flex-col items-center gap-4 min-w-64 max-w-xs w-full mx-4">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl p-6 flex flex-col items-center gap-4 w-full max-w-xs">
             <Loader2 className="h-8 w-8 text-primary animate-spin" />
             <p className="text-sm font-medium text-center">{exportMsg}</p>
-            <div className="w-full bg-muted rounded-full h-2">
-              <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${exportPct}%` }} />
+            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+              <div className="bg-primary h-2.5 rounded-full transition-all duration-300" style={{ width: `${exportPct}%` }} />
             </div>
-            <p className="text-xs text-muted-foreground">{exportPct}%</p>
+            <p className="text-xs text-muted-foreground tabular-nums">{exportPct}% concluído</p>
           </div>
         </div>
       )}
