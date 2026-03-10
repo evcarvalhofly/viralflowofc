@@ -185,7 +185,18 @@ async function exportWithFFmpeg(
   onProgress(10, "Carregando vídeo...");
   await ffmpeg.writeFile("input.mp4", await fetchFile(videoFile));
 
+  const toBlob = (fileData: Awaited<ReturnType<typeof ffmpeg.readFile>>, mime: string) => {
+    const u8 = fileData as Uint8Array;
+    const plain = new Uint8Array(u8.byteLength);
+    plain.set(u8);
+    return new Blob([plain.buffer as ArrayBuffer], { type: mime });
+  };
+
   // Trim each segment
+  // IMPORTANT: -ss is placed AFTER -i (input-seek = slow but frame-accurate).
+  // This prevents FFmpeg from snapping to the nearest keyframe before the cut,
+  // which caused repeated frames/scenes at segment boundaries.
+  // -reset_timestamps 1 ensures each segment starts at t=0 for clean concatenation.
   const segFiles: string[] = [];
   for (let i = 0; i < segs.length; i++) {
     const seg = segs[i];
@@ -194,11 +205,12 @@ async function exportWithFFmpeg(
     onProgress(pct, `Cortando clipe ${i + 1}/${segs.length}...`);
 
     await ffmpeg.exec([
-      "-ss", String(seg.start.toFixed(3)),
       "-i", "input.mp4",
-      "-t", String((seg.end - seg.start).toFixed(3)),
-      "-c", "copy",          // stream copy — fast, no re-encode
-      "-avoid_negative_ts", "1",
+      "-ss", String(seg.start.toFixed(6)),   // output-seek: frame-accurate
+      "-t",  String((seg.end - seg.start).toFixed(6)),
+      "-c", "copy",
+      "-reset_timestamps", "1",             // reset pts to 0 per segment
+      "-avoid_negative_ts", "make_zero",
       outName,
     ]);
     segFiles.push(outName);
@@ -206,20 +218,13 @@ async function exportWithFFmpeg(
 
   onProgress(82, "Concatenando clipes...");
 
-  const toBlob = (fileData: Awaited<ReturnType<typeof ffmpeg.readFile>>, mime: string) => {
-    // Copy bytes into a plain ArrayBuffer to satisfy TypeScript / avoid SharedArrayBuffer issues
-    const u8 = fileData as Uint8Array;
-    const plain = new Uint8Array(u8.byteLength);
-    plain.set(u8);
-    return new Blob([plain.buffer as ArrayBuffer], { type: mime });
-  };
-
   if (segFiles.length === 1) {
     const data = await ffmpeg.readFile(segFiles[0]);
     return toBlob(data, "video/mp4");
   }
 
-  // Write concat list
+  // Concat — use -fflags +genpts to regenerate presentation timestamps
+  // so the final file has a clean, monotonically increasing timeline.
   const concatList = segFiles.map(f => `file '${f}'`).join("\n");
   await ffmpeg.writeFile("list.txt", concatList);
 
@@ -228,6 +233,7 @@ async function exportWithFFmpeg(
     "-safe", "0",
     "-i", "list.txt",
     "-c", "copy",
+    "-fflags", "+genpts",   // regenerate pts → eliminates repeated frames
     "output.mp4",
   ]);
 
