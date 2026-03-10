@@ -4,7 +4,7 @@ import {
   SkipBack, SkipForward, Volume2, VolumeX, ZoomIn, ZoomOut,
   Film, Music, Sparkles, Trash2, Eye, EyeOff,
   ChevronRight, ChevronLeft, Loader2, X,
-  RotateCcw, ChevronUp, ChevronDown, Mic, MicOff
+  RotateCcw, ChevronUp, ChevronDown, Mic, MicOff, Undo2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -14,9 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/** Um segmento de vídeo "a manter" após corte automático */
 type ClipSegment = { id: string; start: number; end: number };
-
 type LayerType = "video" | "overlay" | "text" | "audio";
 
 interface Layer {
@@ -40,6 +38,15 @@ interface CaptionBlock {
 
 type AutoCutLevel = "suave" | "medio" | "agressivo";
 type CaptionWordMode = 1 | 2 | 3;
+
+// ─── History entry ────────────────────────────────────────────────────────────
+
+interface HistoryEntry {
+  cutSegments: ClipSegment[];
+  layers: Layer[];
+  captions: CaptionBlock[];
+  virtualDuration: number;
+}
 
 const SILENCE_THRESHOLDS: Record<AutoCutLevel, number> = {
   suave: 0.7,
@@ -137,10 +144,34 @@ function splitCaptionsFromTranscript(
   return blocks;
 }
 
+// ─── Chroma Key ───────────────────────────────────────────────────────────────
+
+function applyChromaKey(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  color: [number, number, number],
+  tolerance: number,
+  smoothing: number
+) {
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const dist = Math.sqrt(
+      Math.pow(d[i] - color[0], 2) +
+      Math.pow(d[i + 1] - color[1], 2) +
+      Math.pow(d[i + 2] - color[2], 2)
+    );
+    if (dist < tolerance) d[i + 3] = 0;
+    else if (dist < tolerance + smoothing)
+      d[i + 3] = Math.round(((dist - tolerance) / smoothing) * 255);
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
 // ─── Timeline Lane ────────────────────────────────────────────────────────────
 
 function TimelineLane({
-  layer, duration, scale, currentTime,
+  layer, duration, scale,
   onToggleVisible, onDelete, onSeek
 }: {
   layer: Layer; duration: number; scale: number; currentTime: number;
@@ -182,30 +213,6 @@ function TimelineLane({
   );
 }
 
-// ─── Chroma Key ───────────────────────────────────────────────────────────────
-
-function applyChromaKey(
-  ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
-  color: [number, number, number],
-  tolerance: number,
-  smoothing: number
-) {
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const d = imageData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const dist = Math.sqrt(
-      Math.pow(d[i] - color[0], 2) +
-      Math.pow(d[i + 1] - color[1], 2) +
-      Math.pow(d[i + 2] - color[2], 2)
-    );
-    if (dist < tolerance) d[i + 3] = 0;
-    else if (dist < tolerance + smoothing)
-      d[i + 3] = Math.round(((dist - tolerance) / smoothing) * 255);
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const ViralCut = () => {
@@ -215,7 +222,7 @@ const ViralCut = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const rafRef = useRef<number>(0);
-  const segmentIndexRef = useRef<number>(0);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
 
   // ─ State ──────────────────────────────────────────────────────────────────
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
@@ -226,9 +233,7 @@ const ViralCut = () => {
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState([80]);
 
-  // Segmentos de corte (o que o player vai respeitar)
   const [cutSegments, setCutSegments] = useState<ClipSegment[]>([]);
-  // Tempo virtual = posição na "linha do tempo editada"
   const virtualDurationRef = useRef(0);
   const [virtualDuration, setVirtualDuration] = useState(0);
   const [virtualTime, setVirtualTime] = useState(0);
@@ -265,12 +270,107 @@ const ViralCut = () => {
   const [processing, setProcessing] = useState(false);
   const [processingMsg, setProcessingMsg] = useState("");
 
+  // ─ History (Undo) ─────────────────────────────────────────────────────────
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  const pushHistory = useCallback((
+    segs: ClipSegment[], lays: Layer[], caps: CaptionBlock[], virtDur: number
+  ) => {
+    setHistory(prev => [...prev.slice(-19), { cutSegments: segs, layers: lays, captions: caps, virtualDuration: virtDur }]);
+  }, []);
+
+  const handleUndo = () => {
+    if (history.length === 0) {
+      toast({ title: "Nada para desfazer", variant: "destructive" });
+      return;
+    }
+    const last = history[history.length - 1];
+    setCutSegments(last.cutSegments);
+    setLayers(last.layers);
+    setCaptions(last.captions);
+    setVirtualDuration(last.virtualDuration);
+    virtualDurationRef.current = last.virtualDuration;
+    setHistory(prev => prev.slice(0, -1));
+    toast({ title: "↩ Ação desfeita" });
+  };
+
+  // ─ Playhead drag ──────────────────────────────────────────────────────────
+  const playheadDragging = useRef(false);
+  const timelineRulerRef = useRef<HTMLDivElement>(null);
+
+  const handlePlayheadMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    playheadDragging.current = true;
+  }, []);
+
+  const handleTimelineMouseMove = useCallback((e: MouseEvent) => {
+    if (!playheadDragging.current || !timelineRulerRef.current) return;
+    const rect = timelineRulerRef.current.getBoundingClientRect();
+    const relX = e.clientX - rect.left - 128; // offset for lane labels
+    const pxPerSec = timelineScale * 80;
+    const displayDur = virtualDurationRef.current > 0 ? virtualDurationRef.current : 0;
+    if (displayDur <= 0 || pxPerSec <= 0) return;
+    const t = Math.max(0, Math.min(displayDur, relX / pxPerSec));
+    // seekVirtual uses state so we need direct refs approach
+    const v = videoRef.current;
+    if (!v) return;
+    setVirtualTime(t);
+    setCurrentTime(t);
+    v.currentTime = t;
+  }, [timelineScale]);
+
+  const handleTimelineMouseUp = useCallback(() => {
+    playheadDragging.current = false;
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", handleTimelineMouseMove);
+    window.addEventListener("mouseup", handleTimelineMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleTimelineMouseMove);
+      window.removeEventListener("mouseup", handleTimelineMouseUp);
+    };
+  }, [handleTimelineMouseMove, handleTimelineMouseUp]);
+
+  // ─ Timeline pinch/wheel zoom ──────────────────────────────────────────────
+  const lastPinchDist = useRef<number | null>(null);
+
+  const handleTimelineWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.25 : 0.25;
+      setTimelineScale(s => Math.min(8, Math.max(0.25, Math.round((s + delta) * 4) / 4)));
+    }
+  }, []);
+
+  const handleTimelineTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastPinchDist.current = Math.sqrt(dx * dx + dy * dy);
+    }
+  }, []);
+
+  const handleTimelineTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && lastPinchDist.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const ratio = dist / lastPinchDist.current;
+      lastPinchDist.current = dist;
+      setTimelineScale(s => Math.min(8, Math.max(0.25, Math.round(s * ratio * 4) / 4)));
+    }
+  }, []);
+
+  const handleTimelineTouchEnd = useCallback(() => {
+    lastPinchDist.current = null;
+  }, []);
+
   const videoStyle = {
     filter: `brightness(${filterBrightness[0]}%) contrast(${filterContrast[0]}%) saturate(${filterSaturation[0]}%)`,
   };
 
   // ─── Segmented playback ────────────────────────────────────────────────────
-  // Mapeia tempo virtual → tempo real do vídeo
   const virtualToReal = useCallback((vt: number, segs: ClipSegment[]): number => {
     if (segs.length === 0) return vt;
     let acc = 0;
@@ -292,7 +392,6 @@ const ViralCut = () => {
     return acc;
   }, []);
 
-  // RAF loop: sincroniza preview e avança entre segmentos
   const updateLoop = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -303,14 +402,12 @@ const ViralCut = () => {
     setCurrentTime(rt);
     setVirtualTime(vt);
 
-    // atualiza legendas
     setActiveCaptions(prev => {
       const next = captions.filter(c => rt >= c.start && rt < c.end);
       if (next.length !== prev.length || next.some((c, i) => c.id !== prev[i]?.id)) return next;
       return prev;
     });
 
-    // Chroma key frame
     if (chromaEnabled && canvasRef.current && !v.paused) {
       const ctx = canvasRef.current.getContext("2d");
       if (ctx) {
@@ -324,12 +421,9 @@ const ViralCut = () => {
       }
     }
 
-    // Segmented playback: pular para o próximo segmento se estiver fora dos keepRanges
     if (segs && !v.paused) {
-      // Verifica se o tempo atual está dentro de algum segmento
       const inSegment = segs.some(s => rt >= s.start && rt < s.end);
       if (!inSegment) {
-        // Encontra o próximo segmento
         const next = segs.find(s => s.start > rt);
         if (next) {
           v.currentTime = next.start;
@@ -352,11 +446,15 @@ const ViralCut = () => {
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing, updateLoop]);
 
-  // ─── Volume ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
     if (v) v.volume = volume[0] / 100;
   }, [volume]);
+
+  // Keep virtualDurationRef in sync
+  useEffect(() => {
+    virtualDurationRef.current = virtualDuration > 0 ? virtualDuration : duration;
+  }, [virtualDuration, duration]);
 
   // ─── Video load ───────────────────────────────────────────────────────────
   const handleVideoLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -369,6 +467,7 @@ const ViralCut = () => {
     setCaptions([]);
     setTranscriptWords([]);
     setLayers([]);
+    setHistory([]);
     setPlaying(false);
     toast({ title: "Vídeo carregado!", description: file.name });
   };
@@ -379,7 +478,7 @@ const ViralCut = () => {
     const dur = v.duration;
     setDuration(dur);
     virtualDurationRef.current = dur;
-    setVirtualDuration(dur);
+    setVirtualDuration(0);
     setLayers([{
       id: "main-video",
       type: "video",
@@ -398,8 +497,7 @@ const ViralCut = () => {
     else { v.play(); setPlaying(true); }
   };
 
-  // Seek por tempo virtual
-  const seekVirtual = (vt: number) => {
+  const seekVirtual = useCallback((vt: number) => {
     const v = videoRef.current;
     if (!v) return;
     const segs = cutSegments.length > 0 ? cutSegments : null;
@@ -407,7 +505,7 @@ const ViralCut = () => {
     v.currentTime = rt;
     setCurrentTime(rt);
     setVirtualTime(vt);
-  };
+  }, [cutSegments, virtualToReal]);
 
   const toggleMute = () => {
     const v = videoRef.current;
@@ -423,6 +521,8 @@ const ViralCut = () => {
       toast({ title: "Sem vídeo", description: "Carregue um vídeo primeiro.", variant: "destructive" });
       return;
     }
+    // Save history before mutating
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setAutoCutLoading(true);
     setAutoCutProgress(0);
     try {
@@ -430,13 +530,10 @@ const ViralCut = () => {
       const segs = await detectSilenceSegments(v, minDur, setAutoCutProgress);
       setCutSegments(segs);
 
-      // Calcula duração virtual total
       const virtDur = segs.reduce((acc, s) => acc + (s.end - s.start), 0);
       virtualDurationRef.current = virtDur;
       setVirtualDuration(virtDur);
 
-      // Atualiza a ÚNICA faixa de vídeo principal — um único bloco na timeline
-      // representando o tempo virtual resultante
       setLayers(prev => {
         const others = prev.filter(l => l.type !== "video");
         return [
@@ -444,17 +541,14 @@ const ViralCut = () => {
             id: "main-video",
             type: "video" as LayerType,
             label: `${segs.length} clipes (${virtDur.toFixed(1)}s)`,
-            start: 0,
-            end: virtDur,
-            visible: true,
-            locked: false,
+            start: 0, end: virtDur,
+            visible: true, locked: false,
             color: LAYER_COLORS.video,
           },
           ...others
         ];
       });
 
-      // Volta para o início do primeiro segmento
       if (v && segs.length > 0) {
         v.currentTime = segs[0].start;
         setCurrentTime(segs[0].start);
@@ -484,6 +578,7 @@ const ViralCut = () => {
     }
 
     if (transcriptWords.length > 0) {
+      pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
       const blocks = splitCaptionsFromTranscript(transcriptWords, captionMode);
       applyCaptures(blocks);
       return;
@@ -499,6 +594,7 @@ const ViralCut = () => {
       return;
     }
 
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setCaptionLoading(true);
     setIsTranscribing(true);
     setTranscriptRaw("");
@@ -547,14 +643,12 @@ const ViralCut = () => {
       }
     };
 
-    // Reproduz o vídeo e ativa reconhecimento
     recognition.start();
     v.currentTime = 0;
     setVirtualTime(0);
     await v.play();
     setPlaying(true);
 
-    // Para quando o vídeo terminar
     const onEnded = () => {
       recognition.stop();
       v.removeEventListener("ended", onEnded);
@@ -595,6 +689,7 @@ const ViralCut = () => {
       toast({ title: "Carregue um vídeo primeiro", variant: "destructive" });
       return;
     }
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => [...prev, {
       id: `text-${Date.now()}`,
       type: "text",
@@ -612,6 +707,7 @@ const ViralCut = () => {
   const handleAudioLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !duration) return;
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => [...prev, {
       id: `audio-${Date.now()}`,
       type: "audio",
@@ -625,27 +721,27 @@ const ViralCut = () => {
   };
 
   // ─── Layer actions ────────────────────────────────────────────────────────
-  const toggleLayerVisible = (id: string) =>
+  const toggleLayerVisible = (id: string) => {
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
+  };
 
-  const deleteLayer = (id: string) =>
+  const deleteLayer = (id: string) => {
+    pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => prev.filter(l => l.id !== id));
+  };
 
-  // ─── Export (canvas render) ───────────────────────────────────────────────
+  // ─── Export ───────────────────────────────────────────────────────────────
   const handleExport = async () => {
     if (!videoSrc) {
       toast({ title: "Sem vídeo", variant: "destructive" });
       return;
     }
-
     setProcessing(true);
     setProcessingMsg("Preparando exportação via canvas...");
-
-    // Para a reprodução atual
     videoRef.current?.pause();
     setPlaying(false);
 
-    // Se não há cortes, apenas baixa o original
     if (cutSegments.length === 0) {
       const a = document.createElement("a");
       a.href = videoSrc;
@@ -656,7 +752,6 @@ const ViralCut = () => {
       return;
     }
 
-    // Com cortes: usa MediaRecorder + canvas para renderizar os segmentos
     const v = document.createElement("video");
     v.src = videoSrc;
     v.muted = true;
@@ -688,23 +783,18 @@ const ViralCut = () => {
     recorder.start();
     setProcessingMsg("Renderizando segmentos...");
 
-    // Renderiza cada segmento frame a frame
     for (let si = 0; si < cutSegments.length; si++) {
       const seg = cutSegments[si];
       setProcessingMsg(`Renderizando clipe ${si + 1}/${cutSegments.length}...`);
       v.currentTime = seg.start;
       await new Promise(res => v.addEventListener("seeked", res, { once: true }));
-
       while (v.currentTime < seg.end) {
         ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-        // Aplica filtros CSS via canvas (brightness/contrast/saturation)
-        // Simplificado: apenas desenha o frame
         await new Promise(res => setTimeout(res, 1000 / 30));
         v.currentTime = Math.min(v.currentTime + 1 / 30, seg.end);
         await new Promise(res => v.addEventListener("seeked", res, { once: true }));
       }
     }
-
     recorder.stop();
   };
 
@@ -716,46 +806,67 @@ const ViralCut = () => {
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────
-
   const displayDuration = virtualDuration > 0 ? virtualDuration : duration;
   const displayTime = virtualTime;
+  const pxPerSec = timelineScale * 80;
 
   return (
     <div className="flex flex-col h-full bg-[hsl(220,25%,8%)] text-foreground overflow-hidden select-none">
 
       {/* ── Top Bar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40 bg-[hsl(220,25%,10%)] shrink-0 flex-wrap">
-        <div className="flex items-center gap-1.5 mr-2">
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40 bg-[hsl(220,25%,10%)] shrink-0">
+        <div className="flex items-center gap-1.5 mr-2 shrink-0">
           <Scissors className="h-4 w-4 text-primary" />
           <span className="text-sm font-bold text-primary">ViralCut</span>
           {videoName !== "Sem vídeo" && (
-            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{videoName}</span>
+            <span className="hidden sm:inline text-[10px] text-muted-foreground truncate max-w-[100px]">{videoName}</span>
           )}
         </div>
 
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => fileInputRef.current?.click()}>
-          <Upload className="h-3 w-3" /> Vídeo
-        </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-          onClick={handleAutoCut} disabled={!videoSrc || autoCutLoading}>
-          {autoCutLoading
-            ? <><Loader2 className="h-3 w-3 animate-spin" />{autoCutProgress}%</>
-            : <><Scissors className="h-3 w-3" />Corte Auto</>}
-        </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-          onClick={() => { setActiveTab("captions"); }}>
-          <Sparkles className="h-3 w-3" /> Legenda
-        </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setActiveTab("text")}>
-          <Type className="h-3 w-3" /> Texto
-        </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setActiveTab("chroma")}>
-          <Layers className="h-3 w-3" /> Chroma
-        </Button>
-        <Button size="sm" className="h-7 text-xs gap-1 ml-auto" onClick={handleExport} disabled={!videoSrc || processing}>
-          {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-          Exportar
-        </Button>
+        <div className="flex items-center gap-1 flex-1 flex-wrap min-w-0">
+          {/* Undo — destaque na frente */}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground px-2 shrink-0"
+            onClick={handleUndo}
+            disabled={history.length === 0}
+            title="Desfazer última ação"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Desfazer</span>
+          </Button>
+
+          <div className="h-4 w-px bg-border/50 mx-0.5 shrink-0" />
+
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-3 w-3" />
+            <span className="hidden sm:inline">Vídeo</span>
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0"
+            onClick={handleAutoCut} disabled={!videoSrc || autoCutLoading}>
+            {autoCutLoading
+              ? <><Loader2 className="h-3 w-3 animate-spin" />{autoCutProgress}%</>
+              : <><Scissors className="h-3 w-3" /><span className="hidden sm:inline">Corte Auto</span></>}
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0"
+            onClick={() => { setActiveTab("captions"); }}>
+            <Sparkles className="h-3 w-3" />
+            <span className="hidden sm:inline">Legenda</span>
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0" onClick={() => setActiveTab("text")}>
+            <Type className="h-3 w-3" />
+            <span className="hidden sm:inline">Texto</span>
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0" onClick={() => setActiveTab("chroma")}>
+            <Layers className="h-3 w-3" />
+            <span className="hidden sm:inline">Chroma</span>
+          </Button>
+          <Button size="sm" className="h-7 text-xs gap-1 shrink-0 ml-auto" onClick={handleExport} disabled={!videoSrc || processing}>
+            {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+            <span>Exportar</span>
+          </Button>
+        </div>
       </div>
 
       <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoLoad} />
@@ -833,7 +944,12 @@ const ViralCut = () => {
                         <p className="text-[10px] text-primary font-medium">{cutSegments.length} segmentos ativos</p>
                         <p className="text-[9px] text-muted-foreground">Preview reproduz apenas as partes com fala</p>
                         <button
-                          onClick={() => { setCutSegments([]); setVirtualDuration(duration); setVirtualTime(0); }}
+                          onClick={() => {
+                            pushHistory(cutSegments, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
+                            setCutSegments([]);
+                            setVirtualDuration(0);
+                            setVirtualTime(0);
+                          }}
                           className="text-[9px] text-destructive hover:underline"
                         >Desfazer cortes</button>
                       </div>
@@ -856,46 +972,39 @@ const ViralCut = () => {
                   {transcriptWords.length > 0 && (
                     <div className="bg-primary/10 border border-primary/30 rounded p-2">
                       <p className="text-[9px] text-primary">{transcriptWords.length} palavras transcritas</p>
-                      <p className="text-[9px] text-muted-foreground mt-0.5 line-clamp-3">{transcriptRaw.trim()}</p>
+                      <button
+                        onClick={() => { setTranscriptWords([]); setTranscriptRaw(""); }}
+                        className="text-[9px] text-muted-foreground hover:underline mt-0.5"
+                      >Limpar e retranscrever</button>
                     </div>
                   )}
 
-                  <div>
-                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Palavras por bloco</p>
+                  <div className="space-y-1">
+                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Palavras por bloco</p>
                     <div className="grid grid-cols-3 gap-1">
-                      {([1, 2, 3] as CaptionWordMode[]).map(n => (
+                      {([1, 2, 3] as CaptionWordMode[]).map(m => (
                         <button
-                          key={n}
-                          onClick={() => {
-                            setCaptionMode(n);
-                            if (transcriptWords.length > 0) {
-                              const blocks = splitCaptionsFromTranscript(transcriptWords, n);
-                              applyCaptures(blocks);
-                            }
-                          }}
+                          key={m}
+                          onClick={() => setCaptionMode(m)}
                           className={cn(
                             "text-[9px] py-1 rounded border transition-colors",
-                            captionMode === n
+                            captionMode === m
                               ? "bg-primary border-primary text-primary-foreground"
                               : "border-border text-muted-foreground hover:border-primary"
                           )}
-                        >{n} palavra{n > 1 ? "s" : ""}</button>
+                        >{m} {m === 1 ? "palavra" : "palavras"}</button>
                       ))}
                     </div>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Estilo</p>
-                    {[
-                      { label: "Cor", type: "color" as const },
-                    ].map(() => (
-                      <div key="cor" className="flex items-center gap-2">
-                        <label className="text-[10px] text-muted-foreground w-12">Cor</label>
-                        <input type="color" value={captionStyle.color}
-                          onChange={e => setCaptionStyle(s => ({ ...s, color: e.target.value }))}
-                          className="h-5 w-8 cursor-pointer rounded border-0 bg-transparent" />
-                      </div>
-                    ))}
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] text-muted-foreground w-10">Cor</label>
+                      <input type="color" value={captionStyle.color}
+                        onChange={e => setCaptionStyle(s => ({ ...s, color: e.target.value }))}
+                        className="h-5 w-8 cursor-pointer rounded border-0 bg-transparent" />
+                    </div>
                     <div className="flex items-center gap-2">
                       <label className="text-[10px] text-muted-foreground w-12">Tam</label>
                       <Slider value={[captionStyle.size]} onValueChange={v => setCaptionStyle(s => ({ ...s, size: v[0] }))}
@@ -974,7 +1083,7 @@ const ViralCut = () => {
                     <label className="text-[10px] text-muted-foreground w-10">Cor</label>
                     <input type="color" value={chromaColor} onChange={e => setChromaColor(e.target.value)}
                       className="h-5 w-10 cursor-pointer rounded border-0 bg-transparent" />
-                    <span className="text-[9px] text-muted-foreground">{chromaColor}</span>
+                    <span className="text-[10px] text-muted-foreground">{chromaColor}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-[10px] text-muted-foreground w-16">Tolerância</label>
@@ -1042,7 +1151,6 @@ const ViralCut = () => {
               </div>
             ) : (
               <div className="relative max-h-full max-w-full flex items-center justify-center w-full h-full">
-                {/* Vídeo sempre presente (hidden quando chroma ativo) */}
                 <video
                   ref={videoRef}
                   src={videoSrc}
@@ -1052,19 +1160,16 @@ const ViralCut = () => {
                   style={videoStyle}
                   playsInline
                 />
-                {/* Canvas para chroma key */}
                 {chromaEnabled && (
                   <canvas ref={canvasRef} className="max-h-full max-w-full object-contain" style={videoStyle} />
                 )}
 
-                {/* Indicador de cortes ativos */}
                 {cutSegments.length > 0 && (
                   <div className="absolute top-2 right-2 bg-primary/80 text-primary-foreground text-[9px] px-2 py-0.5 rounded-full">
                     ✂️ {cutSegments.length} cortes ativos
                   </div>
                 )}
 
-                {/* Caption overlay */}
                 {activeCaptions.map(cap => (
                   <div
                     key={cap.id}
@@ -1089,18 +1194,18 @@ const ViralCut = () => {
 
           {/* Player controls */}
           <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-3 py-2 flex items-center gap-2">
-            <button onClick={() => seekVirtual(0)} className="text-muted-foreground hover:text-foreground">
+            <button onClick={() => seekVirtual(0)} className="text-muted-foreground hover:text-foreground shrink-0">
               <SkipBack className="h-4 w-4" />
             </button>
-            <button onClick={togglePlay} className="h-7 w-7 rounded-full bg-primary flex items-center justify-center hover:bg-primary/80 transition-colors">
+            <button onClick={togglePlay} className="h-7 w-7 rounded-full bg-primary flex items-center justify-center hover:bg-primary/80 transition-colors shrink-0">
               {playing ? <Pause className="h-3.5 w-3.5 text-primary-foreground" /> : <Play className="h-3.5 w-3.5 text-primary-foreground ml-0.5" />}
             </button>
-            <button onClick={() => seekVirtual(displayDuration)} className="text-muted-foreground hover:text-foreground">
+            <button onClick={() => seekVirtual(displayDuration)} className="text-muted-foreground hover:text-foreground shrink-0">
               <SkipForward className="h-4 w-4" />
             </button>
 
-            {/* Seek bar — mostra tempo virtual */}
-            <div className="flex-1 relative h-1.5 bg-border rounded-full cursor-pointer"
+            {/* Seek bar */}
+            <div className="flex-1 relative h-2 bg-border rounded-full cursor-pointer"
               onClick={e => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const vt = ((e.clientX - rect.left) / rect.width) * displayDuration;
@@ -1108,10 +1213,10 @@ const ViralCut = () => {
               }}>
               <div className="absolute h-full bg-primary rounded-full transition-none"
                 style={{ width: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%" }} />
-              {/* Marcadores de segmentos na barra */}
+              {/* Segment markers */}
               {cutSegments.length > 0 && (() => {
                 let acc = 0;
-                return cutSegments.map((s, i) => {
+                return cutSegments.map((s) => {
                   const left = (acc / displayDuration) * 100;
                   const w = ((s.end - s.start) / displayDuration) * 100;
                   acc += s.end - s.start;
@@ -1121,71 +1226,205 @@ const ViralCut = () => {
                   );
                 });
               })()}
+              {/* Draggable thumb */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-4 w-4 rounded-full bg-primary border-2 border-primary-foreground shadow cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
+                style={{ left: displayDuration > 0 ? `${(displayTime / displayDuration) * 100}%` : "0%", touchAction: "none" }}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  const bar = e.currentTarget.parentElement!;
+                  const onMove = (ev: MouseEvent) => {
+                    const rect = bar.getBoundingClientRect();
+                    const vt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
+                    seekVirtual(vt);
+                  };
+                  const onUp = () => {
+                    window.removeEventListener("mousemove", onMove);
+                    window.removeEventListener("mouseup", onUp);
+                  };
+                  window.addEventListener("mousemove", onMove);
+                  window.addEventListener("mouseup", onUp);
+                }}
+                onTouchStart={e => {
+                  const bar = e.currentTarget.parentElement!;
+                  const onMove = (ev: TouchEvent) => {
+                    const rect = bar.getBoundingClientRect();
+                    const vt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
+                    seekVirtual(vt);
+                  };
+                  const onEnd = () => {
+                    window.removeEventListener("touchmove", onMove);
+                    window.removeEventListener("touchend", onEnd);
+                  };
+                  window.addEventListener("touchmove", onMove, { passive: true });
+                  window.addEventListener("touchend", onEnd);
+                }}
+              />
             </div>
 
-            <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
+            <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
               {formatTime(displayTime)} / {formatTime(displayDuration)}
             </span>
 
-            <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground">
+            <button onClick={toggleMute} className="text-muted-foreground hover:text-foreground shrink-0">
               {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </button>
-            <div className="w-16">
+            <div className="w-16 shrink-0">
               <Slider value={volume} onValueChange={setVolume} min={0} max={100} step={1} />
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Timeline ─────────────────────────────────────────────────── */}
-      <div className={cn(
-        "shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 flex flex-col overflow-hidden transition-all duration-200",
-        bottomCollapsed ? "h-8" : "h-44"
-      )}>
-        <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30 shrink-0">
-          <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Timeline</span>
-          {cutSegments.length > 0 && (
-            <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5">
-              {cutSegments.length} cortes • {formatTime(displayDuration)} editado
-            </span>
-          )}
-          <div className="flex items-center gap-1 ml-auto">
-            <button onClick={() => setTimelineScale(s => Math.max(0.25, s - 0.25))} className="text-muted-foreground hover:text-foreground">
-              <ZoomOut className="h-3 w-3" />
-            </button>
-            <span className="text-[9px] text-muted-foreground w-6 text-center">{timelineScale}x</span>
-            <button onClick={() => setTimelineScale(s => Math.min(4, s + 0.25))} className="text-muted-foreground hover:text-foreground">
-              <ZoomIn className="h-3 w-3" />
-            </button>
-          </div>
-          <button onClick={() => setBottomCollapsed(!bottomCollapsed)} className="text-muted-foreground hover:text-foreground ml-1">
-            {bottomCollapsed ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+      {/* ══ Action toolbar — above timeline, full width ══════════════════════ */}
+      <div className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/40 px-2 py-1.5 flex items-center gap-1.5 flex-wrap">
+        {/* Undo */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-2"
+          onClick={handleUndo}
+          disabled={history.length === 0}
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+          Desfazer
+        </Button>
+
+        <div className="h-4 w-px bg-border/40" />
+
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2" onClick={() => fileInputRef.current?.click()}>
+          <Upload className="h-3 w-3" /> Upload
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2"
+          onClick={handleAutoCut} disabled={!videoSrc || autoCutLoading}>
+          {autoCutLoading
+            ? <><Loader2 className="h-3 w-3 animate-spin" />{autoCutProgress}%</>
+            : <><Scissors className="h-3 w-3" />Corte Auto</>}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2"
+          onClick={() => setActiveTab("captions")}>
+          <Sparkles className="h-3 w-3" /> Legenda
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2" onClick={() => setActiveTab("text")}>
+          <Type className="h-3 w-3" /> Texto
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 px-2" onClick={() => setActiveTab("chroma")}>
+          <Layers className="h-3 w-3" /> Chroma
+        </Button>
+
+        {/* Zoom timeline */}
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-[9px] text-muted-foreground uppercase tracking-widest mr-1">Zoom</span>
+          <button onClick={() => setTimelineScale(s => Math.max(0.25, Math.round((s - 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
+            <ZoomOut className="h-3.5 w-3.5" />
+          </button>
+          <span className="text-[9px] text-muted-foreground w-8 text-center">{timelineScale}x</span>
+          <button onClick={() => setTimelineScale(s => Math.min(8, Math.round((s + 0.25) * 4) / 4))} className="text-muted-foreground hover:text-foreground">
+            <ZoomIn className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        {!bottomCollapsed && (
-          <div className="flex-1 overflow-auto min-h-0">
-            {layers.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-[11px] text-muted-foreground">
-                Carregue um vídeo para ver a timeline
-              </div>
-            ) : (
-              <div className="min-w-max">
-                {/* Time ruler */}
-                <div className="flex h-5 border-b border-border/30 pl-32">
-                  {Array.from({ length: Math.ceil(displayDuration) + 1 }).map((_, i) => (
-                    <div key={i} className="relative shrink-0 border-l border-border/30"
-                      style={{ width: timelineScale * 80 }}>
-                      <span className="absolute top-0.5 left-1 text-[8px] text-muted-foreground">{i}s</span>
-                    </div>
-                  ))}
+        <Button size="sm" className="h-7 text-xs gap-1.5 ml-2" onClick={handleExport} disabled={!videoSrc || processing}>
+          {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+          Exportar
+        </Button>
+
+        <button onClick={() => setBottomCollapsed(!bottomCollapsed)} className="text-muted-foreground hover:text-foreground ml-1">
+          {bottomCollapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+
+      {/* ── Timeline ─────────────────────────────────────────────────── */}
+      {!bottomCollapsed && (
+        <div
+          className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/30 flex flex-col overflow-hidden h-44"
+          onWheel={handleTimelineWheel}
+          onTouchStart={handleTimelineTouchStart}
+          onTouchMove={handleTimelineTouchMove}
+          onTouchEnd={handleTimelineTouchEnd}
+        >
+          {layers.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-[11px] text-muted-foreground">
+              Carregue um vídeo para ver a timeline
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto min-h-0" ref={timelineScrollRef}>
+              <div
+                className="min-w-max"
+                ref={timelineRulerRef}
+              >
+                {/* Time ruler — draggable playhead */}
+                <div className="relative flex h-6 border-b border-border/30 bg-[hsl(220,25%,8%)]">
+                  {/* Label offset */}
+                  <div className="w-32 shrink-0 border-r border-border/30" />
+                  <div className="relative flex-1">
+                    {Array.from({ length: Math.ceil(displayDuration) + 1 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="absolute top-0 bottom-0 border-l border-border/20 flex items-end pb-0.5"
+                        style={{ left: i * pxPerSec }}
+                      >
+                        <span className="text-[8px] text-muted-foreground pl-1">{i}s</span>
+                      </div>
+                    ))}
+                    {/* Playhead on ruler — draggable */}
+                    {displayDuration > 0 && (
+                      <div
+                        className="absolute top-0 bottom-0 w-3 -translate-x-1/2 flex flex-col items-center cursor-col-resize z-20 group"
+                        style={{ left: displayTime * pxPerSec }}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          const ruler = e.currentTarget.parentElement!;
+                          const onMove = (ev: MouseEvent) => {
+                            const rect = ruler.getBoundingClientRect();
+                            const vt = Math.max(0, Math.min(displayDuration, (ev.clientX - rect.left) / pxPerSec));
+                            seekVirtual(vt);
+                          };
+                          const onUp = () => {
+                            window.removeEventListener("mousemove", onMove);
+                            window.removeEventListener("mouseup", onUp);
+                          };
+                          window.addEventListener("mousemove", onMove);
+                          window.addEventListener("mouseup", onUp);
+                        }}
+                        onTouchStart={e => {
+                          const ruler = e.currentTarget.parentElement!;
+                          const onMove = (ev: TouchEvent) => {
+                            const rect = ruler.getBoundingClientRect();
+                            const vt = Math.max(0, Math.min(displayDuration, (ev.touches[0].clientX - rect.left) / pxPerSec));
+                            seekVirtual(vt);
+                          };
+                          const onEnd = () => {
+                            window.removeEventListener("touchmove", onMove);
+                            window.removeEventListener("touchend", onEnd);
+                          };
+                          window.addEventListener("touchmove", onMove, { passive: true });
+                          window.addEventListener("touchend", onEnd);
+                        }}
+                      >
+                        {/* Triangle handle */}
+                        <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[7px] border-l-transparent border-r-transparent border-t-primary group-hover:border-t-primary/70 transition-colors" />
+                      </div>
+                    )}
+                  </div>
+                  {/* Vertical playhead line across all tracks */}
+                  {displayDuration > 0 && (
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-primary/70 pointer-events-none z-10"
+                      style={{ left: 128 + displayTime * pxPerSec }}
+                    />
+                  )}
                 </div>
-                {/* Playhead */}
+
+                {/* Tracks */}
                 <div className="relative">
-                  <div
-                    className="absolute top-0 bottom-0 w-px bg-primary z-10 pointer-events-none"
-                    style={{ left: 128 + (displayTime * timelineScale * 80) }}
-                  />
+                  {/* Playhead line across tracks */}
+                  {displayDuration > 0 && (
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-primary z-10 pointer-events-none"
+                      style={{ left: 128 + displayTime * pxPerSec }}
+                    />
+                  )}
                   {layers.map(layer => (
                     <TimelineLane
                       key={layer.id}
@@ -1200,10 +1439,20 @@ const ViralCut = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Zoom hint */}
+          <div className="px-3 py-1 border-t border-border/20 shrink-0 flex items-center gap-3">
+            <span className="text-[8px] text-muted-foreground/50">Ctrl+scroll ou pinça para zoom • Arraste ▲ para navegar</span>
+            {cutSegments.length > 0 && (
+              <span className="text-[9px] text-primary bg-primary/10 border border-primary/30 rounded px-1.5 ml-auto">
+                {cutSegments.length} cortes • {formatTime(displayDuration)}
+              </span>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Processing overlay ──────────────────────────────────────── */}
       {processing && (
