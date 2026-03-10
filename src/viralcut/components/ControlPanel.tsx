@@ -237,7 +237,7 @@ export function ControlPanel({
       {/* Export */}
       <section className="rounded-xl bg-card border border-border p-4 space-y-3">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <Download className="h-4 w-4 text-green-400" />
+          <Download className="h-4 w-4 text-primary" />
           Exportar
         </h3>
 
@@ -247,12 +247,12 @@ export function ControlPanel({
               onClick={() => onEmbedSubtitlesChange(!embedSubtitles)}
               className={cn(
                 'h-5 w-9 rounded-full transition-colors relative',
-                embedSubtitles ? 'bg-green-500' : 'bg-muted'
+                embedSubtitles ? 'bg-primary' : 'bg-muted'
               )}
             >
               <div
                 className={cn(
-                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
+                  'absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform',
                   embedSubtitles ? 'translate-x-4' : 'translate-x-0.5'
                 )}
               />
