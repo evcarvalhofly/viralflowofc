@@ -1202,7 +1202,6 @@ const ViralCut = () => {
 
     setPlaying(false);
     setMuted(false);
-    setCurrentTime(0);
     setTimelineTime(0);
     setSourceTime(0);
     setDuration(0);
