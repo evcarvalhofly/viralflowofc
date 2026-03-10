@@ -1317,19 +1317,36 @@ const ViralCut = () => {
   };
 
   // ─── Export ───────────────────────────────────────────────────────────────
+  // ─── FFmpeg instance (lazy-loaded once) ──────────────────────────────────
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
+
+  const loadFFmpeg = useCallback(async () => {
+    if (ffmpegRef.current && ffmpegLoaded) return ffmpegRef.current;
+    const ff = new FFmpeg();
+    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+    await ff.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    });
+    ffmpegRef.current = ff;
+    setFfmpegLoaded(true);
+    return ff;
+  }, [ffmpegLoaded]);
+
   const handleExport = async () => {
-    if (!videoSrc) {
+    if (!videoSrc || !videoFile) {
       toast({ title: "Sem vídeo", variant: "destructive" });
       return;
     }
     setProcessing(true);
-    setProcessingMsg("Preparando exportação...");
     videoRef.current?.pause();
     setPlaying(false);
     playingRef.current = false;
 
-    // No cuts — direct download of original
     const segs = cutSegments;
+
+    // No cuts — direct download of original
     if (segs.length === 0) {
       const a = document.createElement("a");
       a.href = videoSrc;
@@ -1341,104 +1358,71 @@ const ViralCut = () => {
     }
 
     try {
-      const mimeType = ["video/webm;codecs=vp9", "video/webm", "video/mp4"]
-        .find(m => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
+      setProcessingMsg("Carregando FFmpeg...");
+      const ff = await loadFFmpeg();
 
-      // Hidden video element for export — plays the source at real speed
-      const ev = document.createElement("video");
-      ev.src = videoSrc;
-      ev.muted = true;
-      ev.playsInline = true;
-      ev.crossOrigin = "anonymous";
-      document.body.appendChild(ev); // must be in DOM for captureStream
+      setProcessingMsg("Carregando vídeo...");
+      // Write source video into FFmpeg virtual FS
+      const inputData = await fetchFile(videoFile);
+      await ff.writeFile("input.mp4", inputData);
 
-      await new Promise<void>((res, rej) => {
-        ev.onloadedmetadata = () => res();
-        ev.onerror = () => rej(new Error("Erro ao carregar vídeo"));
-        ev.load();
-      });
+      // Build a concat filter_complex that trims + concatenates all segments
+      // Format: [0:v]trim=start=S:end=E,setpts=PTS-STARTPTS[v0];
+      //         [0:a]atrim=start=S:end=E,asetpts=PTS-STARTPTS[a0]; ...
+      //         [v0][a0][v1][a1]...concat=n=N:v=1:a=1[outv][outa]
+      const filterParts: string[] = [];
+      const concatInputs: string[] = [];
 
-      const canvas = document.createElement("canvas");
-      canvas.width = ev.videoWidth || 1280;
-      canvas.height = ev.videoHeight || 720;
-      const ctx = canvas.getContext("2d")!;
-
-      // Capture canvas stream + audio stream from video
-      const videoStream = canvas.captureStream(30);
-      let combinedStream = videoStream;
-      try {
-        // Try to capture audio too
-        const audioCtx = new AudioContext();
-        const src = audioCtx.createMediaElementSource(ev);
-        const dest = audioCtx.createMediaStreamDestination();
-        src.connect(dest);
-        src.connect(audioCtx.destination);
-        const audioTrack = dest.stream.getAudioTracks()[0];
-        if (audioTrack) {
-          combinedStream = new MediaStream([...videoStream.getVideoTracks(), audioTrack]);
-        }
-      } catch (_) { /* no audio capture — ok */ }
-
-      const recorder = new MediaRecorder(combinedStream, { mimeType });
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-
-      // Draw frames to canvas while video plays
-      let drawing = true;
-      const drawFrame = () => {
-        if (!drawing) return;
-        ctx.drawImage(ev, 0, 0, canvas.width, canvas.height);
-        requestAnimationFrame(drawFrame);
-      };
-      requestAnimationFrame(drawFrame);
-
-      recorder.start(200);
-
-      // Play each segment sequentially
-      for (let si = 0; si < segs.length; si++) {
-        const seg = segs[si];
-        setProcessingMsg(`Exportando clipe ${si + 1}/${segs.length}...`);
-
-        // Seek to start
-        await new Promise<void>(res => {
-          ev.onseeked = () => res();
-          ev.currentTime = seg.start;
-          setTimeout(res, 3000); // safety fallback
-        });
-
-        // Play until end of segment
-        await new Promise<void>(res => {
-          const onTime = () => {
-            if (ev.currentTime >= seg.end - 0.05) {
-              ev.removeEventListener("timeupdate", onTime);
-              ev.pause();
-              res();
-            }
-          };
-          ev.addEventListener("timeupdate", onTime);
-          ev.play().catch(() => res());
-        });
+      for (let i = 0; i < segs.length; i++) {
+        const { start, end } = segs[i];
+        filterParts.push(
+          `[0:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${i}]`,
+          `[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i}]`
+        );
+        concatInputs.push(`[v${i}][a${i}]`);
       }
 
-      drawing = false;
-      recorder.stop();
+      filterParts.push(
+        `${concatInputs.join("")}concat=n=${segs.length}:v=1:a=1[outv][outa]`
+      );
 
-      await new Promise<void>(res => {
-        recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: mimeType });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.webm";
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 10000);
-          res();
-        };
+      const filterComplex = filterParts.join(";");
+
+      setProcessingMsg(`Exportando ${segs.length} clipe${segs.length > 1 ? "s" : ""} em MP4...`);
+
+      ff.on("progress", ({ progress }) => {
+        setProcessingMsg(`Exportando MP4... ${Math.round(progress * 100)}%`);
       });
 
-      document.body.removeChild(ev);
+      await ff.exec([
+        "-i", "input.mp4",
+        "-filter_complex", filterComplex,
+        "-map", "[outv]",
+        "-map", "[outa]",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "22",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-movflags", "+faststart",
+        "output.mp4",
+      ]);
+
+      const data = await ff.readFile("output.mp4");
+      const blob = new Blob([data], { type: "video/mp4" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = videoName.replace(/\.[^.]+$/, "") + "-viralcut.mp4";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      // Cleanup FS
+      await ff.deleteFile("input.mp4");
+      await ff.deleteFile("output.mp4");
+
       setProcessing(false);
-      toast({ title: `✅ Exportado! ${segs.length} clipe${segs.length > 1 ? "s" : ""} combinados.` });
+      toast({ title: `✅ MP4 exportado com áudio! ${segs.length} clipe${segs.length > 1 ? "s" : ""}.` });
     } catch (err) {
       console.error("Export error:", err);
       setProcessing(false);
