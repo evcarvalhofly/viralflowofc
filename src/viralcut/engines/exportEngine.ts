@@ -121,10 +121,13 @@ export async function exportVideo(opts: ExportOptions): Promise<Blob> {
   onProgress?.(95, 'Preparando download…');
 
   const data = await ffmpeg.readFile(outputFile);
-  const buffer: ArrayBuffer =
-    data instanceof Uint8Array
-      ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
-      : new TextEncoder().encode(String(data)).buffer;
+  let buffer: ArrayBuffer;
+  if (data instanceof Uint8Array) {
+    // Copy to a plain ArrayBuffer to avoid SharedArrayBuffer issues
+    buffer = data.buffer.slice(0) as ArrayBuffer;
+  } else {
+    buffer = new TextEncoder().encode(String(data)).buffer as ArrayBuffer;
+  }
   const blob = new Blob([buffer], { type: 'video/mp4' });
 
   // Cleanup
