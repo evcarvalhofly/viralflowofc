@@ -909,8 +909,9 @@ const ViralCut = () => {
     else { v.play(); setPlaying(true); }
   };
 
-  // Alias: all seek calls from UI go through seekTimeline
-  const seekVirtual = seekTimeline;
+  // UI alias — every visual navigation goes through seekTimeline
+  // Internal/system seeks that operate on raw file time use seekSource
+  const seekVirtual = seekTimeline; // timeline-time (edited sequence)
 
   const toggleMute = () => {
     const v = videoRef.current;
@@ -941,12 +942,9 @@ const ViralCut = () => {
       virtualDurationRef.current = total;
       setVirtualDuration(total);
 
-      // Seek to the start of the first clip (source time)
-      if (clips.length > 0) {
-        v.currentTime = clips[0].sourceStart;  // ← source time
-        setSourceTime(clips[0].sourceStart);
-        setTimelineTime(0);
-      }
+      // Seek to the start of the first clip via seekTimeline(0)
+      // (timeline 0 maps to clips[0].sourceStart via timelineToSourceTime)
+      seekTimeline(0);
 
       toast({ title: `✂️ ${clips.length} clipes detectados`, description: `Silêncios removidos • Nível: ${autoCutLevel}` });
     } catch (err) {
@@ -1150,7 +1148,7 @@ const ViralCut = () => {
       };
 
       recognition.start(dest.stream);
-      v.currentTime = 0;
+      seekSource(0); // rewind to source start for transcription
       await v.play();
       setPlaying(true);
     } catch (err) {
@@ -1489,9 +1487,7 @@ const ViralCut = () => {
                             timelineClipsRef.current = [resetClip];
                             setVirtualDuration(duration);
                             virtualDurationRef.current = duration;
-                            setTimelineTime(0);
-                            setSourceTime(0);
-                            if (videoRef.current) videoRef.current.currentTime = 0;
+                            seekSource(0); // rewind after resetting cuts
                           }}
                           className="text-[9px] text-destructive hover:underline"
                         >Desfazer cortes</button>
