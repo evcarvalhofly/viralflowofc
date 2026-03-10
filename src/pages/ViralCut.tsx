@@ -13,9 +13,6 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-// Vite ?url imports so bundler resolves and serves the WASM assets correctly
-import ffmpegCoreJsURL from "@ffmpeg/core/dist/umd/ffmpeg-core.js?url";
-import ffmpegCoreWasmURL from "@ffmpeg/core/dist/umd/ffmpeg-core.wasm?url";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
