@@ -723,7 +723,13 @@ const ViralCut = () => {
     const tl = clips.length > 0 ? sourceToTimelineTime(src, clips) : src;
 
     setSourceTime(src);
-    setTimelineTime(tl);
+    // FIX 4: Prevent playhead from jumping back in time during gap transitions
+    setTimelineTime(prev => {
+      if (!playingRef.current || tl > prev || Math.abs(tl - prev) > 0.5) {
+        return tl;
+      }
+      return prev;
+    });
 
     // Captions
     setActiveCaptions(prev => {
@@ -860,6 +866,7 @@ const ViralCut = () => {
   }, [virtualDuration, duration]);
 
   // ─ Playhead drag (timeline time) ─────────────────────────────────────────
+  // FIX 1: Only update visual state during drag; do the real seek on mouseUp
   const handleTimelineMouseMove = useCallback((e: MouseEvent) => {
     if (!playheadDragging.current || !timelineRulerRef.current) return;
     const rect = timelineRulerRef.current.getBoundingClientRect();
@@ -867,13 +874,35 @@ const ViralCut = () => {
     const pxPerSec = timelineScale * 80;
     const displayDur = virtualDurationRef.current > 0 ? virtualDurationRef.current : 0;
     if (displayDur <= 0 || pxPerSec <= 0) return;
+
     const tl = Math.max(0, Math.min(displayDur, relX / pxPerSec));
-    seekTimeline(tl);                    // ← always timeline seek
-  }, [timelineScale, seekTimeline]);
+
+    // Only update visual state during drag to avoid lag
+    const clips = timelineClipsRef.current;
+    const src = clips.length > 0
+      ? (timelineToSourceTime(tl, clips) ?? clips[0].sourceStart)
+      : tl;
+
+    setTimelineTime(tl);
+    setSourceTime(src);
+
+    // Pause video during drag if playing
+    if (playingRef.current && videoRef.current) {
+      videoRef.current.pause();
+      setPlaying(false);
+      playingRef.current = false;
+    }
+  }, [timelineScale]);
 
   const handleTimelineMouseUp = useCallback(() => {
+    if (playheadDragging.current) {
+      // FIX 1: Perform the real seek only on mouse release
+      if (videoRef.current) {
+        videoRef.current.currentTime = sourceTime;
+      }
+    }
     playheadDragging.current = false;
-  }, []);
+  }, [sourceTime]);
 
   useEffect(() => {
     window.addEventListener("mousemove", handleTimelineMouseMove);
@@ -1905,12 +1934,25 @@ const ViralCut = () => {
               onMouseDown={e => {
                 e.preventDefault();
                 const bar = e.currentTarget.parentElement!;
+                // FIX 3: Only update visual state during drag, real seek on mouseUp
+                let pendingVt = displayTime;
                 const onMove = (ev: MouseEvent) => {
                   const rect = bar.getBoundingClientRect();
-                  const vt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
-                  seekVirtual(vt);
+                  pendingVt = Math.max(0, Math.min(displayDuration, ((ev.clientX - rect.left) / rect.width) * displayDuration));
+                  const clips = timelineClipsRef.current;
+                  const src = clips.length > 0
+                    ? (timelineToSourceTime(pendingVt, clips) ?? clips[0].sourceStart)
+                    : pendingVt;
+                  setTimelineTime(pendingVt);
+                  setSourceTime(src);
+                  if (playingRef.current && videoRef.current) {
+                    videoRef.current.pause();
+                    setPlaying(false);
+                    playingRef.current = false;
+                  }
                 };
                 const onUp = () => {
+                  if (videoRef.current) videoRef.current.currentTime = pendingVt;
                   window.removeEventListener("mousemove", onMove);
                   window.removeEventListener("mouseup", onUp);
                 };
@@ -1919,12 +1961,25 @@ const ViralCut = () => {
               }}
               onTouchStart={e => {
                 const bar = e.currentTarget.parentElement!;
+                // FIX 3: Same logic for touch
+                let pendingVt = displayTime;
                 const onMove = (ev: TouchEvent) => {
                   const rect = bar.getBoundingClientRect();
-                  const vt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
-                  seekVirtual(vt);
+                  pendingVt = Math.max(0, Math.min(displayDuration, ((ev.touches[0].clientX - rect.left) / rect.width) * displayDuration));
+                  const clips = timelineClipsRef.current;
+                  const src = clips.length > 0
+                    ? (timelineToSourceTime(pendingVt, clips) ?? clips[0].sourceStart)
+                    : pendingVt;
+                  setTimelineTime(pendingVt);
+                  setSourceTime(src);
+                  if (playingRef.current && videoRef.current) {
+                    videoRef.current.pause();
+                    setPlaying(false);
+                    playingRef.current = false;
+                  }
                 };
                 const onEnd = () => {
+                  if (videoRef.current) videoRef.current.currentTime = pendingVt;
                   window.removeEventListener("touchmove", onMove);
                   window.removeEventListener("touchend", onEnd);
                 };
@@ -2036,7 +2091,8 @@ const ViralCut = () => {
                   <div className="relative flex h-6 border-b border-border/30 bg-[hsl(220,25%,8%)]">
                     <div className="w-32 shrink-0 border-r border-border/30" />
                     <div className="relative flex-1">
-                      {Array.from({ length: Math.ceil((duration || displayDuration)) + 1 }).map((_, i) => (
+                      {/* FIX 2: Ticks strictly based on displayed (virtual) timeline duration */}
+                      {Array.from({ length: Math.max(1, Math.ceil(displayDuration) + 1) }).map((_, i) => (
                         <div
                           key={i}
                           className="absolute top-0 bottom-0 border-l border-border/20 flex items-end pb-0.5"
@@ -2105,7 +2161,7 @@ const ViralCut = () => {
                     {/* ── Video track (real clips) ── */}
                     <VideoTrackLane
                       clips={videoClips}
-                      duration={duration || displayDuration}
+                      duration={displayDuration}
                       scale={timelineScale}
                       cutMode={cutMode}
                       onSeek={seekVirtual}
