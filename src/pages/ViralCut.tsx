@@ -1324,19 +1324,37 @@ const ViralCut = () => {
   const loadFFmpeg = useCallback(async () => {
     if (ffmpegRef.current && ffmpegLoaded) return ffmpegRef.current;
     const ff = new FFmpeg();
-    // Use jsdelivr CDN which serves proper CORP headers needed for SharedArrayBuffer
-    const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
+
+    // Load from local node_modules via Vite's asset import system
+    // These URLs resolve to files served by Vite dev server / bundler
+    const coreURL = new URL(
+      "/node_modules/@ffmpeg/core/dist/umd/ffmpeg-core.js",
+      import.meta.url
+    ).href;
+    const wasmURL = new URL(
+      "/node_modules/@ffmpeg/core/dist/umd/ffmpeg-core.wasm",
+      import.meta.url
+    ).href;
+
     try {
+      // Convert to blob URLs so they work regardless of COEP headers
       await ff.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        coreURL: await toBlobURL(coreURL, "text/javascript"),
+        wasmURL: await toBlobURL(wasmURL, "application/wasm"),
       });
-    } catch {
-      // Fallback: load without toBlobURL (direct URL)
-      await ff.load({
-        coreURL: `${baseURL}/ffmpeg-core.js`,
-        wasmURL: `${baseURL}/ffmpeg-core.wasm`,
-      });
+    } catch (e1) {
+      console.warn("toBlobURL failed, trying direct URL:", e1);
+      try {
+        await ff.load({ coreURL, wasmURL });
+      } catch (e2) {
+        // Last resort: unpkg CDN
+        console.warn("Direct URL failed, trying unpkg:", e2);
+        const unpkg = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+        await ff.load({
+          coreURL: await toBlobURL(`${unpkg}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${unpkg}/ffmpeg-core.wasm`, "application/wasm"),
+        });
+      }
     }
     ffmpegRef.current = ff;
     setFfmpegLoaded(true);
