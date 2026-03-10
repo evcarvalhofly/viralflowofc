@@ -1004,24 +1004,67 @@ const ViralCut = () => {
     });
   }, []);
 
+  // ─── Reset main media (called when video is fully removed) ───────────────
+  const resetMainMediaState = useCallback(() => {
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      v.removeAttribute("src");
+      v.load();
+    }
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    cancelAnimationFrame(rafRef.current);
+
+    setPlaying(false);
+    setMuted(false);
+    setTimelineTime(0);
+    setSourceTime(0);
+    setDuration(0);
+    setVirtualDuration(0);
+    virtualDurationRef.current = 0;
+
+    setVideoSrc(null);
+    setVideoName("Sem vídeo");
+    setSourceMedia(null);
+    setVideoFile(null);
+
+    setCaptions([]);
+    setActiveCaptions([]);
+    setTranscriptWords([]);
+    setTranscriptRaw("");
+
+    setTimelineClips([]);
+    timelineClipsRef.current = [];
+
+    setLayers(prev => prev.filter(l => l.type !== "video"));
+    setHistory([]);
+  }, []);
+
   const handleClipDelete = useCallback((id: string) => {
     pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
-    setTimelineClips(prev => {
-      const next = deleteClip(prev, id);
-      timelineClipsRef.current = next;
-      const videoOnly = next.filter(c => c.kind === "video");
-      if (videoOnly.length === 0) {
-        setVirtualDuration(0);
-        virtualDurationRef.current = duration;
-        return next;
-      }
-      const total = videoOnly.reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
-      setVirtualDuration(total);
-      virtualDurationRef.current = total;
-      return next;
-    });
+    const nextClips = deleteClip(timelineClipsRef.current, id);
+    const videoOnly = nextClips.filter(c => c.kind === "video");
+
+    // If no video clips remain, fully reset the editor
+    if (videoOnly.length === 0) {
+      resetMainMediaState();
+      toast({ title: "Vídeo removido — editor resetado" });
+      return;
+    }
+
+    setTimelineClips(nextClips);
+    timelineClipsRef.current = nextClips;
+    const total = videoOnly.reduce((acc, c) => acc + (c.timelineEnd - c.timelineStart), 0);
+    setVirtualDuration(total);
+    virtualDurationRef.current = total;
     toast({ title: "Clipe removido" });
-  }, [timelineClips, layers, captions, duration, virtualDuration, pushHistory]);
+  }, [timelineClips, layers, captions, duration, virtualDuration, pushHistory, resetMainMediaState]);
 
   // ─── Captions via Web Speech API ─────────────────────────────────────────
   const speechRecognitionRef = useRef<any>(null);
@@ -1183,6 +1226,7 @@ const ViralCut = () => {
     toast({ title: "🎵 Áudio adicionado" });
   };
 
+
   // ─── Layer actions ────────────────────────────────────────────────────────
   const toggleLayerVisible = (id: string) => {
     pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
@@ -1190,8 +1234,18 @@ const ViralCut = () => {
   };
 
   const deleteLayer = (id: string) => {
+    // If deleting the main video track, reset everything
+    if (id === "main-video" || id === "track-video-main") {
+      resetMainMediaState();
+      return;
+    }
     pushHistory(timelineClips, layers, captions, virtualDuration > 0 ? virtualDuration : duration);
     setLayers(prev => prev.filter(l => l.id !== id));
+    setTimelineClips(prev => {
+      const next = prev.filter(c => c.trackId !== id && c.id !== id);
+      timelineClipsRef.current = next;
+      return next;
+    });
   };
 
   // ─── Export ───────────────────────────────────────────────────────────────
