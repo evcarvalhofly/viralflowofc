@@ -207,10 +207,11 @@ async function exportWithFFmpeg(
   onProgress(82, "Concatenando clipes...");
 
   const toBlob = (fileData: Awaited<ReturnType<typeof ffmpeg.readFile>>, mime: string) => {
-    // FFmpeg returns Uint8Array; copy buffer to avoid SharedArrayBuffer issues
+    // Copy bytes into a plain ArrayBuffer to satisfy TypeScript / avoid SharedArrayBuffer issues
     const u8 = fileData as Uint8Array;
-    const copy = new Uint8Array(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
-    return new Blob([copy], { type: mime });
+    const plain = new Uint8Array(u8.byteLength);
+    plain.set(u8);
+    return new Blob([plain.buffer as ArrayBuffer], { type: mime });
   };
 
   if (segFiles.length === 1) {
