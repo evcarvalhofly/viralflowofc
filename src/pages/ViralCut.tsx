@@ -209,7 +209,7 @@ async function exportWithFFmpeg(
   if (segFiles.length === 1) {
     // Single segment — just read it back
     const data = await ffmpeg.readFile(segFiles[0]);
-    return new Blob([data], { type: "video/mp4" });
+    return new Blob([data as Uint8Array], { type: "video/mp4" });
   }
 
   // Write concat list
