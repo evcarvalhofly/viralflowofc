@@ -1541,6 +1541,9 @@ const ViralCut = () => {
         </div>
       </div>
 
+      {/* ══ Bottom panel (player + toolbar + timeline) — max-height prevents overflow */}
+      <div className="flex flex-col overflow-hidden" style={{ maxHeight: "min(46vh, 330px)" }}>
+
       {/* ══ Player controls — full width, above action toolbar ══════════════ */}
       <div className="shrink-0 bg-[hsl(220,25%,10%)] border-t border-border/40 px-4 py-2.5 flex items-center gap-3 w-full">
         <button onClick={() => seekVirtual(0)} className="text-muted-foreground hover:text-foreground shrink-0">
@@ -1706,7 +1709,7 @@ const ViralCut = () => {
       {/* ── Timeline ─────────────────────────────────────────────────── */}
       {!bottomCollapsed && (
         <div
-          className="shrink-0 bg-[hsl(220,25%,9%)] border-t border-border/30 flex flex-col overflow-hidden h-44"
+          className="flex-1 min-h-0 bg-[hsl(220,25%,9%)] border-t border-border/30 flex flex-col overflow-hidden"
           onWheel={handleTimelineWheel}
           onTouchStart={handleTimelineTouchStart}
           onTouchMove={handleTimelineTouchMove}
@@ -1843,6 +1846,9 @@ const ViralCut = () => {
           </div>
         </div>
       )}
+
+      {/* Close bottom panel wrapper */}
+      </div>
 
       {/* ── Processing overlay ──────────────────────────────────────── */}
       {processing && (
