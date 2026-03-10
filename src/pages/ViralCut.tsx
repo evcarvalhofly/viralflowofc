@@ -1690,7 +1690,8 @@ const ViralCut = () => {
                   {/* Label offset */}
                   <div className="w-32 shrink-0 border-r border-border/30" />
                   <div className="relative flex-1">
-                    {Array.from({ length: Math.ceil(displayDuration) + 1 }).map((_, i) => (
+                    {/* Ticks based on real duration for the video track */}
+                    {Array.from({ length: Math.ceil((duration || displayDuration)) + 1 }).map((_, i) => (
                       <div
                         key={i}
                         className="absolute top-0 bottom-0 border-l border-border/20 flex items-end pb-0.5"
