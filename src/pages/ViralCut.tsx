@@ -1324,11 +1324,20 @@ const ViralCut = () => {
   const loadFFmpeg = useCallback(async () => {
     if (ffmpegRef.current && ffmpegLoaded) return ffmpegRef.current;
     const ff = new FFmpeg();
-    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
-    await ff.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-    });
+    // Use jsdelivr CDN which serves proper CORP headers needed for SharedArrayBuffer
+    const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
+    try {
+      await ff.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+      });
+    } catch {
+      // Fallback: load without toBlobURL (direct URL)
+      await ff.load({
+        coreURL: `${baseURL}/ffmpeg-core.js`,
+        wasmURL: `${baseURL}/ffmpeg-core.wasm`,
+      });
+    }
     ffmpegRef.current = ff;
     setFfmpegLoaded(true);
     return ff;
