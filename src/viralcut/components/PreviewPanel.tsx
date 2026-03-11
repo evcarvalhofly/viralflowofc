@@ -71,6 +71,10 @@ export function PreviewPanel({
   const [volume, setVolume] = useState(1);
   const lastSrcRef = useRef<string>('');
 
+  // ── Canvas size: matches actual video AR, scaled to preview size ──
+  const activeMf = activeVideoItem?.mediaFile;
+  const { w: canvasW, h: canvasH } = previewSize(activeMf?.width, activeMf?.height);
+
   // ── Derived active items ───────────────────────────────────
   const activeVideoItem = (() => {
     for (const track of tracks) {
