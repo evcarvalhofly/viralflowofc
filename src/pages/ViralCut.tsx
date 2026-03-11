@@ -464,6 +464,7 @@ const ViralCut = () => {
   // MOBILE LANDING (no media yet)
   // ────────────────────────────────────────────────────────────
   if (isMobile && !hasMedia) {
+    // All hooks called above – safe early return
     return (
       <div className="h-full flex flex-col bg-background">
         {/* Header */}
