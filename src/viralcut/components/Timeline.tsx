@@ -110,7 +110,7 @@ export function Timeline({
     onSeek(t);
   }, [zoom, onSeek]);
 
-  // ── Drag item (move) ─────────────────────────────────────────
+  // ── Drag item (move) — mouse ─────────────────────────────────
   const handleItemMouseDown = (e: React.MouseEvent, track: Track, item: TrackItem) => {
     if (track.locked) return;
     e.stopPropagation();
@@ -131,6 +131,33 @@ export function Timeline({
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+  };
+
+  // ── Drag item (move) — touch ─────────────────────────────────
+  const handleItemTouchStart = (e: React.TouchEvent, track: Track, item: TrackItem) => {
+    if (track.locked) return;
+    e.stopPropagation();
+    // Always select on touch
+    onItemSelect(item.id);
+
+    const startX = e.touches[0].clientX;
+    const origStart = item.startTime;
+    let moved = false;
+
+    const onMove = (ev: TouchEvent) => {
+      const dx = ev.touches[0].clientX - startX;
+      if (Math.abs(dx) > 4) {
+        moved = true;
+        const newStart = Math.max(0, origStart + dx / zoom);
+        onItemMove(track.id, item.id, newStart);
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onUp);
   };
 
   // ── Trim left handle ────────────────────────────────────────
