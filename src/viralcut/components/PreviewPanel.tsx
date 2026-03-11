@@ -70,6 +70,8 @@ export function PreviewPanel({
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const lastSrcRef = useRef<string>('');
+  // Track which segment item was active last frame so we can detect jumps
+  const lastSegmentIdRef = useRef<string | null>(null);
 
   // ── Derived active items ───────────────────────────────────
   const activeVideoItem = (() => {
