@@ -855,6 +855,7 @@ const ViralCut = () => {
               onTrackToggleMute={handleToggleMute}
               onTrackToggleLock={handleToggleLock}
               onDropMedia={handleDropMedia}
+              onSplitAllAtPlayhead={handleSplitAllAtPlayhead}
             />
           </div>
         </div>
