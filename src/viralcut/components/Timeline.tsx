@@ -96,6 +96,7 @@ export function Timeline({
   onTrackToggleLock,
   onDropMedia,
   onSplitAllAtPlayhead,
+  onDeleteSelected,
 }: TimelineProps) {
   const rulerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
