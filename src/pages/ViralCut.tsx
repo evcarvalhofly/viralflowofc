@@ -27,35 +27,59 @@ import { cn } from '@/lib/utils';
 async function generateThumbnail(file: File): Promise<string | undefined> {
   return new Promise((resolve) => {
     if (!file.type.startsWith('video/')) { resolve(undefined); return; }
+    const objUrl = URL.createObjectURL(file);
     const video = document.createElement('video');
-    video.src = URL.createObjectURL(file);
-    video.currentTime = 1;
     video.muted = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+    const timeout = setTimeout(() => { URL.revokeObjectURL(objUrl); resolve(undefined); }, 8000);
+    const cleanup = () => { clearTimeout(timeout); URL.revokeObjectURL(objUrl); };
+    video.onerror = () => { cleanup(); resolve(undefined); };
     video.onloadeddata = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 160; canvas.height = 90;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(video, 0, 0, 160, 90);
-      URL.revokeObjectURL(video.src);
-      resolve(canvas.toDataURL('image/jpeg', 0.7));
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 160; canvas.height = 90;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(video, 0, 0, 160, 90);
+        cleanup();
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      } catch { cleanup(); resolve(undefined); }
     };
-    video.onerror = () => resolve(undefined);
+    video.src = objUrl;
+    video.currentTime = 1;
   });
 }
 
 async function getMediaDuration(file: File): Promise<{ duration: number; width?: number; height?: number }> {
   return new Promise((resolve) => {
-    if (file.type.startsWith('video/') || file.type.startsWith('audio/')) {
-      const el = document.createElement(file.type.startsWith('video/') ? 'video' : 'audio') as HTMLVideoElement;
-      el.src = URL.createObjectURL(file);
-      el.onloadedmetadata = () => {
-        URL.revokeObjectURL(el.src);
-        resolve({ duration: el.duration || 0, width: (el as HTMLVideoElement).videoWidth, height: (el as HTMLVideoElement).videoHeight });
-      };
-      el.onerror = () => resolve({ duration: 0 });
-    } else {
+    if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
       resolve({ duration: 0 });
+      return;
     }
+    const isVideo = file.type.startsWith('video/');
+    const objUrl = URL.createObjectURL(file);
+    const el = document.createElement(isVideo ? 'video' : 'audio') as HTMLVideoElement;
+    el.preload = 'metadata';
+    el.muted = true;
+
+    // Safety timeout — resolve after 10 s to avoid freezing on desktop
+    const timeout = setTimeout(() => {
+      URL.revokeObjectURL(objUrl);
+      resolve({ duration: el.duration || 0, width: el.videoWidth || undefined, height: el.videoHeight || undefined });
+    }, 10000);
+
+    const done = (ok: boolean) => {
+      clearTimeout(timeout);
+      URL.revokeObjectURL(objUrl);
+      resolve(ok
+        ? { duration: el.duration || 0, width: el.videoWidth || undefined, height: el.videoHeight || undefined }
+        : { duration: 0 }
+      );
+    };
+
+    el.onloadedmetadata = () => done(true);
+    el.onerror = () => done(false);
+    el.src = objUrl;
   });
 }
 
