@@ -20,6 +20,7 @@ interface PreviewPanelProps {
   selectedItemId?: string | null;
   onSelectItem?: (id: string | null) => void;
   onUpdateItem?: (trackId: string, itemId: string, updates: Partial<TrackItem>) => void;
+  onOpenProperties?: (id: string) => void;
 }
 
 function fmt(s: number) {
@@ -67,17 +68,21 @@ interface OverlayHandleProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   isSelected: boolean;
   onSelect: () => void;
+  onOpenProperties?: () => void;
   onUpdate: (updates: Partial<TrackItem>) => void;
   children: React.ReactNode;
 }
 
-function OverlayHandle({ item, containerRef, isSelected, onSelect, onUpdate, children }: OverlayHandleProps) {
+function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenProperties, onUpdate, children }: OverlayHandleProps) {
   const td = item.textDetails;
   const imgd = item.imageDetails;
 
   const posX = td?.posX ?? imgd?.posX ?? 50;
   const posY = td?.posY ?? imgd?.posY ?? 50;
   const width = td?.width ?? imgd?.width ?? 50;
+
+  // Double-click detection ref
+  const lastTapRef = useRef<number>(0);
 
   // ── Drag to move ──────────────────────────────────────────────
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -215,10 +220,29 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onUpdate, chi
         if (e.touches.length >= 2 && isSelected) {
           handlePinchStart(e);
         } else {
+          // Double-tap detection
+          const now = Date.now();
+          if (isSelected && now - lastTapRef.current < 400) {
+            lastTapRef.current = 0;
+            onOpenProperties?.();
+            return;
+          }
+          lastTapRef.current = now;
           handleDragStart(e);
         }
       }}
-      onClick={(e) => { e.stopPropagation(); onSelect(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        // Double-click detection for desktop
+        const now = Date.now();
+        if (isSelected && now - lastTapRef.current < 400) {
+          lastTapRef.current = 0;
+          onOpenProperties?.();
+          return;
+        }
+        lastTapRef.current = now;
+        onSelect();
+      }}
     >
       {children}
 
@@ -243,7 +267,7 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onUpdate, chi
         />
       )}
 
-      {/* Move icon indicator when selected */}
+      {/* Move/edit indicator when selected */}
       {isSelected && (
         <div
           style={{
@@ -253,14 +277,14 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onUpdate, chi
             transform: 'translateX(-50%)',
             background: 'hsl(var(--primary))',
             borderRadius: 4,
-            padding: '1px 4px',
+            padding: '1px 6px',
             fontSize: 9,
             color: 'white',
             whiteSpace: 'nowrap',
             pointerEvents: 'none',
           }}
         >
-          <Move style={{ display: 'inline', width: 10, height: 10 }} /> mover
+          <Move style={{ display: 'inline', width: 10, height: 10 }} /> mover · 2x clique = editar
         </div>
       )}
     </div>
@@ -279,6 +303,7 @@ export function PreviewPanel({
   selectedItemId,
   onSelectItem,
   onUpdateItem,
+  onOpenProperties,
 }: PreviewPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -589,6 +614,7 @@ export function PreviewPanel({
                   containerRef={overlayContainerRef}
                   isSelected={selectedItemId === item.id}
                   onSelect={() => onSelectItem?.(item.id)}
+                  onOpenProperties={() => onOpenProperties?.(item.id)}
                   onUpdate={(updates) => onUpdateItem?.(trackId, item.id, updates)}
                 >
                   <img
@@ -626,6 +652,7 @@ export function PreviewPanel({
                   containerRef={overlayContainerRef}
                   isSelected={selectedItemId === item.id}
                   onSelect={() => onSelectItem?.(item.id)}
+                  onOpenProperties={() => onOpenProperties?.(item.id)}
                   onUpdate={(updates) => onUpdateItem?.(trackId, item.id, updates)}
                 >
                   <div

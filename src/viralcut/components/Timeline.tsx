@@ -28,6 +28,7 @@ interface TimelineProps {
   onItemTrim: (trackId: string, itemId: string, newStart: number, newEnd: number, newMediaStart: number, newMediaEnd: number) => void;
   onItemDelete: (trackId: string, itemId: string) => void;
   onItemSelect: (itemId: string | null) => void;
+  onItemDoubleClick?: (itemId: string) => void;
   onItemSplit: (trackId: string, itemId: string, atTime: number) => void;
   onTrackToggleMute: (trackId: string) => void;
   onTrackToggleLock: (trackId: string) => void;
@@ -91,6 +92,7 @@ export function Timeline({
   onItemTrim,
   onItemDelete,
   onItemSelect,
+  onItemDoubleClick,
   onItemSplit,
   onTrackToggleMute,
   onTrackToggleLock,
@@ -102,6 +104,9 @@ export function Timeline({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+
+  // Double-click detection: track last click per item
+  const lastClickRef = useRef<{ id: string; time: number } | null>(null);
 
   // Sync horizontal scroll: tracks → ruler
   const handleTrackScroll = useCallback(() => {
@@ -206,6 +211,18 @@ export function Timeline({
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      // Don't fire double-click if we actually dragged
+      if (!dragging) {
+        const now = Date.now();
+        const last = lastClickRef.current;
+        if (last && last.id === item.id && now - last.time < 350) {
+          // Double click detected → open properties
+          lastClickRef.current = null;
+          onItemDoubleClick?.(item.id);
+        } else {
+          lastClickRef.current = { id: item.id, time: now };
+        }
+      }
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -223,7 +240,7 @@ export function Timeline({
 
     const onMove = (ev: TouchEvent) => {
       const dx = ev.touches[0].clientX - startX;
-      if (!isDragging && Math.abs(dx) < 4) return;
+      if (!isDragging && Math.abs(dx) < 8) return;
       isDragging = true;
       // Prevent timeline scroll while dragging a clip
       ev.preventDefault();
@@ -233,6 +250,18 @@ export function Timeline({
     const onUp = () => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
+      // Don't fire double-click if we actually dragged
+      if (!isDragging) {
+        const now = Date.now();
+        const last = lastClickRef.current;
+        if (last && last.id === item.id && now - last.time < 400) {
+          // Double tap detected → open properties
+          lastClickRef.current = null;
+          onItemDoubleClick?.(item.id);
+        } else {
+          lastClickRef.current = { id: item.id, time: now };
+        }
+      }
     };
     // passive: false so we can call preventDefault() to block scroll
     window.addEventListener('touchmove', onMove, { passive: false });
@@ -478,7 +507,6 @@ export function Timeline({
                     )}
                     style={{ left, width: w }}
                     onMouseDown={(e) => handleItemMouseDown(e, track, item)}
-                    onClick={(e) => { e.stopPropagation(); onItemSelect(item.id); }}
                     onTouchStart={(e) => handleItemTouchStart(e, track, item)}
                     title={item.name}
                   >
