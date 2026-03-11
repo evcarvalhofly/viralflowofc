@@ -333,6 +333,20 @@ export function Timeline({
             <Scissors className="h-3 w-3" />
             <span className="hidden sm:inline">Cortar</span>
           </button>
+          {/* Quick-delete selected item */}
+          <button
+            title="Deletar item selecionado"
+            disabled={!selectedItemId}
+            onClick={(e) => { e.stopPropagation(); onDeleteSelected?.(); }}
+            className={cn(
+              'flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all border',
+              selectedItemId
+                ? 'bg-destructive/15 border-destructive/40 text-destructive hover:bg-destructive/25 cursor-pointer'
+                : 'bg-muted/40 border-border/30 text-muted-foreground/40 cursor-not-allowed'
+            )}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
         </div>
 
         {/* Ruler ticks — uses the same scroll container as tracks */}
