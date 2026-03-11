@@ -755,7 +755,9 @@ const ViralCut = () => {
       setExportState({ status: 'encoding', progress: 78, label: 'Convertendo para MP4…' });
 
       ffmpeg.on('progress', ({ progress }) => {
-        const pct = 78 + Math.round(progress * 18);
+        // FFmpeg can report negative or >1 values when duration is unknown — clamp to [0,1]
+        const safeProgress = Math.max(0, Math.min(1, isFinite(progress) ? progress : 0));
+        const pct = 78 + Math.round(safeProgress * 18);
         setExportState((s) => ({ ...s, progress: Math.min(pct, 96), label: 'Convertendo para MP4…' }));
       });
 
