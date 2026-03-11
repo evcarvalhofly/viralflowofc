@@ -212,19 +212,23 @@ export function Timeline({
 
     const startX = e.touches[0].clientX;
     const origStart = item.startTime;
+    let isDragging = false;
 
     const onMove = (ev: TouchEvent) => {
       const dx = ev.touches[0].clientX - startX;
-      if (Math.abs(dx) > 4) {
-        const newStart = Math.max(0, origStart + dx / zoom);
-        onItemMove(track.id, item.id, newStart);
-      }
+      if (!isDragging && Math.abs(dx) < 4) return;
+      isDragging = true;
+      // Prevent timeline scroll while dragging a clip
+      ev.preventDefault();
+      const newStart = Math.max(0, origStart + dx / zoom);
+      onItemMove(track.id, item.id, newStart);
     };
     const onUp = () => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-    window.addEventListener('touchmove', onMove, { passive: true });
+    // passive: false so we can call preventDefault() to block scroll
+    window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
   };
 
