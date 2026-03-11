@@ -220,10 +220,29 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
         if (e.touches.length >= 2 && isSelected) {
           handlePinchStart(e);
         } else {
+          // Double-tap detection
+          const now = Date.now();
+          if (isSelected && now - lastTapRef.current < 400) {
+            lastTapRef.current = 0;
+            onOpenProperties?.();
+            return;
+          }
+          lastTapRef.current = now;
           handleDragStart(e);
         }
       }}
-      onClick={(e) => { e.stopPropagation(); onSelect(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        // Double-click detection for desktop
+        const now = Date.now();
+        if (isSelected && now - lastTapRef.current < 400) {
+          lastTapRef.current = 0;
+          onOpenProperties?.();
+          return;
+        }
+        lastTapRef.current = now;
+        onSelect();
+      }}
     >
       {children}
 
