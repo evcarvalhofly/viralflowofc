@@ -71,10 +71,6 @@ export function PreviewPanel({
   const [volume, setVolume] = useState(1);
   const lastSrcRef = useRef<string>('');
 
-  // ── Canvas size: matches actual video AR, scaled to preview size ──
-  const activeMf = activeVideoItem?.mediaFile;
-  const { w: canvasW, h: canvasH } = previewSize(activeMf?.width, activeMf?.height);
-
   // ── Derived active items ───────────────────────────────────
   const activeVideoItem = (() => {
     for (const track of tracks) {
@@ -87,6 +83,13 @@ export function PreviewPanel({
     }
     return null;
   })();
+
+  // ── Canvas size: matches actual video AR, scaled to preview size ──
+  // ASPECT RATIO = same as original video. Only pixel count reduced for perf.
+  const { w: canvasW, h: canvasH } = previewSize(
+    activeVideoItem?.mediaFile?.width,
+    activeVideoItem?.mediaFile?.height
+  );
 
   const activeTextItems: TrackItem[] = tracks
     .filter((t) => t.type === 'text' && !t.muted)
