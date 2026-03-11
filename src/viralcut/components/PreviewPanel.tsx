@@ -303,6 +303,7 @@ export function PreviewPanel({
   selectedItemId,
   onSelectItem,
   onUpdateItem,
+  onOpenProperties,
 }: PreviewPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
