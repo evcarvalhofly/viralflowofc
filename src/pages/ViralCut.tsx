@@ -50,6 +50,12 @@ async function generateThumbnail(file: File): Promise<string | undefined> {
   });
 }
 
+// Sanitize duration: NaN/Infinity (WebM without metadata) → 0
+function sanitizeDuration(d: number): number {
+  if (!isFinite(d) || isNaN(d) || d <= 0) return 0;
+  return Math.min(d, 3600 * 4); // cap at 4 hours to prevent overflow
+}
+
 async function getMediaDuration(file: File): Promise<{ duration: number; width?: number; height?: number }> {
   return new Promise((resolve) => {
     if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
@@ -62,19 +68,22 @@ async function getMediaDuration(file: File): Promise<{ duration: number; width?:
     el.preload = 'metadata';
     el.muted = true;
 
+    const extract = () => ({
+      duration: sanitizeDuration(el.duration),
+      width: el.videoWidth > 0 ? el.videoWidth : undefined,
+      height: el.videoHeight > 0 ? el.videoHeight : undefined,
+    });
+
     // Safety timeout — resolve after 10 s to avoid freezing on desktop
     const timeout = setTimeout(() => {
       URL.revokeObjectURL(objUrl);
-      resolve({ duration: el.duration || 0, width: el.videoWidth || undefined, height: el.videoHeight || undefined });
+      resolve(extract());
     }, 10000);
 
     const done = (ok: boolean) => {
       clearTimeout(timeout);
       URL.revokeObjectURL(objUrl);
-      resolve(ok
-        ? { duration: el.duration || 0, width: el.videoWidth || undefined, height: el.videoHeight || undefined }
-        : { duration: 0 }
-      );
+      resolve(ok ? extract() : { duration: 0 });
     };
 
     el.onloadedmetadata = () => done(true);
