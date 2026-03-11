@@ -132,6 +132,7 @@ const ViralCut = () => {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       if (e.code === 'Space') { e.preventDefault(); setIsPlaying((p) => !p); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? handleRedo() : handleUndo(); }
+      if (e.key === 's' || e.key === 'S') { e.preventDefault(); handleSplitAllAtPlayhead(); }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedItemId) {
           const track = project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId));
