@@ -4,6 +4,8 @@
 // Mobile: CapCut-style (preview top → timeline → bottom tab bar)
 // ============================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import {
   MediaFile, Track, TrackItem, Project, ExportState,
   DEFAULT_TEXT_DETAILS, DEFAULT_VIDEO_DETAILS, DEFAULT_AUDIO_DETAILS, DEFAULT_IMAGE_DETAILS
