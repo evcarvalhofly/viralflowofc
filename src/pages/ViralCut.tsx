@@ -4,8 +4,6 @@
 // Mobile: CapCut-style (preview top → timeline → bottom tab bar)
 // ============================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import {
   MediaFile, Track, TrackItem, Project, ExportState,
   DEFAULT_TEXT_DETAILS, DEFAULT_VIDEO_DETAILS, DEFAULT_AUDIO_DETAILS, DEFAULT_IMAGE_DETAILS
@@ -621,11 +619,17 @@ const ViralCut = () => {
       }
 
       // ── Step 2: FFmpeg – concatenate segments → MP4 ─────────
+      // Lazy-load FFmpeg so it never blocks the page on initial load
       setExportState({ status: 'encoding', progress: 68, label: 'Carregando FFmpeg…' });
+
+      const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
+        import('@ffmpeg/ffmpeg'),
+        import('@ffmpeg/util'),
+      ]);
 
       const ffmpeg = new FFmpeg();
 
-      // Load FFmpeg WASM (using CDN URLs for core)
+      // Load FFmpeg WASM core from CDN
       const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
       await ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
@@ -674,12 +678,11 @@ const ViralCut = () => {
       setExportState({ status: 'encoding', progress: 97, label: 'Preparando download…' });
 
       const outputData = await ffmpeg.readFile('output.mp4');
-      // FileData can be string | Uint8Array — ensure we get a plain ArrayBuffer for Blob
       let mp4Blob: Blob;
       if (typeof outputData === 'string') {
         mp4Blob = new Blob([outputData], { type: 'video/mp4' });
       } else {
-        // Copy buffer to plain ArrayBuffer (avoids SharedArrayBuffer issues)
+        // Copy to plain ArrayBuffer (avoids SharedArrayBuffer Blob issues)
         const buf = new ArrayBuffer(outputData.byteLength);
         new Uint8Array(buf).set(outputData);
         mp4Blob = new Blob([buf], { type: 'video/mp4' });
