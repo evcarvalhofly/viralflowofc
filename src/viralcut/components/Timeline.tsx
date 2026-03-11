@@ -33,6 +33,7 @@ interface TimelineProps {
   onTrackToggleLock: (trackId: string) => void;
   onDropMedia: (trackId: string, mediaId: string, startTime: number) => void;
   onSplitAllAtPlayhead?: () => void;
+  onDeleteSelected?: () => void;
 }
 
 function fmtRuler(s: number) {
