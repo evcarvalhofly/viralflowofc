@@ -1,8 +1,7 @@
 // ============================================================
 // PreviewPanel – Video preview with text/image overlays + effects
 // LOW-QUALITY PREVIEW MODE: renders video via downscaled canvas
-// at ~360p to ensure smooth playback even with speed changes,
-// multiple layers, and CSS filters. Full quality only on export.
+// Robust segment-jump logic: always awaits 'seeked' before play
 // ============================================================
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
@@ -38,16 +37,25 @@ function buildTransform(flipH = false, flipV = false) {
   return `scale(${sx}, ${sy})`;
 }
 
-// Max pixels on the longest side for preview canvas (low-res for performance)
-// The ASPECT RATIO always matches the actual video dimensions.
 const PREVIEW_MAX_PX = 480;
 
-/** Scale video dimensions down to fit within PREVIEW_MAX_PX on the longest side */
 function previewSize(w?: number, h?: number): { w: number; h: number } {
   if (!w || !h || w === 0 || h === 0) return { w: 480, h: 270 };
   const scale = PREVIEW_MAX_PX / Math.max(w, h);
-  // Ensure even numbers (some codecs require it)
   return { w: Math.max(2, Math.round(w * scale / 2) * 2), h: Math.max(2, Math.round(h * scale / 2) * 2) };
+}
+
+/** Seek a video element and resolve once the seek completes (or times out) */
+function seekTo(v: HTMLVideoElement, t: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (Math.abs(v.currentTime - t) < 0.05) { resolve(); return; }
+    const onSeeked = () => { v.removeEventListener('seeked', onSeeked); resolve(); };
+    v.addEventListener('seeked', onSeeked);
+    // Safety: resolve after 800ms even if seeked never fires
+    const timeout = setTimeout(() => { v.removeEventListener('seeked', onSeeked); resolve(); }, 800);
+    v.addEventListener('seeked', () => clearTimeout(timeout), { once: true });
+    v.currentTime = t;
+  });
 }
 
 export function PreviewPanel({
@@ -60,18 +68,19 @@ export function PreviewPanel({
   onPlayPause,
   projectName,
 }: PreviewPanelProps) {
-  // Hidden video element used purely for decoding
   const videoRef = useRef<HTMLVideoElement>(null);
-  // Canvas shown to the user at low resolution
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
 
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
-  const lastSrcRef = useRef<string>('');
-  // Track which segment item was active last frame so we can detect jumps
+
+  // Track last active segment to detect jumps
   const lastSegmentIdRef = useRef<string | null>(null);
+  const lastSrcRef = useRef<string>('');
+  // Guard: prevent re-entrant seeks
+  const seekingRef = useRef(false);
 
   // ── Derived active items ───────────────────────────────────
   const activeVideoItem = (() => {
@@ -86,8 +95,6 @@ export function PreviewPanel({
     return null;
   })();
 
-  // ── Canvas size: matches actual video AR, scaled to preview size ──
-  // ASPECT RATIO = same as original video. Only pixel count reduced for perf.
   const { w: canvasW, h: canvasH } = previewSize(
     activeVideoItem?.mediaFile?.width,
     activeVideoItem?.mediaFile?.height
@@ -116,7 +123,7 @@ export function PreviewPanel({
     if (v.muted !== muted) v.muted = muted;
   }, [activeVideoItem, muted, volume]);
 
-  // ── Draw a frame: canvas matches video AR, so draw 1:1 (no letterbox needed) ──
+  // ── Draw a frame ───────────────────────────────────────────
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
     const v = videoRef.current;
@@ -135,7 +142,6 @@ export function PreviewPanel({
         ctx.translate(vd.flipH ? canvas.width : 0, vd.flipV ? canvas.height : 0);
         ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
       }
-      // Canvas dimensions already match video AR — fill the whole canvas
       ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
       ctx.restore();
     }
@@ -147,34 +153,29 @@ export function PreviewPanel({
       drawFrame();
       rafRef.current = requestAnimationFrame(loop);
     };
-
     if (isPlaying) {
       rafRef.current = requestAnimationFrame(loop);
     } else {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
-      // Draw one frame when paused
       drawFrame();
     }
-
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [isPlaying, drawFrame]);
 
-  // ── Also redraw on currentTime change (scrubbing) ─────────
+  // Redraw on scrub
   useEffect(() => {
     if (!isPlaying) drawFrame();
   }, [currentTime, isPlaying, drawFrame]);
 
-  // ── Sync video src + seek ──────────────────────────────────
+  // ── Core sync: src change + segment jump + seek ────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     const mf = activeVideoItem?.mediaFile;
+
     if (!mf) {
       lastSegmentIdRef.current = null;
-      // No video — clear canvas
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -185,62 +186,73 @@ export function PreviewPanel({
 
     const currentItemId = activeVideoItem!.item.id;
     const segmentChanged = lastSegmentIdRef.current !== currentItemId;
-    lastSegmentIdRef.current = currentItemId;
-
-    // Src changed → reload
-    if (v.src !== mf.url) {
-      lastSrcRef.current = mf.url;
-      v.src = mf.url;
-      v.preload = 'auto';
-      v.load();
-      const mediaTime = activeVideoItem!.item.mediaStart + (currentTime - activeVideoItem!.item.startTime);
-      v.oncanplay = () => {
-        v.currentTime = mediaTime;
-        v.oncanplay = null;
-        if (isPlaying) { applyVideoProps(); v.play().catch(() => {}); }
-      };
-      applyVideoProps();
-      return;
-    }
+    const srcChanged = v.src !== mf.url && lastSrcRef.current !== mf.url;
 
     const mediaTime = activeVideoItem!.item.mediaStart + (currentTime - activeVideoItem!.item.startTime);
 
-    // Segment changed (cut jump) → always seek to the mediaStart of the new segment
-    if (segmentChanged) {
-      v.currentTime = mediaTime;
-      applyVideoProps();
-      if (isPlaying) v.play().catch(() => {});
+    if (srcChanged) {
+      // Source changed: load new file, seek, then play
+      lastSrcRef.current = mf.url;
+      lastSegmentIdRef.current = currentItemId;
+      seekingRef.current = true;
+      v.pause();
+      v.src = mf.url;
+      v.preload = 'auto';
+      v.load();
+      v.oncanplay = async () => {
+        v.oncanplay = null;
+        await seekTo(v, mediaTime);
+        applyVideoProps();
+        seekingRef.current = false;
+        if (isPlaying) v.play().catch(() => {});
+      };
       return;
     }
 
-    // Normal scrub (paused) or drift correction
+    if (segmentChanged) {
+      // Jumped to a new segment: MUST await seeked before playing to avoid black frame
+      lastSegmentIdRef.current = currentItemId;
+      if (seekingRef.current) return; // Already seeking, skip
+      seekingRef.current = true;
+      v.pause();
+      seekTo(v, mediaTime).then(() => {
+        applyVideoProps();
+        seekingRef.current = false;
+        if (isPlaying) v.play().catch(() => {});
+        else drawFrame();
+      });
+      return;
+    }
+
+    // Same segment — normal scrub correction (only when paused)
     if (!isPlaying && Math.abs(v.currentTime - mediaTime) > 0.1) {
-      v.currentTime = mediaTime;
+      seekingRef.current = true;
+      seekTo(v, mediaTime).then(() => {
+        seekingRef.current = false;
+        drawFrame();
+      });
     }
     applyVideoProps();
-  }, [currentTime, activeVideoItem, isPlaying, applyVideoProps]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTime, activeVideoItem?.item.id, activeVideoItem?.mediaFile?.url, isPlaying]);
 
-  // ── Play / pause ──────────────────────────────────────────
+  // Apply props when volume/mute changes
+  useEffect(() => { applyVideoProps(); }, [applyVideoProps]);
+
+  // ── Play / Pause ──────────────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     if (isPlaying) {
-      if (activeVideoItem) {
-        const mediaTime = activeVideoItem.item.mediaStart + (currentTime - activeVideoItem.item.startTime);
-        if (Math.abs(v.currentTime - mediaTime) > 0.3) v.currentTime = mediaTime;
-      }
+      if (seekingRef.current) return; // Seeking in progress, will play on complete
       applyVideoProps();
       v.play().catch(() => {});
     } else {
       v.pause();
       setTimeout(() => drawFrame(), 30);
     }
-  }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Apply rate/volume immediately when they change ────────
-  useEffect(() => {
-    applyVideoProps();
-  }, [applyVideoProps]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
 
   // ── Audio tracks ──────────────────────────────────────────
   useEffect(() => {
@@ -272,10 +284,9 @@ export function PreviewPanel({
     });
   }, [currentTime, isPlaying, tracks, media, muted, volume]);
 
-  // ── Canvas CSS filter (reflects video effects) ────────────
+  // ── Canvas CSS filter ─────────────────────────────────────
   const vd = activeVideoItem?.item.videoDetails;
   const canvasFilter = buildFilter(vd?.brightness, vd?.contrast, vd?.saturation);
-  const canvasTransform = (vd?.flipH || vd?.flipV) ? undefined : undefined; // handled in drawFrame
 
   // ── Scrubber ──────────────────────────────────────────────
   const scrubbing = useRef(false);
@@ -313,7 +324,7 @@ export function PreviewPanel({
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Hidden video element — decodes at full speed, never shown */}
+      {/* Hidden video element */}
       <video
         ref={videoRef}
         style={{ display: 'none' }}
@@ -323,9 +334,8 @@ export function PreviewPanel({
         crossOrigin="anonymous"
       />
 
-      {/* Preview canvas — low-res display */}
+      {/* Preview canvas */}
       <div className="flex-1 min-h-0 flex items-center justify-center bg-black/90 relative overflow-hidden">
-
         {activeVideoItem?.mediaFile ? (
           <canvas
             ref={canvasRef}
@@ -453,10 +463,11 @@ export function PreviewPanel({
             <SkipBack className="h-4 w-4" />
           </button>
           <button
-            className="p-2 rounded-xl hover:bg-primary/20 text-primary transition-colors"
+            className="p-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground transition-colors shadow-sm"
             onClick={onPlayPause}
+            title={isPlaying ? 'Pausar' : 'Reproduzir'}
           >
-            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
           </button>
           <button
             className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
@@ -469,8 +480,9 @@ export function PreviewPanel({
 
         <div className="flex items-center gap-1.5 w-[72px] justify-end">
           <button
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => setMuted((v) => !v)}
+            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setMuted((m) => !m)}
+            title={muted ? 'Ativar som' : 'Silenciar'}
           >
             {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
           </button>
@@ -478,10 +490,11 @@ export function PreviewPanel({
             type="range"
             min={0}
             max={1}
-            step={0.05}
+            step={0.01}
             value={muted ? 0 : volume}
-            onChange={(e) => { setVolume(+e.target.value); setMuted(false); }}
-            className="w-14 h-1 accent-primary"
+            onChange={(e) => { setMuted(false); setVolume(Number(e.target.value)); }}
+            className="w-16 accent-primary"
+            title="Volume"
           />
         </div>
       </div>
