@@ -244,7 +244,7 @@ export function Timeline({
               'flex border-b border-border relative',
               dragOver === track.id && 'ring-1 ring-inset ring-primary/40 bg-primary/5'
             )}
-            style={{ height: TRACK_H }}
+            style={{ height: TRACK_H[track.type] ?? 56 }}
           >
             {/* Track label */}
             <div className="w-[160px] shrink-0 flex items-center gap-1.5 px-2 bg-card/90 border-r border-border z-10">
