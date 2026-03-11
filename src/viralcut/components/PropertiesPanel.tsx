@@ -202,10 +202,10 @@ export function PropertiesPanel({
               </Section>
               <Section title="Estilo">
                 <div className="space-y-1">
-                  <span className="text-[10px] text-muted-foreground">Tamanho da fonte</span>
+                  <span className="text-[10px] text-muted-foreground">Tamanho da fonte (%)</span>
                   <div className="flex items-center gap-2">
-                    <Slider min={8} max={200} step={1} value={[td.fontSize]} onValueChange={([v]) => updateText({ fontSize: v })} className="flex-1 h-4" />
-                    <span className="text-[10px] font-mono w-8 text-right">{td.fontSize}</span>
+                    <Slider min={1} max={30} step={0.5} value={[td.fontSize]} onValueChange={([v]) => updateText({ fontSize: v })} className="flex-1 h-4" />
+                    <span className="text-[10px] font-mono w-8 text-right">{td.fontSize.toFixed(1)}%</span>
                   </div>
                 </div>
                 <div className="space-y-1">
