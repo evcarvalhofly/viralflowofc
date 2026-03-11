@@ -411,13 +411,11 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
   }, [pushHistory, isMobile]);
 
-  // ── Export: Real-time playback → canvas + AudioContext → MediaRecorder ──
-  // Plays each video segment sequentially, draws frames to a full-res canvas
-  // with filters/flips applied, and routes audio through a Web AudioContext
-  // mixer so the exported file includes the original video audio + extra
-  // audio tracks. MediaRecorder captures both streams.
+  // ── Export: Canvas+AudioContext → WebM segments → FFmpeg → MP4 ──
+  // 1. Plays each segment in real-time capturing to a WebM blob
+  // 2. Passes all blobs to FFmpeg.wasm which concatenates + re-encodes as MP4
   const handleExport = useCallback(async (opts: ExportOptions) => {
-    setExportState({ status: 'preparing', progress: 5, label: 'Preparando…' });
+    setExportState({ status: 'preparing', progress: 2, label: 'Preparando…' });
 
     if (isMobile) setShowMobilePanel(false);
 
@@ -431,7 +429,7 @@ const ViralCut = () => {
       return;
     }
 
-    // ── Compute export dimensions from the ACTUAL video dimensions ──
+    // Compute export dimensions from actual video
     const firstMf = media.find((m) => m.id === videoItems[0].mediaId);
     const srcW = firstMf?.width ?? 1920;
     const srcH = firstMf?.height ?? 1080;
@@ -442,51 +440,25 @@ const ViralCut = () => {
     const FPS = opts.fps ?? 30;
 
     try {
-      setExportState({ status: 'encoding', progress: 8, label: 'Iniciando exportação…' });
+      // ── Step 1: Render each segment to a WebM blob ──────────
+      setExportState({ status: 'encoding', progress: 5, label: 'Iniciando renderização…' });
 
-      // ── Canvas (video) ──────────────────────────────────────
       const canvas = document.createElement('canvas');
       canvas.width = outW;
       canvas.height = outH;
       const ctx = canvas.getContext('2d', { alpha: false })!;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, outW, outH);
 
-      // ── AudioContext mixer ──────────────────────────────────
-      // We route video element audio through a GainNode into a
-      // MediaStreamDestination so MediaRecorder captures real audio.
-      const audioCtx = new AudioContext();
-      const audioDestination = audioCtx.createMediaStreamDestination();
-      const masterGain = audioCtx.createGain();
-      masterGain.gain.value = 1;
-      masterGain.connect(audioDestination);
+      const segmentBlobs: Blob[] = [];
+      const totalSegments = videoItems.length;
 
-      // ── Combine canvas + audio into one stream ─────────────
-      const videoStream = canvas.captureStream(FPS);
-      const audioStream = audioDestination.stream;
-      const combinedStream = new MediaStream([
-        ...videoStream.getVideoTracks(),
-        ...audioStream.getAudioTracks(),
-      ]);
-
-      const codecPrefs = [
+      const webmMimePrefs = [
         'video/webm;codecs=vp9,opus',
         'video/webm;codecs=vp8,opus',
         'video/webm;codecs=vp9',
         'video/webm;codecs=vp8',
         'video/webm',
-        'video/mp4',
       ];
-      const mimeType = codecPrefs.find((c) => MediaRecorder.isTypeSupported(c)) ?? 'video/webm';
-      const bitrate = opts.resolution === '1080p' ? 12_000_000 : 6_000_000;
-
-      const chunks: BlobPart[] = [];
-      const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: bitrate });
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-      const recorderStopped = new Promise<void>((res) => { recorder.onstop = () => res(); });
-      recorder.start(200);
-
-      const totalSegments = videoItems.length;
+      const segMimeType = webmMimePrefs.find((c) => MediaRecorder.isTypeSupported(c)) ?? 'video/webm';
 
       for (let segIdx = 0; segIdx < totalSegments; segIdx++) {
         const item = videoItems[segIdx];
@@ -499,19 +471,36 @@ const ViralCut = () => {
 
         setExportState({
           status: 'encoding',
-          progress: 10 + Math.round((segIdx / totalSegments) * 82),
-          label: `Renderizando ${segIdx + 1} de ${totalSegments}…`,
+          progress: 5 + Math.round((segIdx / totalSegments) * 60),
+          label: `Renderizando segmento ${segIdx + 1} de ${totalSegments}…`,
         });
 
-        // Create video element — NOT muted so we can capture its audio
+        // AudioContext for this segment
+        const audioCtx = new AudioContext();
+        const audioDestination = audioCtx.createMediaStreamDestination();
+        const masterGain = audioCtx.createGain();
+        masterGain.gain.value = 1;
+        masterGain.connect(audioDestination);
+
+        const videoStream = canvas.captureStream(FPS);
+        const combinedStream = new MediaStream([
+          ...videoStream.getVideoTracks(),
+          ...audioDestination.stream.getAudioTracks(),
+        ]);
+        const bitrate = opts.resolution === '1080p' ? 10_000_000 : 5_000_000;
+        const segChunks: BlobPart[] = [];
+        const segRecorder = new MediaRecorder(combinedStream, { mimeType: segMimeType, videoBitsPerSecond: bitrate });
+        segRecorder.ondataavailable = (e) => { if (e.data.size > 0) segChunks.push(e.data); };
+        const segStopped = new Promise<void>((res) => { segRecorder.onstop = () => res(); });
+        segRecorder.start(100);
+
         const vid = document.createElement('video');
         vid.src = mf.url;
-        vid.muted = false; // audio must be unmuted so Web Audio API can read it
+        vid.muted = false;
         vid.playsInline = true;
         vid.crossOrigin = 'anonymous';
         vid.volume = Math.min(1, vd?.volume ?? 1);
 
-        // Connect video audio to AudioContext mixer
         let sourceNode: MediaElementAudioSourceNode | null = null;
         let segGain: GainNode | null = null;
         try {
@@ -520,26 +509,23 @@ const ViralCut = () => {
           segGain.gain.value = Math.min(1, vd?.volume ?? 1);
           sourceNode.connect(segGain);
           segGain.connect(masterGain);
-        } catch {
-          // If browser blocks (e.g. CORS), we continue without audio for this segment
-        }
+        } catch { /* CORS – continue without audio */ }
 
-        // Seek to mediaStart
         await new Promise<void>((res, rej) => {
           const onMeta = () => {
             vid.removeEventListener('loadedmetadata', onMeta);
             vid.currentTime = item.mediaStart;
             const onSeeked = () => { vid.removeEventListener('seeked', onSeeked); res(); };
             vid.addEventListener('seeked', onSeeked);
+            setTimeout(res, 3000);
           };
           vid.addEventListener('loadedmetadata', onMeta);
-          vid.addEventListener('error', () => rej(new Error(`Erro ao carregar: ${mf.name}`)));
+          vid.addEventListener('error', () => rej(new Error(`Falha ao carregar: ${mf.name}`)));
           vid.load();
         });
 
         vid.playbackRate = playRate;
 
-        // Real-time playback loop: draw each frame to canvas
         await new Promise<void>((res) => {
           let rafId: number;
           let startTs: number | null = null;
@@ -548,7 +534,7 @@ const ViralCut = () => {
             if (startTs === null) startTs = ts;
             const elapsed = (ts - startTs) / 1000;
 
-            if (elapsed >= wallClockDuration + 0.15 || vid.currentTime >= item.mediaEnd - 0.02 || vid.ended) {
+            if (elapsed >= wallClockDuration + 0.1 || vid.currentTime >= item.mediaEnd - 0.02 || vid.ended) {
               cancelAnimationFrame(rafId);
               vid.pause();
               sourceNode?.disconnect();
@@ -558,11 +544,13 @@ const ViralCut = () => {
               return;
             }
 
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, outW, outH);
             ctx.save();
             const filters: string[] = [];
-            if (vd?.brightness !== undefined && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
-            if (vd?.contrast !== undefined && vd.contrast !== 1) filters.push(`contrast(${vd.contrast})`);
-            if (vd?.saturation !== undefined && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
+            if (vd?.brightness && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
+            if (vd?.contrast && vd.contrast !== 1) filters.push(`contrast(${vd.contrast})`);
+            if (vd?.saturation && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
             if (filters.length) (ctx as any).filter = filters.join(' ');
             ctx.globalAlpha = vd?.opacity ?? 1;
             if (vd?.flipH || vd?.flipV) {
@@ -581,24 +569,86 @@ const ViralCut = () => {
             .then(() => { rafId = requestAnimationFrame(renderFrame); })
             .catch(() => res());
 
-          setTimeout(() => { cancelAnimationFrame(rafId); vid.pause(); sourceNode?.disconnect(); segGain?.disconnect(); vid.src = ''; res(); },
-            (wallClockDuration + 10) * 1000);
+          setTimeout(() => {
+            cancelAnimationFrame(rafId);
+            vid.pause();
+            sourceNode?.disconnect();
+            segGain?.disconnect();
+            vid.src = '';
+            res();
+          }, (wallClockDuration + 15) * 1000);
         });
+
+        segRecorder.stop();
+        await segStopped;
+        audioCtx.close();
+
+        const segBlob = new Blob(segChunks, { type: segMimeType });
+        segmentBlobs.push(segBlob);
       }
 
-      setExportState({ status: 'encoding', progress: 94, label: 'Finalizando arquivo…' });
-      recorder.stop();
-      await recorderStopped;
-      audioCtx.close();
+      // ── Step 2: FFmpeg – concatenate segments → MP4 ─────────
+      setExportState({ status: 'encoding', progress: 68, label: 'Carregando FFmpeg…' });
 
-      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-      const blob = new Blob(chunks, { type: mimeType });
-      const url = URL.createObjectURL(blob);
+      const ffmpeg = new FFmpeg();
+
+      // Load FFmpeg WASM (using CDN URLs for core)
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+
+      setExportState({ status: 'encoding', progress: 72, label: 'Processando com FFmpeg…' });
+
+      // Write each segment to FFmpeg virtual FS
+      const concatLines: string[] = [];
+      for (let i = 0; i < segmentBlobs.length; i++) {
+        const fname = `seg${i}.webm`;
+        const data = await fetchFile(segmentBlobs[i]);
+        await ffmpeg.writeFile(fname, data);
+        concatLines.push(`file '${fname}'`);
+      }
+
+      // Write concat list
+      const concatContent = concatLines.join('\n');
+      const encoder = new TextEncoder();
+      await ffmpeg.writeFile('concat.txt', encoder.encode(concatContent));
+
+      setExportState({ status: 'encoding', progress: 78, label: 'Convertendo para MP4…' });
+
+      ffmpeg.on('progress', ({ progress }) => {
+        const pct = 78 + Math.round(progress * 18);
+        setExportState((s) => ({ ...s, progress: Math.min(pct, 96), label: 'Convertendo para MP4…' }));
+      });
+
+      // Concat + re-encode to MP4
+      await ffmpeg.exec([
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', 'concat.txt',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-movflags', '+faststart',
+        '-vf', `scale=${outW}:${outH}`,
+        '-r', String(FPS),
+        'output.mp4',
+      ]);
+
+      setExportState({ status: 'encoding', progress: 97, label: 'Preparando download…' });
+
+      const outputData = await ffmpeg.readFile('output.mp4');
+      const mp4Blob = new Blob([outputData], { type: 'video/mp4' });
+      const url = URL.createObjectURL(mp4Blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${project.name}_${opts.resolution}_${opts.fps}fps.${ext}`;
+      a.download = `${project.name}_${opts.resolution}_${opts.fps}fps.mp4`;
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 15_000);
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+
       setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
 
     } catch (err: any) {
