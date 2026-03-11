@@ -15,7 +15,7 @@ async function getOrCreatePipeline(onProgress: (msg: string) => void) {
 
   onProgress('Carregando modelo Whisper…');
 
-  _pipeline = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small', {
+  _pipeline = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-large-v3-turbo', {
     progress_callback: (info: any) => {
       if (info?.status === 'downloading' || info?.status === 'progress') {
         const pct = info.progress != null ? Math.round(info.progress) : 0;
