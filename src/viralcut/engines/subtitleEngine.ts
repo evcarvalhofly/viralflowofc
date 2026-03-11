@@ -58,49 +58,31 @@ export function buildSubtitleBlocks(
   return blocks;
 }
 
-// ─── Audio decoder ────────────────────────────────────────────────────────────
+// ─── Whisper segment → words ──────────────────────────────────────────────────
 
-export async function fileToAudioData(file: File): Promise<Float32Array> {
-  const arrayBuffer = await file.arrayBuffer();
-  const audioCtx = new AudioContext({ sampleRate: 16000 });
-  try {
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-    return decoded.getChannelData(0);
-  } finally {
-    audioCtx.close();
-  }
-}
-
-// ─── Chunk normalizer ─────────────────────────────────────────────────────────
-
-export function chunksToTimedWords(
-  chunks: Array<{ text: string; timestamp: [number, number | null] }>
+/**
+ * Converts OpenAI Whisper verbose_json "segments" into timed word objects.
+ * Each segment has start/end timestamps and full text — we distribute words evenly within.
+ */
+function segmentsToTimedWords(
+  segments: Array<{ text: string; start: number; end: number }>
 ): TranscriberWord[] {
   const words: TranscriberWord[] = [];
 
-  for (const chunk of chunks) {
-    if (!chunk?.text || !Array.isArray(chunk.timestamp)) continue;
+  for (const seg of segments) {
+    if (!seg?.text) continue;
+    const segWords = seg.text.trim().split(/\s+/).filter(Boolean);
+    if (!segWords.length) continue;
 
-    const rawStart = chunk.timestamp[0];
-    const rawEnd = chunk.timestamp[1];
+    const duration = seg.end - seg.start;
+    const step = duration / segWords.length;
 
-    const chunkStart = typeof rawStart === 'number' ? rawStart : 0;
-    const chunkWords = chunk.text.trim().split(/\s+/).filter(Boolean);
-    if (!chunkWords.length) continue;
-
-    const chunkEnd =
-      typeof rawEnd === 'number' && rawEnd > chunkStart
-        ? rawEnd
-        : chunkStart + chunkWords.length * 0.4;
-
-    const step = (chunkEnd - chunkStart) / chunkWords.length;
-
-    chunkWords.forEach((w, i) => {
+    segWords.forEach((w, i) => {
       words.push({
         text: w,
         timestamp: [
-          parseFloat((chunkStart + i * step).toFixed(3)),
-          parseFloat((chunkStart + (i + 1) * step).toFixed(3)),
+          parseFloat((seg.start + i * step).toFixed(3)),
+          parseFloat((seg.start + (i + 1) * step).toFixed(3)),
         ],
       });
     });
@@ -109,24 +91,78 @@ export function chunksToTimedWords(
   return words;
 }
 
-export function textToTimedWords(text: string, audioDuration: number): TranscriberWord[] {
-  const allWords = text.trim().split(/\s+/).filter(Boolean);
-  if (!allWords.length) return [];
+// ─── Audio converter: File → WebM/OGG blob (browser AudioContext → WAV PCM) ──
 
-  return allWords.map((w, i) => ({
-    text: w,
-    timestamp: [
-      parseFloat(((i / allWords.length) * audioDuration).toFixed(3)),
-      parseFloat((((i + 1) / allWords.length) * audioDuration).toFixed(3)),
-    ],
-  }));
+/**
+ * Converts the video/audio File to a 16 kHz mono WAV Blob
+ * suitable for OpenAI Whisper API (max 25 MB).
+ */
+async function fileToWavBlob(
+  file: File,
+  onProgress?: (label: string) => void
+): Promise<Blob> {
+  onProgress?.('Decodificando áudio…');
+
+  const arrayBuffer = await file.arrayBuffer();
+  const audioCtx = new AudioContext({ sampleRate: 16000 });
+
+  let decoded: AudioBuffer;
+  try {
+    decoded = await audioCtx.decodeAudioData(arrayBuffer);
+  } finally {
+    audioCtx.close();
+  }
+
+  onProgress?.('Preparando áudio para envio…');
+
+  const pcm = decoded.getChannelData(0); // mono, 16 kHz Float32
+  const wavBuffer = float32ToWav(pcm, 16000);
+  return new Blob([wavBuffer], { type: 'audio/wav' });
+}
+
+/** Encodes Float32Array PCM samples into a WAV ArrayBuffer. */
+function float32ToWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
+  const numSamples = samples.length;
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+
+  const writeStr = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);          // chunk size
+  view.setUint16(20, 1, true);           // PCM
+  view.setUint16(22, 1, true);           // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate
+  view.setUint16(32, 2, true);           // block align
+  view.setUint16(34, 16, true);          // bits per sample
+  writeStr(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += 2;
+  }
+
+  return buffer;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const TRANSCRIBE_URL = `${SUPABASE_URL}/functions/v1/transcribe-audio`;
+
 /**
- * Transcribes a video/audio File using Whisper-tiny in a Web Worker.
+ * Transcribes a video/audio File using OpenAI Whisper API via Supabase Edge Function.
  * Returns subtitle blocks ready for the overlay.
+ * No more browser OOM — processing happens on the server.
  */
 export async function transcribeFile(
   file: File,
@@ -134,34 +170,81 @@ export async function transcribeFile(
 ): Promise<SubtitleItem[]> {
   console.log('[subtitleEngine] Start:', file.name, file.size);
 
-  onProgress?.('Decodificando áudio…');
-
-  let audioData: Float32Array;
+  // Convert to WAV first (16 kHz mono — optimal for Whisper)
+  let wavBlob: Blob;
   try {
-    audioData = await fileToAudioData(file);
-    console.log('[subtitleEngine] Audio samples:', audioData.length, '→', (audioData.length / 16000).toFixed(1), 's');
+    wavBlob = await fileToWavBlob(file, onProgress);
+    console.log('[subtitleEngine] WAV blob:', wavBlob.size, 'bytes');
   } catch (err) {
     console.error('[subtitleEngine] Audio decode failed:', err);
     throw new Error('Não foi possível decodificar o áudio. Verifique se o arquivo tem áudio.');
   }
 
-  const audioDuration = audioData.length / 16000;
+  // Whisper API accepts up to 25 MB
+  const MAX_BYTES = 25 * 1024 * 1024;
+  if (wavBlob.size > MAX_BYTES) {
+    throw new Error(
+      `Arquivo muito grande para transcrição (${(wavBlob.size / 1024 / 1024).toFixed(1)} MB). Máximo: 25 MB.`
+    );
+  }
 
-  // Run Whisper in a Web Worker to avoid blocking the UI
-  const raw = await runWorker(audioData, 'portuguese', onProgress);
+  onProgress?.('Enviando áudio para transcrição na nuvem…');
 
-  console.log('[subtitleEngine] Raw text:', String(raw?.text ?? '').slice(0, 300));
-  console.log('[subtitleEngine] Chunks:', raw?.chunks?.length ?? 0, raw?.chunks?.[0]);
+  const form = new FormData();
+  form.append('audio', wavBlob, 'audio.wav');
+  form.append('language', 'pt');
+
+  let res: Response;
+  try {
+    res = await fetch(TRANSCRIBE_URL, {
+      method: 'POST',
+      body: form,
+    });
+  } catch (networkErr) {
+    console.error('[subtitleEngine] Network error:', networkErr);
+    throw new Error('Erro de rede ao conectar com o servidor de transcrição.');
+  }
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    console.error('[subtitleEngine] Edge function error:', res.status, errBody);
+
+    let msg = 'Erro ao transcrever o áudio.';
+    try {
+      const parsed = JSON.parse(errBody);
+      if (parsed?.error) msg = parsed.error;
+    } catch { /* ignore */ }
+
+    throw new Error(msg);
+  }
+
+  onProgress?.('Processando resultado…');
+
+  const data = await res.json();
+  console.log('[subtitleEngine] Whisper response segments:', data.segments?.length ?? 0);
+  console.log('[subtitleEngine] Whisper text (first 200):', String(data.text ?? '').slice(0, 200));
+
+  if (!data.segments?.length && !data.text?.trim()) {
+    throw new Error('Nenhuma fala detectada. Verifique se o vídeo tem áudio claro.');
+  }
 
   let words: TranscriberWord[] = [];
 
-  if (raw?.chunks && Array.isArray(raw.chunks) && raw.chunks.length > 0) {
-    words = chunksToTimedWords(raw.chunks);
-    console.log('[subtitleEngine] Words from chunks:', words.length);
-  } else if (typeof raw?.text === 'string' && raw.text.trim()) {
-    console.warn('[subtitleEngine] No chunks — distributing words evenly');
-    words = textToTimedWords(raw.text, audioDuration);
-    console.log('[subtitleEngine] Words from text split:', words.length);
+  if (data.segments?.length) {
+    words = segmentsToTimedWords(data.segments);
+    console.log('[subtitleEngine] Words from segments:', words.length);
+  } else if (data.text?.trim()) {
+    // Fallback: distribute words evenly over full duration
+    const duration = data.duration ?? 60;
+    const allWords = data.text.trim().split(/\s+/).filter(Boolean);
+    words = allWords.map((w: string, i: number) => ({
+      text: w,
+      timestamp: [
+        parseFloat(((i / allWords.length) * duration).toFixed(3)),
+        parseFloat((((i + 1) / allWords.length) * duration).toFixed(3)),
+      ] as [number, number],
+    }));
+    console.log('[subtitleEngine] Words from text fallback:', words.length);
   }
 
   if (!words.length) {
@@ -178,43 +261,6 @@ export async function transcribeFile(
   return blocks;
 }
 
-// ─── Worker runner ────────────────────────────────────────────────────────────
-
-function runWorker(
-  audioData: Float32Array,
-  language: string,
-  onProgress?: (label: string) => void
-): Promise<any> {
-  return new Promise((resolve, reject) => {
-    // Vite handles ?worker with type module correctly
-    const worker = new Worker(
-      new URL('../workers/transcriber.worker.ts', import.meta.url),
-      { type: 'module' }
-    );
-
-    worker.onmessage = (e: MessageEvent) => {
-      const { type, label, raw, message } = e.data;
-      if (type === 'progress') {
-        onProgress?.(label);
-      } else if (type === 'result') {
-        worker.terminate();
-        resolve(raw);
-      } else if (type === 'error') {
-        worker.terminate();
-        reject(new Error(message));
-      }
-    };
-
-    worker.onerror = (err) => {
-      worker.terminate();
-      reject(new Error(err.message));
-    };
-
-    // Transfer the buffer to avoid copying (faster)
-    worker.postMessage({ audioData, language }, [audioData.buffer]);
-  });
-}
-
 export function resetPipeline() {
-  // No-op: pipeline lives in the worker which is created per-run
+  // No-op: processing is now server-side
 }
