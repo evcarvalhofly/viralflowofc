@@ -33,6 +33,7 @@ interface TimelineProps {
   onTrackToggleLock: (trackId: string) => void;
   onDropMedia: (trackId: string, mediaId: string, startTime: number) => void;
   onSplitAllAtPlayhead?: () => void;
+  onDeleteSelected?: () => void;
 }
 
 function fmtRuler(s: number) {
@@ -95,6 +96,7 @@ export function Timeline({
   onTrackToggleLock,
   onDropMedia,
   onSplitAllAtPlayhead,
+  onDeleteSelected,
 }: TimelineProps) {
   const rulerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -210,19 +212,23 @@ export function Timeline({
 
     const startX = e.touches[0].clientX;
     const origStart = item.startTime;
+    let isDragging = false;
 
     const onMove = (ev: TouchEvent) => {
       const dx = ev.touches[0].clientX - startX;
-      if (Math.abs(dx) > 4) {
-        const newStart = Math.max(0, origStart + dx / zoom);
-        onItemMove(track.id, item.id, newStart);
-      }
+      if (!isDragging && Math.abs(dx) < 4) return;
+      isDragging = true;
+      // Prevent timeline scroll while dragging a clip
+      ev.preventDefault();
+      const newStart = Math.max(0, origStart + dx / zoom);
+      onItemMove(track.id, item.id, newStart);
     };
     const onUp = () => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-    window.addEventListener('touchmove', onMove, { passive: true });
+    // passive: false so we can call preventDefault() to block scroll
+    window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
   };
 
@@ -326,6 +332,20 @@ export function Timeline({
           >
             <Scissors className="h-3 w-3" />
             <span className="hidden sm:inline">Cortar</span>
+          </button>
+          {/* Quick-delete selected item */}
+          <button
+            title="Deletar item selecionado"
+            disabled={!selectedItemId}
+            onClick={(e) => { e.stopPropagation(); onDeleteSelected?.(); }}
+            className={cn(
+              'flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all border',
+              selectedItemId
+                ? 'bg-destructive/15 border-destructive/40 text-destructive hover:bg-destructive/25 cursor-pointer'
+                : 'bg-muted/40 border-border/30 text-muted-foreground/40 cursor-not-allowed'
+            )}
+          >
+            <Trash2 className="h-3 w-3" />
           </button>
         </div>
 

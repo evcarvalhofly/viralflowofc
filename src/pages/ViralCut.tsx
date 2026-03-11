@@ -960,6 +960,12 @@ const ViralCut = () => {
               onTrackToggleLock={handleToggleLock}
               onDropMedia={handleDropMedia}
               onSplitAllAtPlayhead={handleSplitAllAtPlayhead}
+              onDeleteSelected={() => {
+                if (selectedItemId) {
+                  const track = project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId));
+                  if (track) handleItemDelete(track.id, selectedItemId);
+                }
+              }}
             />
           </div>
         </div>
@@ -1205,6 +1211,12 @@ const ViralCut = () => {
               onTrackToggleLock={handleToggleLock}
               onDropMedia={handleDropMedia}
               onSplitAllAtPlayhead={handleSplitAllAtPlayhead}
+              onDeleteSelected={() => {
+                if (selectedItemId) {
+                  const track = project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId));
+                  if (track) handleItemDelete(track.id, selectedItemId);
+                }
+              }}
           />
         </div>
       </div>
