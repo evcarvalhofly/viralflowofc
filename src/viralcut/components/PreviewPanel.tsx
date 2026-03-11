@@ -497,26 +497,23 @@ export function PreviewPanel({
         onClick={() => onSelectItem?.(null)}
       >
       {activeVideoItem?.mediaFile ? (
-          // Canvas + overlays wrapper — preserves video aspect ratio, fills available space
+          // Canvas + overlays wrapper — fit inside flex container maintaining AR
+          // Strategy: fill height first, aspect-ratio determines width, max-width caps overflow
           <div
             ref={overlayContainerRef}
             style={{
               position: 'relative',
-              // Use aspect-ratio to preserve video proportions without stretching
               aspectRatio: `${canvasW} / ${canvasH}`,
-              // Fill available space but never overflow
+              height: '100%',
+              width: 'auto',
               maxWidth: '100%',
               maxHeight: '100%',
-              // Let the aspect-ratio drive the size
-              width: '100%',
-              height: 'auto',
               flexShrink: 1,
               flexGrow: 0,
             }}
           >
             <canvas
               ref={canvasRef}
-              // Low-res internal resolution for performance
               width={canvasW}
               height={canvasH}
               style={{
