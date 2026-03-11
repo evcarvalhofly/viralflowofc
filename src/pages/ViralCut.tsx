@@ -327,6 +327,7 @@ const ViralCut = () => {
                     keepSegments={state.keepSegments}
                     currentTime={currentTime}
                     duration={state.duration}
+                    onSilencesChange={hasSegments ? handleSilencesChange : undefined}
                   />
                 )}
 
