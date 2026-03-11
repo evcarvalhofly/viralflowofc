@@ -944,6 +944,7 @@ const ViralCut = () => {
             selectedItemId={selectedItemId}
             onSelectItem={handleItemSelect}
             onUpdateItem={handleUpdateItem}
+            onOpenProperties={handleItemDoubleClick}
           />
         </div>
 
