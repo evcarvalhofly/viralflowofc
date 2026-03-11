@@ -7,7 +7,12 @@ import { Lock, Volume2, VolumeX, Trash2, Film, Music, Type, Image, Scissors } fr
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
 
-const TRACK_H = 56;
+const TRACK_H: Record<string, number> = {
+  video: 56,
+  image: 56,
+  audio: 34,
+  text: 34,
+};
 
 interface TimelineProps {
   tracks: Track[];
