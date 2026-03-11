@@ -496,22 +496,27 @@ export function PreviewPanel({
         className="flex-1 min-h-0 flex items-center justify-center bg-black/90 relative overflow-hidden"
         onClick={() => onSelectItem?.(null)}
       >
-        {activeVideoItem?.mediaFile ? (
-          // Canvas + overlays wrapper — overlays are positioned relative to this
+      {activeVideoItem?.mediaFile ? (
+          // Canvas + overlays wrapper — preserves video aspect ratio, fills available space
           <div
             ref={overlayContainerRef}
             style={{
               position: 'relative',
-              maxHeight: '100%',
+              // Use aspect-ratio to preserve video proportions without stretching
+              aspectRatio: `${canvasW} / ${canvasH}`,
+              // Fill available space but never overflow
               maxWidth: '100%',
-              // Match canvas's displayed size
-              width: canvasW,
-              height: canvasH,
-              flexShrink: 0,
+              maxHeight: '100%',
+              // Let the aspect-ratio drive the size
+              width: '100%',
+              height: 'auto',
+              flexShrink: 1,
+              flexGrow: 0,
             }}
           >
             <canvas
               ref={canvasRef}
+              // Low-res internal resolution for performance
               width={canvasW}
               height={canvasH}
               style={{
