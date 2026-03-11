@@ -28,6 +28,13 @@ export function PreviewPlayer({
   const [muted, setMuted] = useState(false);
   // Whether to play only kept segments (preview mode)
   const [previewMode, setPreviewMode] = useState(false);
+  // Guard to prevent recursive timeupdate calls when we manually seek
+  const isSeekingRef = useRef(false);
+  // Stable refs for values used inside timeupdate (avoids stale closure)
+  const previewModeRef = useRef(previewMode);
+  const keepSegmentsRef = useRef(keepSegments);
+  previewModeRef.current = previewMode;
+  keepSegmentsRef.current = keepSegments;
 
   const hasSegments = keepSegments.length > 0;
 
@@ -46,17 +53,22 @@ export function PreviewPlayer({
   const handleTimeUpdate = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
+
+    // If we triggered this timeupdate by seeking programmatically, skip logic
+    if (isSeekingRef.current) return;
+
     const t = v.currentTime;
     setCurrentTime(t);
     onTimeUpdate?.(t);
 
-    if (!previewMode || keepSegments.length === 0) return;
+    if (!previewModeRef.current || keepSegmentsRef.current.length === 0) return;
 
     // Check if we're inside a "removed" gap between kept segments
-    const inKeep = keepSegments.some((seg) => t >= seg.start && t < seg.end);
+    const inKeep = keepSegmentsRef.current.some((seg) => t >= seg.start && t < seg.end);
     if (!inKeep) {
+      isSeekingRef.current = true;
       // Find the next kept segment start
-      const next = keepSegments.find((seg) => seg.start > t);
+      const next = keepSegmentsRef.current.find((seg) => seg.start > t);
       if (next) {
         v.currentTime = next.start;
       } else {
@@ -64,11 +76,13 @@ export function PreviewPlayer({
         v.pause();
         setPlaying(false);
         // Rewind to first kept segment
-        const first = keepSegments[0];
+        const first = keepSegmentsRef.current[0];
         if (first) v.currentTime = first.start;
       }
+      // Release guard after browser processes the seek
+      requestAnimationFrame(() => { isSeekingRef.current = false; });
     }
-  }, [onTimeUpdate, previewMode, keepSegments]);
+  }, [onTimeUpdate]);
 
   const handleLoadedMetadata = useCallback(() => {
     const d = videoRef.current?.duration ?? 0;
