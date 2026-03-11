@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 import { SilenceRange, Segment } from '../types';
@@ -11,6 +11,7 @@ interface TimelineProps {
   currentTime: number;
   duration: number;
   onSeek?: (t: number) => void;
+  onSilencesChange?: (silences: SilenceRange[]) => void;
 }
 
 export function Timeline({
@@ -20,12 +21,15 @@ export function Timeline({
   currentTime,
   duration,
   onSeek,
+  onSilencesChange,
 }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<ReturnType<typeof RegionsPlugin.create> | null>(null);
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
+  // Local copy so drag updates are immediate
+  const silencesRef = useRef<SilenceRange[]>(silences);
 
   // Init WaveSurfer
   useEffect(() => {
@@ -70,26 +74,45 @@ export function Timeline({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
-  // Paint silence regions when silences/ws changes
+  // Paint regions when silences/ws changes
   useEffect(() => {
     const regions = regionsRef.current;
     if (!regions || !ready) return;
 
+    silencesRef.current = silences;
+
     // Clear old regions
     regions.clearRegions();
 
-    // Paint removed (silence) regions in red
-    silences.forEach((s) => {
-      regions.addRegion({
+    const canEdit = onSilencesChange != null && silences.length > 0;
+
+    // Paint removed (silence) regions in red — editable if callback provided
+    silences.forEach((s, idx) => {
+      const region = regions.addRegion({
+        id: `silence-${idx}`,
         start: s.start,
         end: s.end,
-        drag: false,
-        resize: false,
-        color: 'rgba(239, 68, 68, 0.22)',
+        drag: canEdit,
+        resize: canEdit,
+        color: 'rgba(239, 68, 68, 0.28)',
       });
+
+      if (canEdit) {
+        // Update local silences on every move
+        region.on('update', () => {
+          const updated = [...silencesRef.current];
+          updated[idx] = { start: region.start, end: region.end };
+          silencesRef.current = updated;
+        });
+
+        // Notify parent only when drag/resize finishes
+        region.on('update-end', () => {
+          onSilencesChange?.([...silencesRef.current]);
+        });
+      }
     });
 
-    // Paint keep regions in green
+    // Paint keep regions in green (non-interactive)
     keepSegments.forEach((seg) => {
       regions.addRegion({
         start: seg.start,
@@ -99,7 +122,7 @@ export function Timeline({
         color: 'rgba(34, 197, 94, 0.08)',
       });
     });
-  }, [silences, keepSegments, ready]);
+  }, [silences, keepSegments, ready, onSilencesChange]);
 
   // Sync playhead
   useEffect(() => {
@@ -108,10 +131,19 @@ export function Timeline({
     wsRef.current.seekTo(Math.min(1, Math.max(0, pct)));
   }, [currentTime, duration, ready]);
 
+  const isEditable = onSilencesChange != null && silences.length > 0;
+
   return (
     <div className="rounded-xl bg-card border border-border p-3 space-y-2">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Timeline</span>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground">Timeline</span>
+          {isEditable && !loading && (
+            <span className="text-[10px] bg-primary/15 text-primary px-2 py-0.5 rounded-full font-medium">
+              Arraste as regiões para ajustar
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <span className="inline-block h-2 w-3 rounded-sm bg-red-500/60" />
@@ -144,6 +176,11 @@ export function Timeline({
           <span className="text-red-400 font-medium">{silences.length}</span> silêncio
           {silences.length !== 1 ? 's' : ''} detectado
           {silences.length !== 1 ? 's' : ''}
+          {isEditable && (
+            <span className="text-muted-foreground/60 ml-1">
+              · arraste as regiões vermelhas para ajustar os cortes
+            </span>
+          )}
         </p>
       )}
     </div>
