@@ -440,6 +440,9 @@ const ViralCut = () => {
     });
     setSelectedItemId(null);
   }, [currentTime, pushHistory]);
+  // Keep ref in sync so keyboard handler can call it before declaration order
+  splitAllRef.current = handleSplitAllAtPlayhead;
+
 
   // ── Export: Canvas+AudioContext → WebM segments → FFmpeg → MP4 ──
   // 1. Plays each segment in real-time capturing to a WebM blob
