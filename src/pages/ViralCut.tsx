@@ -462,7 +462,8 @@ const ViralCut = () => {
       setExportState((s) => ({ ...s, progress: 97, label: 'Gerando download…' }));
 
       const data = await ffmpeg.readFile('output.mp4');
-      const blob = new Blob([data instanceof Uint8Array ? data.buffer : data], { type: 'video/mp4' });
+      const uint8 = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
+      const blob = new Blob([uint8], { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
