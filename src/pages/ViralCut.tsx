@@ -70,6 +70,8 @@ const ViralCut = () => {
   const isMobile = useIsMobile();
   const importRef = useRef<HTMLInputElement>(null);
   const autoCutImportRef = useRef<HTMLInputElement>(null);
+  // Ref to splitAllAtPlayhead so it can be called from keyboard handler before declaration
+  const splitAllRef = useRef<(() => void) | null>(null);
 
   const [project, setProject] = useState<Project>(createDefaultProject());
   const [media, setMedia] = useState<MediaFile[]>([]);
@@ -132,6 +134,7 @@ const ViralCut = () => {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       if (e.code === 'Space') { e.preventDefault(); setIsPlaying((p) => !p); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? handleRedo() : handleUndo(); }
+      if (e.key === 's' || e.key === 'S') { e.preventDefault(); splitAllRef.current?.(); }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedItemId) {
           const track = project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId));
@@ -410,6 +413,36 @@ const ViralCut = () => {
     setShowAutoCut(false);
     if (isMobile) setShowMobilePanel(false);
   }, [pushHistory, isMobile]);
+
+  // ── Split ALL items at playhead across every unlocked track ──
+  const handleSplitAllAtPlayhead = useCallback(() => {
+    const t = currentTime;
+    setProject((p) => {
+      let changed = false;
+      const tracks = p.tracks.map((track) => {
+        if (track.locked) return track;
+        const newItems: typeof track.items = [];
+        for (const item of track.items) {
+          if (t > item.startTime + 0.05 && t < item.endTime - 0.05) {
+            const mediaAtSplit = item.mediaStart + (t - item.startTime);
+            newItems.push({ ...item, id: item.id + '_L', endTime: t, mediaEnd: mediaAtSplit });
+            newItems.push({ ...item, id: item.id + '_R', startTime: t, mediaStart: mediaAtSplit });
+            changed = true;
+          } else {
+            newItems.push(item);
+          }
+        }
+        return { ...track, items: newItems };
+      });
+      if (!changed) return p;
+      pushHistory(tracks);
+      return { ...p, tracks, duration: calcProjectDuration(tracks) };
+    });
+    setSelectedItemId(null);
+  }, [currentTime, pushHistory]);
+  // Keep ref in sync so keyboard handler can call it before declaration order
+  splitAllRef.current = handleSplitAllAtPlayhead;
+
 
   // ── Export: Canvas+AudioContext → WebM segments → FFmpeg → MP4 ──
   // 1. Plays each segment in real-time capturing to a WebM blob
@@ -828,6 +861,7 @@ const ViralCut = () => {
               onTrackToggleMute={handleToggleMute}
               onTrackToggleLock={handleToggleLock}
               onDropMedia={handleDropMedia}
+              onSplitAllAtPlayhead={handleSplitAllAtPlayhead}
             />
           </div>
         </div>
@@ -1067,11 +1101,12 @@ const ViralCut = () => {
             onItemMove={handleItemMove}
             onItemTrim={handleItemTrim}
             onItemDelete={handleItemDelete}
-            onItemSelect={handleItemSelect}
-            onItemSplit={handleItemSplit}
-            onTrackToggleMute={handleToggleMute}
-            onTrackToggleLock={handleToggleLock}
-            onDropMedia={handleDropMedia}
+              onItemSelect={handleItemSelect}
+              onItemSplit={handleItemSplit}
+              onTrackToggleMute={handleToggleMute}
+              onTrackToggleLock={handleToggleLock}
+              onDropMedia={handleDropMedia}
+              onSplitAllAtPlayhead={handleSplitAllAtPlayhead}
           />
         </div>
       </div>
