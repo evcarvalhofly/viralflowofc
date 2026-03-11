@@ -390,70 +390,190 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
   }, [pushHistory, isMobile]);
 
-  // ── Export with FFmpeg ────────────────────────────────────
+  // ── Export: Canvas+MediaRecorder (works without SharedArrayBuffer) ──
   const handleExport = useCallback(async (_opts: ExportOptions) => {
     setExportState({ status: 'preparing', progress: 5, label: 'Preparando…' });
-    const videoItems = project.tracks.filter((t) => t.type === 'video').flatMap((t) => t.items).sort((a, b) => a.startTime - b.startTime);
+
+    const videoItems = project.tracks
+      .filter((t) => t.type === 'video')
+      .flatMap((t) => t.items)
+      .sort((a, b) => a.startTime - b.startTime);
+
     if (!videoItems.length) {
       setExportState({ status: 'error', progress: 0, label: '', error: 'Nenhum vídeo na timeline.' });
       return;
     }
+
     try {
-      setExportState({ status: 'encoding', progress: 20, label: 'Carregando FFmpeg…' });
-      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-      const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
-      const ffmpeg = new FFmpeg();
-      ffmpeg.on('progress', ({ progress }) => {
-        setExportState((s) => ({ ...s, progress: 20 + Math.round(progress * 75), label: `Codificando… ${Math.round(progress * 100)}%` }));
-      });
-      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      });
-      setExportState((s) => ({ ...s, progress: 25, label: 'Importando clipes…' }));
-      const writtenFiles = new Set<string>();
-      for (const item of videoItems) {
-        const mf = media.find((m) => m.id === item.mediaId);
-        if (!mf || writtenFiles.has(mf.id)) continue;
-        const filename = `input_${mf.id}.${mf.name.split('.').pop() ?? 'mp4'}`;
-        await ffmpeg.writeFile(filename, await fetchFile(mf.url));
-        writtenFiles.add(mf.id);
-      }
-      let filterParts: string[] = [];
-      let concatInputs = '';
-      videoItems.forEach((item, idx) => {
-        const mf = media.find((m) => m.id === item.mediaId)!;
-        filterParts.push(`[${idx}:v]trim=start=${item.mediaStart.toFixed(3)}:end=${item.mediaEnd.toFixed(3)},setpts=PTS-STARTPTS[v${idx}]`);
-        concatInputs += `[v${idx}]`;
-      });
-      filterParts.push(`${concatInputs}concat=n=${videoItems.length}:v=1:a=0[outv]`);
-      const inputArgs: string[] = [];
-      videoItems.forEach((item) => {
-        const mf = media.find((m) => m.id === item.mediaId)!;
-        inputArgs.push('-i', `input_${mf.id}.${mf.name.split('.').pop() ?? 'mp4'}`);
-      });
-      setExportState((s) => ({ ...s, progress: 30, label: 'Processando vídeo…' }));
-      await ffmpeg.exec([...inputArgs, '-filter_complex', filterParts.join(';'), '-map', '[outv]', '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart', 'output.mp4']);
-      setExportState((s) => ({ ...s, progress: 97, label: 'Gerando download…' }));
-      const rawData = await ffmpeg.readFile('output.mp4');
-      let blobParts: BlobPart[];
-      if (typeof rawData === 'string') {
-        blobParts = [rawData];
-      } else {
-        const copy = new Uint8Array(rawData.length);
+      // ── Try FFmpeg first (requires SharedArrayBuffer / COOP headers) ──
+      const hasSharedBuffer = typeof SharedArrayBuffer !== 'undefined';
+
+      if (hasSharedBuffer) {
+        setExportState({ status: 'encoding', progress: 10, label: 'Carregando FFmpeg…' });
+        const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+        const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
+        const ffmpeg = new FFmpeg();
+        ffmpeg.on('progress', ({ progress }) => {
+          setExportState((s) => ({ ...s, progress: 20 + Math.round(progress * 75), label: `Codificando… ${Math.round(progress * 100)}%` }));
+        });
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+        setExportState((s) => ({ ...s, progress: 25, label: 'Importando clipes…' }));
+        const writtenFiles = new Set<string>();
+        for (const item of videoItems) {
+          const mf = media.find((m) => m.id === item.mediaId);
+          if (!mf || writtenFiles.has(mf.id)) continue;
+          const filename = `input_${mf.id}.${mf.name.split('.').pop() ?? 'mp4'}`;
+          await ffmpeg.writeFile(filename, await fetchFile(mf.url));
+          writtenFiles.add(mf.id);
+        }
+        let filterParts: string[] = [];
+        let concatInputs = '';
+        videoItems.forEach((item, idx) => {
+          filterParts.push(`[${idx}:v]trim=start=${item.mediaStart.toFixed(3)}:end=${item.mediaEnd.toFixed(3)},setpts=PTS-STARTPTS[v${idx}]`);
+          concatInputs += `[v${idx}]`;
+        });
+        filterParts.push(`${concatInputs}concat=n=${videoItems.length}:v=1:a=0[outv]`);
+        const inputArgs: string[] = [];
+        videoItems.forEach((item) => {
+          const mf = media.find((m) => m.id === item.mediaId)!;
+          inputArgs.push('-i', `input_${mf.id}.${mf.name.split('.').pop() ?? 'mp4'}`);
+        });
+        setExportState((s) => ({ ...s, progress: 30, label: 'Processando vídeo…' }));
+        await ffmpeg.exec([...inputArgs, '-filter_complex', filterParts.join(';'), '-map', '[outv]', '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart', 'output.mp4']);
+        setExportState((s) => ({ ...s, progress: 97, label: 'Gerando download…' }));
+        const rawData = await ffmpeg.readFile('output.mp4');
+        const copy = new Uint8Array((rawData as Uint8Array).length);
         copy.set(rawData as Uint8Array);
-        blobParts = [copy.buffer];
+        const blob = new Blob([copy.buffer], { type: 'video/mp4' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${project.name}.mp4`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+        return;
       }
-      const blob = new Blob(blobParts, { type: 'video/mp4' });
+
+      // ── Fallback: Canvas + MediaRecorder (no WASM needed) ────────────
+      // Renders each video segment to a canvas at 30fps and records it
+      setExportState({ status: 'encoding', progress: 10, label: 'Preparando canvas…' });
+
+      // Determine output size from first video
+      const firstMf = media.find((m) => m.id === videoItems[0].mediaId);
+      const outW = firstMf?.width ?? 1280;
+      const outH = firstMf?.height ?? 720;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = outW;
+      canvas.height = outH;
+      const ctx = canvas.getContext('2d')!;
+
+      // Pick best supported codec
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+        ? 'video/webm;codecs=vp8'
+        : 'video/webm';
+
+      const chunks: BlobPart[] = [];
+      const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType, videoBitsPerSecond: 8_000_000 });
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+      const recorderStopped = new Promise<void>((res) => { recorder.onstop = () => res(); });
+      recorder.start(100); // collect every 100ms
+
+      const totalDuration = videoItems.reduce((acc, i) => acc + (i.endTime - i.startTime), 0);
+      let elapsed = 0;
+      const FPS = 30;
+      const frameDuration = 1 / FPS;
+
+      for (let segIdx = 0; segIdx < videoItems.length; segIdx++) {
+        const item = videoItems[segIdx];
+        const mf = media.find((m) => m.id === item.mediaId);
+        if (!mf) continue;
+
+        const segDuration = item.endTime - item.startTime;
+        const rate = item.videoDetails?.playbackRate ?? 1;
+        const vd = item.videoDetails;
+
+        // Create a hidden video element for this segment
+        const vid = document.createElement('video');
+        vid.src = mf.url;
+        vid.muted = true;
+        vid.playsInline = true;
+        if (rate !== 1) vid.playbackRate = rate;
+
+        // Wait for video metadata + seek to start
+        await new Promise<void>((res, rej) => {
+          vid.onloadedmetadata = () => {
+            vid.currentTime = item.mediaStart;
+            vid.onseeked = () => res();
+          };
+          vid.onerror = rej;
+          vid.load();
+        });
+
+        // Render frame by frame
+        const frameCount = Math.ceil(segDuration * FPS);
+        for (let f = 0; f < frameCount; f++) {
+          const targetMedia = item.mediaStart + (f * frameDuration * rate);
+          if (Math.abs(vid.currentTime - targetMedia) > frameDuration * 1.5) {
+            vid.currentTime = Math.min(targetMedia, item.mediaEnd - 0.01);
+            await new Promise<void>((r) => { vid.onseeked = () => r(); });
+          }
+
+          // Draw with CSS filters applied via canvas filter
+          ctx.save();
+          if (vd) {
+            const filters: string[] = [];
+            if (vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
+            if (vd.contrast !== 1) filters.push(`contrast(${vd.contrast})`);
+            if (vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
+            if (filters.length) (ctx as any).filter = filters.join(' ');
+            if (vd.opacity !== 1) ctx.globalAlpha = vd.opacity;
+            if (vd.flipH || vd.flipV) {
+              ctx.translate(vd.flipH ? outW : 0, vd.flipV ? outH : 0);
+              ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+            }
+          }
+          ctx.drawImage(vid, 0, 0, outW, outH);
+          ctx.restore();
+          (ctx as any).filter = 'none';
+          ctx.globalAlpha = 1;
+
+          elapsed += frameDuration;
+          const prog = Math.round((elapsed / totalDuration) * 85) + 10;
+          if (f % 15 === 0) {
+            setExportState((s) => ({ ...s, progress: Math.min(95, prog), label: `Renderizando seg. ${segIdx + 1}/${videoItems.length}…` }));
+            // Yield to browser to stay responsive
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        }
+
+        vid.src = '';
+      }
+
+      setExportState((s) => ({ ...s, progress: 96, label: 'Finalizando…' }));
+      recorder.stop();
+      await recorderStopped;
+
+      const blob = new Blob(chunks, { type: mimeType });
+      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `${project.name}.mp4`; a.click();
+      a.href = url; a.download = `${project.name}.${ext}`; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+
     } catch (err: any) {
       console.error('Export error:', err);
-      setExportState({ status: 'error', progress: 0, label: '', error: err?.message ?? 'Erro ao exportar' });
+      setExportState({
+        status: 'error', progress: 0, label: '',
+        error: `Erro ao exportar: ${err?.message ?? 'Tente novamente'}`,
+      });
     }
   }, [project, media]);
 
