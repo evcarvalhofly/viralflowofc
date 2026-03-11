@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 // This worker runs Whisper inference off the main thread so the UI stays responsive.
+// Model: Xenova/whisper-small (~460MB) — best balance of quality/size for in-browser PT-BR.
 
 import { pipeline, env } from '@huggingface/transformers';
 
@@ -8,24 +9,29 @@ import { pipeline, env } from '@huggingface/transformers';
 (env as any).useBrowserCache = true;
 (env as any).allowLocalModels = false;
 
+// Use WASM single-thread backend to avoid SharedArrayBuffer issues in some environments
+(env as any).backends = { onnx: { wasm: { numThreads: 1 } } };
+
 let _pipeline: any = null;
 
 async function getOrCreatePipeline(onProgress: (msg: string) => void) {
   if (_pipeline) return _pipeline;
 
-  onProgress('Carregando modelo Whisper…');
+  onProgress('Carregando modelo Whisper (pequeno ~460MB)…');
 
   _pipeline = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small', {
+    dtype: 'q8', // quantized 8-bit — 2x smaller download, nearly same quality
     progress_callback: (info: any) => {
       if (info?.status === 'downloading' || info?.status === 'progress') {
         const pct = info.progress != null ? Math.round(info.progress) : 0;
-        onProgress(`Baixando modelo: ${pct}%`);
+        const file = info.file ? ` (${info.file.split('/').pop()})` : '';
+        onProgress(`Baixando modelo${file}: ${pct}%`);
       } else if (info?.status === 'initiate') {
         onProgress('Inicializando modelo…');
       } else if (info?.status === 'done') {
-        onProgress('Modelo pronto!');
+        onProgress('Arquivo carregado!');
       } else if (info?.status === 'ready') {
-        onProgress('Modelo carregado. Transcrevendo…');
+        onProgress('Modelo pronto. Transcrevendo…');
       }
     },
   });
@@ -41,23 +47,26 @@ self.onmessage = async (e: MessageEvent) => {
       self.postMessage({ type: 'progress', label });
     });
 
-    self.postMessage({ type: 'progress', label: 'Transcrevendo com Whisper…' });
+    self.postMessage({ type: 'progress', label: 'Transcrevendo áudio…' });
 
     let result: any;
     try {
       result = await transcriber(audioData, {
-        return_timestamps: true,
-        chunk_length_s: 15,
-        stride_length_s: 3,
-        language,
+        return_timestamps: 'word', // word-level timestamps for precise SRT
+        chunk_length_s: 20,        // longer chunks = better context
+        stride_length_s: 4,
+        language: language || 'portuguese',
         task: 'transcribe',
       });
     } catch {
-      self.postMessage({ type: 'progress', label: 'Retentando transcrição…' });
+      // Fallback: sentence-level timestamps (still generates valid SRT)
+      self.postMessage({ type: 'progress', label: 'Retentando com timestamps por frase…' });
       result = await transcriber(audioData, {
         return_timestamps: true,
-        chunk_length_s: 15,
-        stride_length_s: 3,
+        chunk_length_s: 20,
+        stride_length_s: 4,
+        language: language || 'portuguese',
+        task: 'transcribe',
       });
     }
 
