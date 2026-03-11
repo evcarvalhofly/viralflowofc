@@ -114,7 +114,7 @@ export function PreviewPanel({
     if (v.muted !== muted) v.muted = muted;
   }, [activeVideoItem, muted, volume]);
 
-  // ── Draw a frame maintaining original aspect ratio (letterbox) ──
+  // ── Draw a frame: canvas matches video AR, so draw 1:1 (no letterbox needed) ──
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
     const v = videoRef.current;
@@ -127,28 +127,14 @@ export function PreviewPanel({
 
     if (v && v.readyState >= 2 && activeVideoItem?.mediaFile && v.videoWidth > 0) {
       const vd = activeVideoItem.item.videoDetails;
-
-      // Letterbox: fit video inside canvas keeping original aspect ratio
-      const srcAR = v.videoWidth / v.videoHeight;
-      const dstAR = canvas.width / canvas.height;
-      let dw = canvas.width, dh = canvas.height, dx = 0, dy = 0;
-      if (srcAR > dstAR) {
-        dh = canvas.width / srcAR;
-        dy = (canvas.height - dh) / 2;
-      } else {
-        dw = canvas.height * srcAR;
-        dx = (canvas.width - dw) / 2;
-      }
-
       ctx.save();
       ctx.globalAlpha = vd?.opacity ?? 1;
       if (vd?.flipH || vd?.flipV) {
-        ctx.translate(vd.flipH ? dx + dw : dx, vd.flipV ? dy + dh : dy);
+        ctx.translate(vd.flipH ? canvas.width : 0, vd.flipV ? canvas.height : 0);
         ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
-        ctx.drawImage(v, 0, 0, dw, dh);
-      } else {
-        ctx.drawImage(v, dx, dy, dw, dh);
       }
+      // Canvas dimensions already match video AR — fill the whole canvas
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
       ctx.restore();
     }
   }, [activeVideoItem]);
