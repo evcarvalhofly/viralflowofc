@@ -81,14 +81,24 @@ export function ExportModal({ open, onClose, onExport, exportState, project }: E
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg bg-muted/60 p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Resolução</p>
-                  <p className="text-sm font-semibold text-foreground mt-0.5">1080p</p>
+                  <p className="text-xs text-muted-foreground">Formato</p>
+                  <p className="text-sm font-semibold text-foreground mt-0.5">
+                    {typeof SharedArrayBuffer !== 'undefined' ? 'MP4' : 'WebM'}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-muted/60 p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Formato</p>
-                  <p className="text-sm font-semibold text-foreground mt-0.5">MP4</p>
+                  <p className="text-xs text-muted-foreground">Motor</p>
+                  <p className="text-sm font-semibold text-foreground mt-0.5">
+                    {typeof SharedArrayBuffer !== 'undefined' ? 'FFmpeg' : 'Canvas'}
+                  </p>
                 </div>
               </div>
+
+              {typeof SharedArrayBuffer === 'undefined' && (
+                <p className="text-[10px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                  ℹ️ Exportação via Canvas (sem WASM). Pode ser mais lenta para vídeos longos.
+                </p>
+              )}
             </>
           )}
         </div>

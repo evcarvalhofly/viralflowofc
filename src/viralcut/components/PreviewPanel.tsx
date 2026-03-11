@@ -1,12 +1,11 @@
 // ============================================================
 // PreviewPanel – Video preview with text/image overlays + effects
+// Optimised for smooth playback: minimal re-renders, immediate
+// playbackRate + volume application, debounced scrub sync.
 // ============================================================
 import { useEffect, useRef, useState, useCallback } from 'react';
-import {
-  Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-} from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
-import { cn } from '@/lib/utils';
 
 interface PreviewPanelProps {
   tracks: Track[];
@@ -26,12 +25,11 @@ function fmt(s: number) {
   return `${m}:${String(sec).padStart(2, '0')}.${ms}`;
 }
 
-/** Build CSS filter string from video/image details */
 function buildFilter(brightness = 1, contrast = 1, saturation = 1) {
+  if (brightness === 1 && contrast === 1 && saturation === 1) return 'none';
   return `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`;
 }
 
-/** Build CSS transform for flips */
 function buildTransform(flipH = false, flipV = false) {
   const sx = flipH ? -1 : 1;
   const sy = flipV ? -1 : 1;
@@ -53,8 +51,11 @@ export function PreviewPanel({
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  // Track last synced video src to avoid re-setting currentTime on src change
+  const lastSrcRef = useRef<string>('');
+  const lastSeekRef = useRef<number>(-1);
 
-  // ── Find active items at currentTime ─────────────────────────
+  // ── Derived active items (computed inline, not state) ─────
   const activeVideoItem = (() => {
     for (const track of tracks) {
       if (track.type !== 'video' || track.muted) continue;
@@ -78,42 +79,72 @@ export function PreviewPanel({
     .filter((i) => currentTime >= i.startTime && currentTime < i.endTime)
     .map((item) => ({ item, mediaFile: media.find((m) => m.id === item.mediaId) }));
 
-  // ── Sync video element ────────────────────────────────────────
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v || !activeVideoItem?.mediaFile) return;
-    const mediaTime = activeVideoItem.item.mediaStart + (currentTime - activeVideoItem.item.startTime);
-    if (Math.abs(v.currentTime - mediaTime) > 0.15) {
-      v.currentTime = mediaTime;
-    }
-  }, [currentTime, activeVideoItem]);
-
-  // Apply playback rate from videoDetails
-  useEffect(() => {
+  // ── Directly apply playbackRate + volume to video element ──
+  // Called imperatively so we avoid waiting for a React re-render cycle
+  const applyVideoProps = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     const rate = activeVideoItem?.item.videoDetails?.playbackRate ?? 1;
-    v.playbackRate = rate;
-  }, [activeVideoItem]);
-
-  // Apply volume from videoDetails
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const itemVolume = activeVideoItem?.item.videoDetails?.volume ?? 1;
-    v.volume = Math.min(1, itemVolume) * (muted ? 0 : volume);
-    v.muted = muted;
+    const itemVol = activeVideoItem?.item.videoDetails?.volume ?? 1;
+    if (v.playbackRate !== rate) v.playbackRate = rate;
+    const targetVol = Math.min(1, itemVol) * (muted ? 0 : volume);
+    if (Math.abs(v.volume - targetVol) > 0.01) v.volume = targetVol;
+    if (v.muted !== muted) v.muted = muted;
   }, [activeVideoItem, muted, volume]);
 
-  // Play/pause sync
+  // ── Sync video src + seek ──────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (isPlaying) v.play().catch(() => {});
-    else v.pause();
-  }, [isPlaying, activeVideoItem?.item.id]);
+    const mf = activeVideoItem?.mediaFile;
+    if (!mf) return;
 
-  // ── Audio tracks ──────────────────────────────────────────────
+    // If src changed, let onloadeddata handle the seek
+    if (v.src !== mf.url) {
+      lastSrcRef.current = mf.url;
+      lastSeekRef.current = -1;
+      v.src = mf.url;
+      v.preload = 'auto';
+      v.load();
+      applyVideoProps();
+      return;
+    }
+
+    // Seek only when difference is meaningful (>150ms) to avoid stutter
+    const mediaTime = activeVideoItem!.item.mediaStart + (currentTime - activeVideoItem!.item.startTime);
+    if (Math.abs(v.currentTime - mediaTime) > 0.15 && !isPlaying) {
+      v.currentTime = mediaTime;
+      lastSeekRef.current = mediaTime;
+    }
+
+    applyVideoProps();
+  }, [currentTime, activeVideoItem, isPlaying, applyVideoProps]);
+
+  // ── Play / pause ──────────────────────────────────────────
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (isPlaying) {
+      // Seek to correct position before playing
+      if (activeVideoItem) {
+        const mediaTime = activeVideoItem.item.mediaStart + (currentTime - activeVideoItem.item.startTime);
+        if (Math.abs(v.currentTime - mediaTime) > 0.3) {
+          v.currentTime = mediaTime;
+        }
+      }
+      applyVideoProps();
+      v.play().catch(() => {});
+    } else {
+      v.pause();
+    }
+  }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Immediately apply rate/volume when those change ───────
+  useEffect(() => {
+    applyVideoProps();
+  }, [applyVideoProps]);
+
+  // ── Audio tracks ──────────────────────────────────────────
   useEffect(() => {
     const activeAudioItems = tracks
       .filter((t) => t.type === 'audio' && !t.muted)
@@ -140,19 +171,43 @@ export function PreviewPanel({
       else if (!isPlaying && !audio.paused) audio.pause();
     });
 
-    // Pause audio items not currently active
     audioRefs.current.forEach((audio, id) => {
       const isActive = activeAudioItems.some((i) => i.id === id);
       if (!isActive && !audio.paused) audio.pause();
     });
   }, [currentTime, isPlaying, tracks, media, muted, volume]);
 
-  const handleScrub = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  // ── Scrubber ──────────────────────────────────────────────
+  const scrubbing = useRef(false);
+
+  const handleScrubMove = useCallback((clientX: number, rect: DOMRect) => {
     if (duration <= 0) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     onTimeChange(pct * duration);
   }, [duration, onTimeChange]);
+
+  const handleScrubStart = useCallback((e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    scrubbing.current = true;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    handleScrubMove(clientX, rect);
+
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      const x = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
+      handleScrubMove(x, rect);
+    };
+    const onUp = () => {
+      scrubbing.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onUp);
+  }, [handleScrubMove]);
 
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -165,10 +220,8 @@ export function PreviewPanel({
     opacity: vd?.opacity ?? 1,
     filter: buildFilter(vd?.brightness, vd?.contrast, vd?.saturation),
     transform: buildTransform(vd?.flipH, vd?.flipV),
-    borderWidth: vd?.borderWidth ? `${vd.borderWidth}px` : undefined,
-    borderColor: vd?.borderWidth ? (vd.borderColor ?? '#000') : undefined,
-    borderStyle: vd?.borderWidth ? 'solid' : undefined,
-    borderRadius: vd?.borderRadius ? `${vd.borderRadius}%` : undefined,
+    // NOTE: no borderWidth/radius here to avoid layout thrash — applied via wrapper
+    willChange: 'filter, opacity, transform',
   };
 
   return (
@@ -185,6 +238,8 @@ export function PreviewPanel({
             style={videoStyle}
             preload="auto"
             playsInline
+            // Lower decoding priority allows UI to stay responsive
+            {...({ decoding: 'async' } as any)}
           />
         ) : (
           <div className="flex flex-col items-center gap-2 text-muted-foreground/40 select-none">
@@ -266,17 +321,20 @@ export function PreviewPanel({
       {/* Scrubber */}
       <div className="px-3 pt-2 pb-1 shrink-0">
         <div
-          className="h-1.5 rounded-full bg-muted cursor-pointer relative group"
-          onClick={handleScrub}
+          className="h-3 flex items-center cursor-pointer group"
+          onMouseDown={handleScrubStart}
+          onTouchStart={handleScrubStart}
         >
-          <div
-            className="absolute left-0 top-0 h-full rounded-full gradient-viral transition-none"
-            style={{ width: `${pct}%` }}
-          />
-          <div
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-primary shadow-md border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-            style={{ left: `${pct}%` }}
-          />
+          <div className="relative w-full h-1.5 rounded-full bg-muted">
+            <div
+              className="absolute left-0 top-0 h-full rounded-full gradient-viral transition-none"
+              style={{ width: `${pct}%` }}
+            />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-primary shadow-md border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+              style={{ left: `${pct}%` }}
+            />
+          </div>
         </div>
       </div>
 
