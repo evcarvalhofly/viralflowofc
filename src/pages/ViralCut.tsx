@@ -811,10 +811,23 @@ const ViralCut = () => {
   const selectedItem = selectedItemId ? project.tracks.flatMap((t) => t.items).find((i) => i.id === selectedItemId) ?? null : null;
   const selectedTrackId = selectedItemId ? project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId))?.id ?? null : null;
 
-  // Selecting an item: only set the selected ID; do NOT auto-open any panel on mobile
+  // Selecting an item: only set the selected ID; do NOT auto-open any panel
   const handleItemSelect = useCallback((id: string | null) => {
     setSelectedItemId(id);
   }, []);
+
+  // Double-click on a timeline/preview item → open properties panel
+  const handleItemDoubleClick = useCallback((id: string) => {
+    setSelectedItemId(id);
+    if (isMobile) {
+      // On mobile: open the sliding panel with 'editar' tab (properties)
+      setMobileTab('editar');
+      setShowMobilePanel(true);
+    } else {
+      // On desktop: ensure the right properties panel is visible
+      setShowProperties(true);
+    }
+  }, [isMobile]);
 
   // ────────────────────────────────────────────────────────────
   // MOBILE LANDING (no media yet)
