@@ -70,6 +70,8 @@ const ViralCut = () => {
   const isMobile = useIsMobile();
   const importRef = useRef<HTMLInputElement>(null);
   const autoCutImportRef = useRef<HTMLInputElement>(null);
+  // Ref to splitAllAtPlayhead so it can be called from keyboard handler before declaration
+  const splitAllRef = useRef<(() => void) | null>(null);
 
   const [project, setProject] = useState<Project>(createDefaultProject());
   const [media, setMedia] = useState<MediaFile[]>([]);
