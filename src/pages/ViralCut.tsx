@@ -39,7 +39,7 @@ async function getMediaDuration(file: File): Promise<{ duration: number; width?:
   return new Promise((resolve) => {
     if (file.type.startsWith('video/') || file.type.startsWith('audio/')) {
       const el = document.createElement(file.type.startsWith('video/') ? 'video' : 'audio') as HTMLVideoElement;
-      el.src = URL.createObjectURL(el.tagName === 'VIDEO' ? file : file);
+      el.src = URL.createObjectURL(file);
       el.onloadedmetadata = () => {
         URL.revokeObjectURL(el.src);
         resolve({
@@ -55,7 +55,6 @@ async function getMediaDuration(file: File): Promise<{ duration: number; width?:
   });
 }
 
-// Undo/Redo history
 const MAX_HISTORY = 30;
 
 const ViralCut = () => {
@@ -93,19 +92,45 @@ const ViralCut = () => {
   const canUndo = historyIndexRef.current > 0;
   const canRedo = historyIndexRef.current < historyRef.current.length - 1;
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (!canUndo) return;
     historyIndexRef.current--;
     const tracks = JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current]));
     setProject((p) => ({ ...p, tracks, duration: calcProjectDuration(tracks) }));
-  };
+  }, [canUndo]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     if (!canRedo) return;
     historyIndexRef.current++;
     const tracks = JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current]));
     setProject((p) => ({ ...p, tracks, duration: calcProjectDuration(tracks) }));
-  };
+  }, [canRedo]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsPlaying((p) => !p);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedItemId) {
+          const track = project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId));
+          if (track) handleItemDelete(track.id, selectedItemId);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleUndo, handleRedo, selectedItemId, project.tracks]);
 
   // Playback ticker
   const tickRef = useRef<number | null>(null);
@@ -169,7 +194,6 @@ const ViralCut = () => {
       if (mf) URL.revokeObjectURL(mf.url);
       return prev.filter((m) => m.id !== id);
     });
-    // Also remove from tracks
     setProject((p) => {
       const tracks = p.tracks.map((t) => ({
         ...t,
@@ -189,7 +213,6 @@ const ViralCut = () => {
       const track = p.tracks.find((t) => t.type === targetTrackType);
       if (!track) return p;
 
-      // Place after last item in track
       const lastEnd = track.items.reduce((acc, i) => Math.max(acc, i.endTime), 0);
       const dur = mf.duration > 0 ? mf.duration : 5;
 
@@ -259,6 +282,69 @@ const ViralCut = () => {
     });
   }, []);
 
+  // ── Trim item (resize handles) ────────────────────────────
+  const handleItemTrim = useCallback((
+    trackId: string,
+    itemId: string,
+    newStart: number,
+    newEnd: number,
+    newMediaStart: number,
+    newMediaEnd: number,
+  ) => {
+    setProject((p) => {
+      const tracks = p.tracks.map((t) => {
+        if (t.id !== trackId) return t;
+        return {
+          ...t,
+          items: t.items.map((i) => {
+            if (i.id !== itemId) return i;
+            return { ...i, startTime: newStart, endTime: newEnd, mediaStart: newMediaStart, mediaEnd: newMediaEnd };
+          }),
+        };
+      });
+      const duration = calcProjectDuration(tracks);
+      return { ...p, tracks, duration };
+    });
+  }, []);
+
+  // ── Split item at time ────────────────────────────────────
+  const handleItemSplit = useCallback((trackId: string, itemId: string, atTime: number) => {
+    setProject((p) => {
+      const track = p.tracks.find((t) => t.id === trackId);
+      if (!track) return p;
+      const item = track.items.find((i) => i.id === itemId);
+      if (!item) return p;
+      if (atTime <= item.startTime || atTime >= item.endTime) return p;
+
+      const mediaAtSplit = item.mediaStart + (atTime - item.startTime);
+
+      const left: TrackItem = {
+        ...item,
+        id: createId(),
+        endTime: atTime,
+        mediaEnd: mediaAtSplit,
+      };
+      const right: TrackItem = {
+        ...item,
+        id: createId(),
+        startTime: atTime,
+        mediaStart: mediaAtSplit,
+      };
+
+      const tracks = p.tracks.map((t) => {
+        if (t.id !== trackId) return t;
+        const newItems = t.items.flatMap((i) =>
+          i.id === itemId ? [left, right] : [i]
+        );
+        return { ...t, items: newItems };
+      });
+
+      pushHistory(tracks);
+      return { ...p, tracks, duration: calcProjectDuration(tracks) };
+    });
+    setSelectedItemId(null);
+  }, [pushHistory]);
+
   // ── Delete item from timeline ─────────────────────────────
   const handleItemDelete = useCallback((trackId: string, itemId: string) => {
     setProject((p) => {
@@ -287,7 +373,7 @@ const ViralCut = () => {
     }));
   }, []);
 
-  // ── Export (basic download of original file) ──────────────
+  // ── Export with FFmpeg ────────────────────────────────────
   const handleExport = useCallback(async (_opts: ExportOptions) => {
     setExportState({ status: 'preparing', progress: 5, label: 'Preparando…' });
 
@@ -302,30 +388,112 @@ const ViralCut = () => {
     }
 
     try {
-      setExportState({ status: 'encoding', progress: 30, label: 'Processando…' });
-      // For now: download the first media file directly
-      const firstMedia = media.find((m) => m.id === videoItems[0].mediaId);
-      if (!firstMedia) throw new Error('Mídia não encontrada');
+      setExportState({ status: 'encoding', progress: 20, label: 'Carregando FFmpeg…' });
 
-      await new Promise((r) => setTimeout(r, 800)); // simulate
+      // Dynamic import of FFmpeg
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+      const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
 
-      setExportState({ status: 'encoding', progress: 80, label: 'Finalizando…' });
-      await new Promise((r) => setTimeout(r, 400));
+      const ffmpeg = new FFmpeg();
 
+      ffmpeg.on('progress', ({ progress }) => {
+        setExportState((s) => ({
+          ...s,
+          progress: 20 + Math.round(progress * 75),
+          label: `Codificando… ${Math.round(progress * 100)}%`,
+        }));
+      });
+
+      // Load FFmpeg WASM
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+
+      setExportState((s) => ({ ...s, progress: 25, label: 'Importando clipes…' }));
+
+      // Write all needed media files
+      const writtenFiles = new Set<string>();
+      for (const item of videoItems) {
+        const mf = media.find((m) => m.id === item.mediaId);
+        if (!mf || writtenFiles.has(mf.id)) continue;
+        const filename = `input_${mf.id}.${mf.name.split('.').pop() ?? 'mp4'}`;
+        await ffmpeg.writeFile(filename, await fetchFile(mf.url));
+        writtenFiles.add(mf.id);
+      }
+
+      // Build filter_complex for concat with trim
+      let filterParts: string[] = [];
+      let concatInputs = '';
+      videoItems.forEach((item, idx) => {
+        const mf = media.find((m) => m.id === item.mediaId)!;
+        const filename = `input_${mf.id}.${mf.name.split('.').pop() ?? 'mp4'}`;
+        filterParts.push(
+          `[${idx}:v]trim=start=${item.mediaStart.toFixed(3)}:end=${item.mediaEnd.toFixed(3)},setpts=PTS-STARTPTS[v${idx}]`
+        );
+        concatInputs += `[v${idx}]`;
+      });
+
+      filterParts.push(`${concatInputs}concat=n=${videoItems.length}:v=1:a=0[outv]`);
+      const filterComplex = filterParts.join(';');
+
+      // Build input args
+      const inputArgs: string[] = [];
+      videoItems.forEach((item) => {
+        const mf = media.find((m) => m.id === item.mediaId)!;
+        const filename = `input_${mf.id}.${mf.name.split('.').pop() ?? 'mp4'}`;
+        inputArgs.push('-i', filename);
+      });
+
+      setExportState((s) => ({ ...s, progress: 30, label: 'Processando vídeo…' }));
+
+      await ffmpeg.exec([
+        ...inputArgs,
+        '-filter_complex', filterComplex,
+        '-map', '[outv]',
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '23',
+        '-movflags', '+faststart',
+        'output.mp4',
+      ]);
+
+      setExportState((s) => ({ ...s, progress: 97, label: 'Gerando download…' }));
+
+      const rawData = await ffmpeg.readFile('output.mp4');
+      // Convert FileData to Blob-compatible format
+      let blobParts: BlobPart[];
+      if (typeof rawData === 'string') {
+        blobParts = [rawData];
+      } else {
+        // Copy Uint8Array to a plain ArrayBuffer to avoid SharedArrayBuffer issues
+        const copy = new Uint8Array(rawData.length);
+        copy.set(rawData as Uint8Array);
+        blobParts = [copy.buffer];
+      }
+      const blob = new Blob(blobParts, { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = firstMedia.url;
+      a.href = url;
       a.download = `${project.name}.mp4`;
       a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
 
       setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
     } catch (err: any) {
-      setExportState({ status: 'error', progress: 0, label: '', error: err?.message });
+      console.error('Export error:', err);
+      setExportState({ status: 'error', progress: 0, label: '', error: err?.message ?? 'Erro ao exportar' });
     }
   }, [project, media]);
 
-  // ── Selected item (for properties panel) ─────────────────
+  // ── Selected item ─────────────────────────────────────────
   const selectedItem = selectedItemId
     ? project.tracks.flatMap((t) => t.items).find((i) => i.id === selectedItemId) ?? null
+    : null;
+
+  const selectedTrackId = selectedItemId
+    ? project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId))?.id ?? null
     : null;
 
   // ── Drag from media panel ─────────────────────────────────
@@ -340,7 +508,7 @@ const ViralCut = () => {
         projectName={project.name}
         onProjectNameChange={(name) => setProject((p) => ({ ...p, name }))}
         zoom={zoom}
-        onZoomIn={() => setZoom((z) => Math.min(200, z + 20))}
+        onZoomIn={() => setZoom((z) => Math.min(300, z + 20))}
         onZoomOut={() => setZoom((z) => Math.max(20, z - 20))}
         onUndo={handleUndo}
         onRedo={handleRedo}
@@ -352,7 +520,7 @@ const ViralCut = () => {
       {/* Main editor area */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
 
-        {/* ── Left panel: Media library ── */}
+        {/* Left panel: Media library */}
         {showMedia && !isMobile && (
           <div className="w-[200px] xl:w-[220px] shrink-0 border-r border-border bg-card/50 flex flex-col overflow-hidden">
             {media.map((m) => (
@@ -374,7 +542,7 @@ const ViralCut = () => {
           </div>
         )}
 
-        {/* ── Center: Preview ── */}
+        {/* Center: Preview */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-border">
           <PreviewPanel
             tracks={project.tracks}
@@ -388,23 +556,33 @@ const ViralCut = () => {
           />
         </div>
 
-        {/* ── Right panel: Properties ── */}
+        {/* Right panel: Properties */}
         {showProperties && !isMobile && (
           <div className="w-[200px] xl:w-[220px] shrink-0 border-l border-border bg-card/50 overflow-hidden">
-            <PropertiesPanel selectedItem={selectedItem} media={media} />
+            <PropertiesPanel
+              selectedItem={selectedItem}
+              selectedTrackId={selectedTrackId}
+              media={media}
+              onDelete={handleItemDelete}
+              onSplit={handleItemSplit}
+              currentTime={currentTime}
+            />
           </div>
         )}
       </div>
 
-      {/* ── Timeline ── */}
+      {/* Timeline */}
       <div
         className="shrink-0 border-t border-border"
-        style={{ height: isMobile ? 140 : 180 }}
+        style={{ height: isMobile ? 160 : 220 }}
       >
-        {/* Timeline header with toggle buttons */}
+        {/* Timeline header */}
         <div className="flex items-center gap-2 px-3 py-1.5 bg-card/60 border-b border-border">
           <span className="text-[11px] font-semibold text-foreground uppercase tracking-wide flex-1">
             Timeline
+          </span>
+          <span className="text-[10px] text-muted-foreground hidden sm:block">
+            Espaço = play/pause · Del = deletar · Arrastar borda = cortar
           </span>
           {!isMobile && (
             <>
@@ -433,16 +611,20 @@ const ViralCut = () => {
         </div>
 
         {/* Timeline body */}
-        <div style={{ height: isMobile ? 108 : 148 }}>
+        <div style={{ height: isMobile ? 128 : 188 }}>
           <Timeline
             tracks={project.tracks}
             media={media}
             currentTime={currentTime}
             duration={project.duration}
             zoom={zoom}
+            selectedItemId={selectedItemId}
             onSeek={(t) => { setCurrentTime(t); setIsPlaying(false); }}
             onItemMove={handleItemMove}
+            onItemTrim={handleItemTrim}
             onItemDelete={handleItemDelete}
+            onItemSelect={setSelectedItemId}
+            onItemSplit={handleItemSplit}
             onTrackToggleMute={handleToggleMute}
             onTrackToggleLock={handleToggleLock}
             onDropMedia={handleDropMedia}
