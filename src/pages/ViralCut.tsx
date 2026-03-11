@@ -1,5 +1,7 @@
 // ============================================================
-// ViralCut – Main Editor Page (Full featured, ViralFlow design)
+// ViralCut – Main Editor Page
+// Desktop: sidebar left + preview + props right + timeline bottom
+// Mobile: CapCut-style (preview top → timeline → bottom tab bar)
 // ============================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
@@ -13,8 +15,12 @@ import { Timeline } from '@/viralcut/components/Timeline';
 import { Toolbar } from '@/viralcut/components/Toolbar';
 import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
+import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { PanelLeft, PanelRight } from 'lucide-react';
+import {
+  PanelLeft, PanelRight, Scissors, Music, Type, Layers, Image, Zap,
+  Upload, Plus, Wand2, X, ChevronUp
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -55,8 +61,13 @@ async function getMediaDuration(file: File): Promise<{ duration: number; width?:
 
 const MAX_HISTORY = 30;
 
+// Mobile bottom tab type
+type MobileTab = 'editar' | 'audio' | 'texto' | 'efeitos' | 'camada';
+
 const ViralCut = () => {
   const isMobile = useIsMobile();
+  const importRef = useRef<HTMLInputElement>(null);
+  const autoCutImportRef = useRef<HTMLInputElement>(null);
 
   const [project, setProject] = useState<Project>(createDefaultProject());
   const [media, setMedia] = useState<MediaFile[]>([]);
@@ -72,6 +83,15 @@ const ViralCut = () => {
 
   const [showMedia, setShowMedia] = useState(true);
   const [showProperties, setShowProperties] = useState(true);
+
+  // Mobile state
+  const [mobileTab, setMobileTab] = useState<MobileTab>('editar');
+  const [showMobilePanel, setShowMobilePanel] = useState(false);
+  const [showAutoCut, setShowAutoCut] = useState(false);
+  const [pendingAutoCutFile, setPendingAutoCutFile] = useState<FileList | null>(null);
+
+  // Has any media been imported?
+  const hasMedia = media.length > 0;
 
   // Undo/Redo
   const historyRef = useRef<Track[][]>([JSON.parse(JSON.stringify(project.tracks))]);
@@ -102,8 +122,9 @@ const ViralCut = () => {
     setProject((p) => ({ ...p, tracks, duration: calcProjectDuration(tracks) }));
   }, [canRedo]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (desktop only)
   useEffect(() => {
+    if (isMobile) return;
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
@@ -118,7 +139,7 @@ const ViralCut = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [handleUndo, handleRedo, selectedItemId, project.tracks]);
+  }, [handleUndo, handleRedo, selectedItemId, project.tracks, isMobile]);
 
   // Playback ticker
   const tickRef = useRef<number | null>(null);
@@ -155,8 +176,45 @@ const ViralCut = () => {
       const mf: MediaFile = { id: createId(), name: file.name, type, file, url, duration, thumbnail, width, height };
       setMedia((prev) => [...prev, mf]);
       setSelectedMediaId(mf.id);
+      // Auto-add first file to timeline on mobile
+      setProject((p) => {
+        const targetType: Track['type'] = type === 'audio' ? 'audio' : type === 'image' ? 'image' : 'video';
+        let track = p.tracks.find((t) => t.type === targetType);
+        let tracks = p.tracks;
+        if (!track && targetType === 'image') {
+          const newTrack: Track = { id: createId(), type: 'image', items: [], locked: false, muted: false };
+          tracks = [...p.tracks, newTrack];
+          track = newTrack;
+        }
+        if (!track) return p;
+        const lastEnd = track.items.reduce((acc, i) => Math.max(acc, i.endTime), 0);
+        const dur = duration > 0 ? duration : 5;
+        const item: TrackItem = {
+          id: createId(), mediaId: mf.id, trackId: track.id,
+          startTime: lastEnd, endTime: lastEnd + dur,
+          mediaStart: 0, mediaEnd: dur,
+          name: file.name.replace(/\.[^.]+$/, ''),
+          type: targetType,
+          videoDetails: targetType === 'video' ? { ...DEFAULT_VIDEO_DETAILS } : undefined,
+          audioDetails: targetType === 'audio' ? { ...DEFAULT_AUDIO_DETAILS } : undefined,
+          imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS } : undefined,
+        };
+        const newTracks = tracks.map((t) => t.id === track!.id ? { ...t, items: [...t.items, item] } : t);
+        return { ...p, tracks: newTracks, duration: calcProjectDuration(newTracks) };
+      });
     }
   }, []);
+
+  // ── Import for auto-cut: import then analyze ──────────────
+  const handleAutoCutImport = useCallback(async (files: FileList) => {
+    await handleImport(files);
+    setPendingAutoCutFile(files);
+    setShowAutoCut(true);
+    if (isMobile) {
+      setShowMobilePanel(true);
+      setMobileTab('editar');
+    }
+  }, [handleImport, isMobile]);
 
   const handleDeleteMedia = useCallback((id: string) => {
     setMedia((prev) => {
@@ -178,7 +236,6 @@ const ViralCut = () => {
       const targetType: Track['type'] = mf.type === 'audio' ? 'audio' : mf.type === 'image' ? 'image' : 'video';
       let track = p.tracks.find((t) => t.type === targetType);
       let tracks = p.tracks;
-      // If no image track, create one
       if (!track && targetType === 'image') {
         const newTrack: Track = { id: createId(), type: 'image', items: [], locked: false, muted: false };
         tracks = [...p.tracks, newTrack];
@@ -203,7 +260,6 @@ const ViralCut = () => {
     });
   }, [media, pushHistory]);
 
-  // ── Drop from media panel ─────────────────────────────────
   const handleDropMedia = useCallback((trackId: string, mediaId: string, startTime: number) => {
     const mf = media.find((m) => m.id === mediaId);
     if (!mf) return;
@@ -225,7 +281,6 @@ const ViralCut = () => {
     });
   }, [media, pushHistory]);
 
-  // ── Add text to timeline ──────────────────────────────────
   const handleAddText = useCallback((preset: Partial<typeof DEFAULT_TEXT_DETAILS>) => {
     setProject((p) => {
       const textTrack = p.tracks.find((t) => t.type === 'text');
@@ -243,15 +298,14 @@ const ViralCut = () => {
       pushHistory(tracks);
       return { ...p, tracks, duration: calcProjectDuration(tracks) };
     });
-  }, [currentTime, pushHistory]);
+    if (isMobile) setShowMobilePanel(false);
+  }, [currentTime, pushHistory, isMobile]);
 
-  // ── Add shape ─────────────────────────────────────────────
   const handleAddShape = useCallback((shape: 'rect' | 'circle' | 'triangle') => {
     const shapeText = shape === 'rect' ? '▬' : shape === 'circle' ? '●' : '▲';
     handleAddText({ text: shapeText, fontSize: 80, color: '#f472b6', posX: 50, posY: 50 });
   }, [handleAddText]);
 
-  // ── Move item ─────────────────────────────────────────────
   const handleItemMove = useCallback((trackId: string, itemId: string, newStart: number) => {
     setProject((p) => {
       const tracks = p.tracks.map((t) => {
@@ -266,7 +320,6 @@ const ViralCut = () => {
     });
   }, []);
 
-  // ── Trim item ─────────────────────────────────────────────
   const handleItemTrim = useCallback((trackId: string, itemId: string, newStart: number, newEnd: number, newMediaStart: number, newMediaEnd: number) => {
     setProject((p) => {
       const tracks = p.tracks.map((t) => {
@@ -279,7 +332,6 @@ const ViralCut = () => {
     });
   }, []);
 
-  // ── Split item ────────────────────────────────────────────
   const handleItemSplit = useCallback((trackId: string, itemId: string, atTime: number) => {
     setProject((p) => {
       const track = p.tracks.find((t) => t.id === trackId);
@@ -299,7 +351,6 @@ const ViralCut = () => {
     setSelectedItemId(null);
   }, [pushHistory]);
 
-  // ── Delete item ───────────────────────────────────────────
   const handleItemDelete = useCallback((trackId: string, itemId: string) => {
     setProject((p) => {
       const tracks = p.tracks.map((t) =>
@@ -311,7 +362,6 @@ const ViralCut = () => {
     setSelectedItemId(null);
   }, [pushHistory]);
 
-  // ── Update item properties ────────────────────────────────
   const handleUpdateItem = useCallback((trackId: string, itemId: string, updates: Partial<TrackItem>) => {
     setProject((p) => ({
       ...p,
@@ -321,7 +371,6 @@ const ViralCut = () => {
     }));
   }, []);
 
-  // ── Track controls ────────────────────────────────────────
   const handleToggleMute = useCallback((trackId: string) => {
     setProject((p) => ({ ...p, tracks: p.tracks.map((t) => t.id === trackId ? { ...t, muted: !t.muted } : t) }));
   }, []);
@@ -329,6 +378,17 @@ const ViralCut = () => {
   const handleToggleLock = useCallback((trackId: string) => {
     setProject((p) => ({ ...p, tracks: p.tracks.map((t) => t.id === trackId ? { ...t, locked: !t.locked } : t) }));
   }, []);
+
+  // ── Apply auto-cut silence regions ───────────────────────
+  const handleApplyAutoCuts = useCallback((regions: SilenceRegion[]) => {
+    setProject((p) => {
+      const newTracks = applySilenceCuts(p.tracks, regions);
+      pushHistory(newTracks);
+      return { ...p, tracks: newTracks, duration: calcProjectDuration(newTracks) };
+    });
+    setShowAutoCut(false);
+    if (isMobile) setShowMobilePanel(false);
+  }, [pushHistory, isMobile]);
 
   // ── Export with FFmpeg ────────────────────────────────────
   const handleExport = useCallback(async (_opts: ExportOptions) => {
@@ -397,13 +457,280 @@ const ViralCut = () => {
     }
   }, [project, media]);
 
-  // ── Selected item ─────────────────────────────────────────
   const selectedItem = selectedItemId ? project.tracks.flatMap((t) => t.items).find((i) => i.id === selectedItemId) ?? null : null;
   const selectedTrackId = selectedItemId ? project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId))?.id ?? null : null;
 
+  // ────────────────────────────────────────────────────────────
+  // MOBILE LANDING (no media yet)
+  // ────────────────────────────────────────────────────────────
+  if (isMobile && !hasMedia) {
+    // All hooks called above – safe early return
+    return (
+      <div className="h-full flex flex-col bg-background">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0 bg-card/60">
+          <span className="text-base font-bold text-foreground">ViralCut</span>
+          <button
+            className="text-xs text-primary font-medium"
+            onClick={() => { setExportState({ status: 'idle', progress: 0, label: '' }); setExportOpen(true); }}
+          >
+            Exportar
+          </button>
+        </div>
+
+        {/* Landing content */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6">
+          <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center mb-2">
+            <Scissors className="h-9 w-9 text-primary" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-xl font-bold text-foreground mb-1">Editor de Vídeo</h2>
+            <p className="text-sm text-muted-foreground">Edite vídeos profissionais diretamente no seu celular</p>
+          </div>
+
+          {/* Button 1: Normal upload */}
+          <button
+            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 hover:border-primary/60 transition-all px-5 py-4"
+            onClick={() => importRef.current?.click()}
+          >
+            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+              <Upload className="h-5 w-5 text-primary" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-foreground">+ Adicione seu vídeo ou imagem</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Edição manual completa</p>
+            </div>
+          </button>
+
+          {/* Button 2: Auto-cut */}
+          <button
+            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/60 transition-all px-5 py-4"
+            onClick={() => autoCutImportRef.current?.click()}
+          >
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+              <Wand2 className="h-5 w-5 text-amber-500" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-foreground">+ Cortes Automáticos</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Remove silêncios e pausas do vídeo</p>
+            </div>
+          </button>
+        </div>
+
+        {/* Hidden inputs */}
+        <input ref={importRef} type="file" accept="video/*,audio/*,image/*" multiple className="hidden"
+          onChange={(e) => e.target.files && handleImport(e.target.files)} />
+        <input ref={autoCutImportRef} type="file" accept="video/*" className="hidden"
+          onChange={(e) => e.target.files && handleAutoCutImport(e.target.files)} />
+
+        <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // MOBILE EDITOR (CapCut-style)
+  // ────────────────────────────────────────────────────────────
+  if (isMobile) {
+    const mobileTabs = [
+      { id: 'editar' as MobileTab, icon: <Scissors className="h-5 w-5" />, label: 'Editar' },
+      { id: 'audio' as MobileTab, icon: <Music className="h-5 w-5" />, label: 'Áudio' },
+      { id: 'texto' as MobileTab, icon: <Type className="h-5 w-5" />, label: 'Texto' },
+      { id: 'efeitos' as MobileTab, icon: <Zap className="h-5 w-5" />, label: 'Efeitos' },
+      { id: 'camada' as MobileTab, icon: <Layers className="h-5 w-5" />, label: 'Camada' },
+    ];
+
+    return (
+      <div className="h-full flex flex-col bg-background overflow-hidden">
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0 bg-card/80 z-10">
+          <div className="flex items-center gap-2">
+            <button className="p-1 text-muted-foreground" onClick={handleUndo} disabled={!canUndo}>
+              <svg className={cn("h-4 w-4", !canUndo && "opacity-30")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+            </button>
+            <button className="p-1 text-muted-foreground" onClick={handleRedo} disabled={!canRedo}>
+              <svg className={cn("h-4 w-4", !canRedo && "opacity-30")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+            </button>
+          </div>
+          <span className="text-sm font-semibold text-foreground">ViralCut</span>
+          <button
+            className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-semibold"
+            onClick={() => { setExportState({ status: 'idle', progress: 0, label: '' }); setExportOpen(true); }}
+          >
+            Exportar
+          </button>
+        </div>
+
+        {/* Preview */}
+        <div className="shrink-0" style={{ height: '42vh' }}>
+          <PreviewPanel
+            tracks={project.tracks}
+            media={media}
+            currentTime={currentTime}
+            duration={project.duration}
+            isPlaying={isPlaying}
+            onTimeChange={setCurrentTime}
+            onPlayPause={() => setIsPlaying((p) => !p)}
+            projectName={project.name}
+          />
+        </div>
+
+        {/* Timeline */}
+        <div className="shrink-0 border-t border-border" style={{ height: '22vh' }}>
+          <div className="flex items-center gap-2 px-2 py-1 bg-card/60 border-b border-border">
+            <span className="text-[10px] font-semibold text-foreground flex-1">Timeline</span>
+            <button
+              className="p-1 rounded bg-muted/60 text-muted-foreground hover:text-foreground"
+              onClick={() => importRef.current?.click()}
+              title="Adicionar mídia"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            <input ref={importRef} type="file" accept="video/*,audio/*,image/*" multiple className="hidden"
+              onChange={(e) => e.target.files && handleImport(e.target.files)} />
+          </div>
+          <div style={{ height: 'calc(100% - 32px)' }}>
+            <Timeline
+              tracks={project.tracks}
+              media={media}
+              currentTime={currentTime}
+              duration={project.duration}
+              zoom={zoom}
+              selectedItemId={selectedItemId}
+              onSeek={(t) => { setCurrentTime(t); setIsPlaying(false); }}
+              onItemMove={handleItemMove}
+              onItemTrim={handleItemTrim}
+              onItemDelete={handleItemDelete}
+              onItemSelect={setSelectedItemId}
+              onItemSplit={handleItemSplit}
+              onTrackToggleMute={handleToggleMute}
+              onTrackToggleLock={handleToggleLock}
+              onDropMedia={handleDropMedia}
+            />
+          </div>
+        </div>
+
+        {/* Sliding panel for tools */}
+        {showMobilePanel && (
+          <div className="fixed inset-0 z-40" onClick={() => { setShowMobilePanel(false); setShowAutoCut(false); }}>
+            <div
+              className="absolute bottom-16 left-0 right-0 bg-card border-t border-border rounded-t-2xl shadow-2xl overflow-hidden"
+              style={{ maxHeight: '50vh' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+                <span className="text-xs font-semibold text-foreground capitalize">
+                  {showAutoCut ? 'Corte Automático' : mobileTab}
+                </span>
+                <button onClick={() => { setShowMobilePanel(false); setShowAutoCut(false); }}>
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
+              <div className="overflow-y-auto" style={{ maxHeight: 'calc(50vh - 48px)' }}>
+                {showAutoCut ? (
+                  <AutoCut
+                    tracks={project.tracks}
+                    media={media}
+                    onApplyCuts={handleApplyAutoCuts}
+                    onClose={() => { setShowAutoCut(false); setShowMobilePanel(false); }}
+                  />
+                ) : mobileTab === 'texto' ? (
+                  <MediaPanel
+                    media={media}
+                    selectedMediaId={selectedMediaId}
+                    onImport={handleImport}
+                    onSelect={setSelectedMediaId}
+                    onDelete={handleDeleteMedia}
+                    onAddToTimeline={handleAddToTimeline}
+                    onAddText={handleAddText}
+                    onAddShape={handleAddShape}
+                    onAddTransition={() => {}}
+                    defaultTab="text"
+                  />
+                ) : mobileTab === 'camada' ? (
+                  <MediaPanel
+                    media={media}
+                    selectedMediaId={selectedMediaId}
+                    onImport={handleImport}
+                    onSelect={setSelectedMediaId}
+                    onDelete={handleDeleteMedia}
+                    onAddToTimeline={handleAddToTimeline}
+                    onAddText={handleAddText}
+                    onAddShape={handleAddShape}
+                    onAddTransition={() => {}}
+                    defaultTab="uploads"
+                  />
+                ) : mobileTab === 'editar' && selectedItem ? (
+                  <PropertiesPanel
+                    selectedItem={selectedItem}
+                    selectedTrackId={selectedTrackId}
+                    media={media}
+                    onDelete={handleItemDelete}
+                    onSplit={handleItemSplit}
+                    onUpdateItem={handleUpdateItem}
+                    currentTime={currentTime}
+                  />
+                ) : (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    {mobileTab === 'editar' ? 'Selecione um clipe na timeline para editar' :
+                     mobileTab === 'audio' ? 'Selecione um clipe de áudio na timeline' :
+                     mobileTab === 'efeitos' ? 'Efeitos em breve' : 'Selecione uma opção'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom tab bar */}
+        <div className="shrink-0 border-t border-border bg-card/95 safe-area-inset-bottom">
+          <div className="flex">
+            {mobileTabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={cn(
+                  'flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors',
+                  mobileTab === tab.id && showMobilePanel && !showAutoCut
+                    ? 'text-primary'
+                    : 'text-muted-foreground'
+                )}
+                onClick={() => {
+                  setMobileTab(tab.id);
+                  setShowAutoCut(false);
+                  setShowMobilePanel(true);
+                }}
+              >
+                {tab.icon}
+                <span className="text-[10px] font-medium">{tab.label}</span>
+              </button>
+            ))}
+            {/* Auto-cut shortcut button */}
+            <button
+              className={cn(
+                'flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors',
+                showAutoCut && showMobilePanel ? 'text-amber-500' : 'text-muted-foreground'
+              )}
+              onClick={() => {
+                setShowAutoCut(true);
+                setShowMobilePanel(true);
+              }}
+            >
+              <Wand2 className="h-5 w-5" />
+              <span className="text-[10px] font-medium">Auto</span>
+            </button>
+          </div>
+        </div>
+
+        <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
+      </div>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // DESKTOP EDITOR (original layout)
+  // ────────────────────────────────────────────────────────────
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
-      {/* Toolbar */}
       <Toolbar
         projectName={project.name}
         onProjectNameChange={(name) => setProject((p) => ({ ...p, name }))}
@@ -417,22 +744,30 @@ const ViralCut = () => {
         onExport={() => { setExportState({ status: 'idle', progress: 0, label: '' }); setExportOpen(true); }}
       />
 
-      {/* Main editor area */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Left panel: Media & panels */}
-        {showMedia && !isMobile && (
+        {/* Left panel */}
+        {showMedia && (
           <div className="w-[210px] xl:w-[230px] shrink-0 border-r border-border bg-card/50 flex flex-col overflow-hidden">
-            <MediaPanel
-              media={media}
-              selectedMediaId={selectedMediaId}
-              onImport={handleImport}
-              onSelect={setSelectedMediaId}
-              onDelete={handleDeleteMedia}
-              onAddToTimeline={handleAddToTimeline}
-              onAddText={handleAddText}
-              onAddShape={handleAddShape}
-              onAddTransition={() => {}}
-            />
+            {showAutoCut ? (
+              <AutoCut
+                tracks={project.tracks}
+                media={media}
+                onApplyCuts={handleApplyAutoCuts}
+                onClose={() => setShowAutoCut(false)}
+              />
+            ) : (
+              <MediaPanel
+                media={media}
+                selectedMediaId={selectedMediaId}
+                onImport={handleImport}
+                onSelect={setSelectedMediaId}
+                onDelete={handleDeleteMedia}
+                onAddToTimeline={handleAddToTimeline}
+                onAddText={handleAddText}
+                onAddShape={handleAddShape}
+                onAddTransition={() => {}}
+              />
+            )}
           </div>
         )}
 
@@ -450,8 +785,8 @@ const ViralCut = () => {
           />
         </div>
 
-        {/* Right panel: Properties */}
-        {showProperties && !isMobile && (
+        {/* Right panel */}
+        {showProperties && (
           <div className="w-[210px] xl:w-[230px] shrink-0 border-l border-border bg-card/50 overflow-hidden">
             <PropertiesPanel
               selectedItem={selectedItem}
@@ -467,24 +802,38 @@ const ViralCut = () => {
       </div>
 
       {/* Timeline */}
-      <div className="shrink-0 border-t border-border" style={{ height: isMobile ? 160 : 220 }}>
+      <div className="shrink-0 border-t border-border" style={{ height: 220 }}>
         <div className="flex items-center gap-2 px-3 py-1.5 bg-card/60 border-b border-border">
           <span className="text-[11px] font-semibold text-foreground uppercase tracking-wide flex-1">Timeline</span>
           <span className="text-[10px] text-muted-foreground hidden sm:block">
             Espaço = play/pause · Del = deletar · Arrastar borda = cortar
           </span>
-          {!isMobile && (
-            <>
-              <button className={cn('p-1 rounded transition-colors text-muted-foreground hover:text-foreground', showMedia && 'text-primary')} onClick={() => setShowMedia((v) => !v)} title="Painel de mídia">
-                <PanelLeft className="h-3.5 w-3.5" />
-              </button>
-              <button className={cn('p-1 rounded transition-colors text-muted-foreground hover:text-foreground', showProperties && 'text-primary')} onClick={() => setShowProperties((v) => !v)} title="Propriedades">
-                <PanelRight className="h-3.5 w-3.5" />
-              </button>
-            </>
-          )}
+          {/* Auto-cut toggle */}
+          <button
+            className={cn('flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors',
+              showAutoCut ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' : 'text-muted-foreground hover:text-foreground border border-transparent')}
+            onClick={() => setShowAutoCut((v) => !v)}
+            title="Corte Automático"
+          >
+            <Wand2 className="h-3 w-3" />
+            Auto Corte
+          </button>
+          <button
+            className={cn('p-1 rounded transition-colors text-muted-foreground hover:text-foreground', showMedia && 'text-primary')}
+            onClick={() => setShowMedia((v) => !v)}
+            title="Painel de mídia"
+          >
+            <PanelLeft className="h-3.5 w-3.5" />
+          </button>
+          <button
+            className={cn('p-1 rounded transition-colors text-muted-foreground hover:text-foreground', showProperties && 'text-primary')}
+            onClick={() => setShowProperties((v) => !v)}
+            title="Propriedades"
+          >
+            <PanelRight className="h-3.5 w-3.5" />
+          </button>
         </div>
-        <div style={{ height: isMobile ? 128 : 188 }}>
+        <div style={{ height: 188 }}>
           <Timeline
             tracks={project.tracks}
             media={media}
@@ -505,7 +854,6 @@ const ViralCut = () => {
         </div>
       </div>
 
-      {/* Export modal */}
       <ExportModal
         open={exportOpen}
         onClose={() => setExportOpen(false)}

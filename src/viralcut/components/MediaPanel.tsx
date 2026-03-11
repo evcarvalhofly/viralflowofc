@@ -19,6 +19,7 @@ interface MediaPanelProps {
   onAddText: (preset: Partial<typeof DEFAULT_TEXT_DETAILS>) => void;
   onAddShape: (shape: 'rect' | 'circle' | 'triangle') => void;
   onAddTransition: (type: string) => void;
+  defaultTab?: Tab;
 }
 
 function fmt(s: number) {
@@ -57,9 +58,10 @@ export function MediaPanel({
   onAddText,
   onAddShape,
   onAddTransition,
+  defaultTab = 'uploads',
 }: MediaPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('uploads');
+  const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
 
   const tabs: { id: Tab; icon: React.ReactNode; label: string }[] = [
     { id: 'uploads', icon: <Upload className="h-3.5 w-3.5" />, label: 'Mídia' },
