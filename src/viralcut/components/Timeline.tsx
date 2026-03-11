@@ -28,6 +28,7 @@ interface TimelineProps {
   onItemTrim: (trackId: string, itemId: string, newStart: number, newEnd: number, newMediaStart: number, newMediaEnd: number) => void;
   onItemDelete: (trackId: string, itemId: string) => void;
   onItemSelect: (itemId: string | null) => void;
+  onItemDoubleClick?: (itemId: string) => void;
   onItemSplit: (trackId: string, itemId: string, atTime: number) => void;
   onTrackToggleMute: (trackId: string) => void;
   onTrackToggleLock: (trackId: string) => void;
