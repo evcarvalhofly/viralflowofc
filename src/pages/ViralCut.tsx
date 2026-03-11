@@ -505,11 +505,26 @@ const ViralCut = () => {
             if (vd?.saturation !== undefined && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
             if (filters.length) (ctx as any).filter = filters.join(' ');
             ctx.globalAlpha = vd?.opacity ?? 1;
-            if (vd?.flipH || vd?.flipV) {
-              ctx.translate(vd.flipH ? outW : 0, vd.flipV ? outH : 0);
-              ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+
+            // Letterbox: preserve original video aspect ratio
+            const srcAR = vid.videoWidth > 0 ? vid.videoWidth / vid.videoHeight : outW / outH;
+            const dstAR = outW / outH;
+            let dx = 0, dy = 0, dw = outW, dh = outH;
+            if (srcAR > dstAR) {
+              dh = outW / srcAR;
+              dy = (outH - dh) / 2;
+            } else {
+              dw = outH * srcAR;
+              dx = (outW - dw) / 2;
             }
-            ctx.drawImage(vid, 0, 0, outW, outH);
+
+            if (vd?.flipH || vd?.flipV) {
+              ctx.translate(vd.flipH ? dx + dw : dx, vd.flipV ? dy + dh : dy);
+              ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+              ctx.drawImage(vid, 0, 0, dw, dh);
+            } else {
+              ctx.drawImage(vid, dx, dy, dw, dh);
+            }
             ctx.restore();
             (ctx as any).filter = 'none';
             ctx.globalAlpha = 1;

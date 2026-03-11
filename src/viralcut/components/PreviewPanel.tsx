@@ -99,7 +99,7 @@ export function PreviewPanel({
     if (v.muted !== muted) v.muted = muted;
   }, [activeVideoItem, muted, volume]);
 
-  // ── Draw a single frame to the low-res canvas ─────────────
+  // ── Draw a frame maintaining original aspect ratio (letterbox) ──
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
     const v = videoRef.current;
@@ -107,26 +107,34 @@ export function PreviewPanel({
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (v && v.readyState >= 2 && activeVideoItem?.mediaFile) {
+    if (v && v.readyState >= 2 && activeVideoItem?.mediaFile && v.videoWidth > 0) {
       const vd = activeVideoItem.item.videoDetails;
-      ctx.save();
-      // Apply opacity
-      ctx.globalAlpha = vd?.opacity ?? 1;
-      // Apply flip via transform
-      if (vd?.flipH || vd?.flipV) {
-        ctx.translate(
-          vd.flipH ? canvas.width : 0,
-          vd.flipV ? canvas.height : 0
-        );
-        ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+
+      // Letterbox: fit video inside canvas keeping original aspect ratio
+      const srcAR = v.videoWidth / v.videoHeight;
+      const dstAR = canvas.width / canvas.height;
+      let dw = canvas.width, dh = canvas.height, dx = 0, dy = 0;
+      if (srcAR > dstAR) {
+        dh = canvas.width / srcAR;
+        dy = (canvas.height - dh) / 2;
+      } else {
+        dw = canvas.height * srcAR;
+        dx = (canvas.width - dw) / 2;
       }
-      // CSS filter applied on canvas element itself (hardware accelerated)
-      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.globalAlpha = vd?.opacity ?? 1;
+      if (vd?.flipH || vd?.flipV) {
+        ctx.translate(vd.flipH ? dx + dw : dx, vd.flipV ? dy + dh : dy);
+        ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+        ctx.drawImage(v, 0, 0, dw, dh);
+      } else {
+        ctx.drawImage(v, dx, dy, dw, dh);
+      }
       ctx.restore();
-    } else if (!activeVideoItem) {
-      // Draw placeholder background (already black via bg)
     }
   }, [activeVideoItem]);
 
@@ -175,9 +183,8 @@ export function PreviewPanel({
       lastSrcRef.current = mf.url;
       v.src = mf.url;
       v.preload = 'auto';
-      // Set tiny resolution hint on the video element
-      v.width = PREVIEW_MAX_W;
-      v.height = PREVIEW_MAX_H;
+      // Do NOT constrain width/height — let browser decode at native res
+      // (preview quality reduction is handled by the small canvas display size)
       v.load();
       applyVideoProps();
       return;
