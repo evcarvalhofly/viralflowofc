@@ -1095,11 +1095,12 @@ const ViralCut = () => {
             onItemMove={handleItemMove}
             onItemTrim={handleItemTrim}
             onItemDelete={handleItemDelete}
-            onItemSelect={handleItemSelect}
-            onItemSplit={handleItemSplit}
-            onTrackToggleMute={handleToggleMute}
-            onTrackToggleLock={handleToggleLock}
-            onDropMedia={handleDropMedia}
+              onItemSelect={handleItemSelect}
+              onItemSplit={handleItemSplit}
+              onTrackToggleMute={handleToggleMute}
+              onTrackToggleLock={handleToggleLock}
+              onDropMedia={handleDropMedia}
+              onSplitAllAtPlayhead={handleSplitAllAtPlayhead}
           />
         </div>
       </div>
