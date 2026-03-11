@@ -141,7 +141,11 @@ const ViralCut = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleUndo, handleRedo, selectedItemId, project.tracks, isMobile]);
 
-  // Playback ticker
+  // Ref to always-fresh tracks for RAF callbacks (avoids stale closure)
+  const tracksRef = useRef(project.tracks);
+  useEffect(() => { tracksRef.current = project.tracks; }, [project.tracks]);
+
+  // Playback ticker – skips gaps between segments (silence cuts)
   const tickRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
   useEffect(() => {
@@ -150,8 +154,23 @@ const ViralCut = () => {
         if (lastTsRef.current !== null) {
           const dt = (ts - lastTsRef.current) / 1000;
           setCurrentTime((t) => {
-            const next = t + dt;
-            if (project.duration > 0 && next >= project.duration) { setIsPlaying(false); return project.duration; }
+            let next = t + dt;
+            if (project.duration > 0 && next >= project.duration) {
+              setIsPlaying(false);
+              return project.duration;
+            }
+            // Skip gaps between cut segments: jump to next segment start
+            const segs = tracksRef.current
+              .filter((tr) => (tr.type === 'video' || tr.type === 'audio') && !tr.muted)
+              .flatMap((tr) => tr.items)
+              .sort((a, b) => a.startTime - b.startTime);
+            if (segs.length > 0) {
+              const covered = segs.some((s) => next >= s.startTime && next < s.endTime);
+              if (!covered) {
+                const nextSeg = segs.find((s) => s.startTime > t);
+                if (nextSeg) next = nextSeg.startTime;
+              }
+            }
             return next;
           });
         }
@@ -390,10 +409,11 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
   }, [pushHistory, isMobile]);
 
-  // ── Export: Real-time playback → canvas → MediaRecorder ────
-  // Plays each segment at configured speed, captures frames to a
-  // full-res canvas with filters/flips applied, records with
-  // MediaRecorder. Correctly handles speed, cuts and effects.
+  // ── Export: Real-time playback → canvas + AudioContext → MediaRecorder ──
+  // Plays each video segment sequentially, draws frames to a full-res canvas
+  // with filters/flips applied, and routes audio through a Web AudioContext
+  // mixer so the exported file includes the original video audio + extra
+  // audio tracks. MediaRecorder captures both streams.
   const handleExport = useCallback(async (opts: ExportOptions) => {
     setExportState({ status: 'preparing', progress: 5, label: 'Preparando…' });
 
@@ -410,15 +430,11 @@ const ViralCut = () => {
     }
 
     // ── Compute export dimensions from the ACTUAL video dimensions ──
-    // Scale maintaining aspect ratio so the longest side = target resolution.
-    // e.g. 9:16 video at "1080p" → 1080×1920, not 1920×1080.
     const firstMf = media.find((m) => m.id === videoItems[0].mediaId);
     const srcW = firstMf?.width ?? 1920;
     const srcH = firstMf?.height ?? 1080;
     const targetLongSide = opts.resolution === '1080p' ? 1920 : 1280;
-    // Don't upscale beyond original
     const exportScale = Math.min(targetLongSide / Math.max(srcW, srcH), 1);
-    // Ensure even numbers (codec requirement)
     const outW = Math.max(2, Math.round(srcW * exportScale / 2) * 2);
     const outH = Math.max(2, Math.round(srcH * exportScale / 2) * 2);
     const FPS = opts.fps ?? 30;
@@ -426,6 +442,7 @@ const ViralCut = () => {
     try {
       setExportState({ status: 'encoding', progress: 8, label: 'Iniciando exportação…' });
 
+      // ── Canvas (video) ──────────────────────────────────────
       const canvas = document.createElement('canvas');
       canvas.width = outW;
       canvas.height = outH;
@@ -433,7 +450,26 @@ const ViralCut = () => {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, outW, outH);
 
+      // ── AudioContext mixer ──────────────────────────────────
+      // We route video element audio through a GainNode into a
+      // MediaStreamDestination so MediaRecorder captures real audio.
+      const audioCtx = new AudioContext();
+      const audioDestination = audioCtx.createMediaStreamDestination();
+      const masterGain = audioCtx.createGain();
+      masterGain.gain.value = 1;
+      masterGain.connect(audioDestination);
+
+      // ── Combine canvas + audio into one stream ─────────────
+      const videoStream = canvas.captureStream(FPS);
+      const audioStream = audioDestination.stream;
+      const combinedStream = new MediaStream([
+        ...videoStream.getVideoTracks(),
+        ...audioStream.getAudioTracks(),
+      ]);
+
       const codecPrefs = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
         'video/webm;codecs=vp9',
         'video/webm;codecs=vp8',
         'video/webm',
@@ -443,8 +479,7 @@ const ViralCut = () => {
       const bitrate = opts.resolution === '1080p' ? 12_000_000 : 6_000_000;
 
       const chunks: BlobPart[] = [];
-      const stream = canvas.captureStream(FPS);
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitrate });
+      const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: bitrate });
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       const recorderStopped = new Promise<void>((res) => { recorder.onstop = () => res(); });
       recorder.start(200);
@@ -458,7 +493,6 @@ const ViralCut = () => {
 
         const vd = item.videoDetails;
         const playRate = Math.min(Math.max(vd?.playbackRate ?? 1, 0.1), 16);
-        // Wall-clock duration = timeline segment length / playback rate
         const wallClockDuration = (item.endTime - item.startTime) / playRate;
 
         setExportState({
@@ -467,11 +501,26 @@ const ViralCut = () => {
           label: `Renderizando ${segIdx + 1} de ${totalSegments}…`,
         });
 
+        // Create video element — NOT muted so we can capture its audio
         const vid = document.createElement('video');
         vid.src = mf.url;
-        vid.muted = true;
+        vid.muted = false; // audio must be unmuted so Web Audio API can read it
         vid.playsInline = true;
         vid.crossOrigin = 'anonymous';
+        vid.volume = Math.min(1, vd?.volume ?? 1);
+
+        // Connect video audio to AudioContext mixer
+        let sourceNode: MediaElementAudioSourceNode | null = null;
+        let segGain: GainNode | null = null;
+        try {
+          sourceNode = audioCtx.createMediaElementSource(vid);
+          segGain = audioCtx.createGain();
+          segGain.gain.value = Math.min(1, vd?.volume ?? 1);
+          sourceNode.connect(segGain);
+          segGain.connect(masterGain);
+        } catch {
+          // If browser blocks (e.g. CORS), we continue without audio for this segment
+        }
 
         // Seek to mediaStart
         await new Promise<void>((res, rej) => {
@@ -482,13 +531,13 @@ const ViralCut = () => {
             vid.addEventListener('seeked', onSeeked);
           };
           vid.addEventListener('loadedmetadata', onMeta);
-          vid.addEventListener('error', () => rej(new Error(`Erro: ${mf.name}`)));
+          vid.addEventListener('error', () => rej(new Error(`Erro ao carregar: ${mf.name}`)));
           vid.load();
         });
 
         vid.playbackRate = playRate;
 
-        // Real-time playback loop: draw each frame as it arrives
+        // Real-time playback loop: draw each frame to canvas
         await new Promise<void>((res) => {
           let rafId: number;
           let startTs: number | null = null;
@@ -497,9 +546,11 @@ const ViralCut = () => {
             if (startTs === null) startTs = ts;
             const elapsed = (ts - startTs) / 1000;
 
-            if (elapsed >= wallClockDuration + 0.1 || vid.currentTime >= item.mediaEnd - 0.02 || vid.ended) {
+            if (elapsed >= wallClockDuration + 0.15 || vid.currentTime >= item.mediaEnd - 0.02 || vid.ended) {
               cancelAnimationFrame(rafId);
               vid.pause();
+              sourceNode?.disconnect();
+              segGain?.disconnect();
               vid.src = '';
               res();
               return;
@@ -512,7 +563,6 @@ const ViralCut = () => {
             if (vd?.saturation !== undefined && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
             if (filters.length) (ctx as any).filter = filters.join(' ');
             ctx.globalAlpha = vd?.opacity ?? 1;
-            // Canvas dimensions already match video AR — fill entirely, no letterbox
             if (vd?.flipH || vd?.flipV) {
               ctx.translate(vd.flipH ? outW : 0, vd.flipV ? outH : 0);
               ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
@@ -529,8 +579,7 @@ const ViralCut = () => {
             .then(() => { rafId = requestAnimationFrame(renderFrame); })
             .catch(() => res());
 
-          // Safety timeout
-          setTimeout(() => { cancelAnimationFrame(rafId); vid.pause(); vid.src = ''; res(); },
+          setTimeout(() => { cancelAnimationFrame(rafId); vid.pause(); sourceNode?.disconnect(); segGain?.disconnect(); vid.src = ''; res(); },
             (wallClockDuration + 10) * 1000);
         });
       }
@@ -538,6 +587,7 @@ const ViralCut = () => {
       setExportState({ status: 'encoding', progress: 94, label: 'Finalizando arquivo…' });
       recorder.stop();
       await recorderStopped;
+      audioCtx.close();
 
       const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
       const blob = new Blob(chunks, { type: mimeType });
