@@ -211,6 +211,18 @@ export function Timeline({
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      // Don't fire double-click if we actually dragged
+      if (!dragging) {
+        const now = Date.now();
+        const last = lastClickRef.current;
+        if (last && last.id === item.id && now - last.time < 350) {
+          // Double click detected → open properties
+          lastClickRef.current = null;
+          onItemDoubleClick?.(item.id);
+        } else {
+          lastClickRef.current = { id: item.id, time: now };
+        }
+      }
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -228,7 +240,7 @@ export function Timeline({
 
     const onMove = (ev: TouchEvent) => {
       const dx = ev.touches[0].clientX - startX;
-      if (!isDragging && Math.abs(dx) < 4) return;
+      if (!isDragging && Math.abs(dx) < 8) return;
       isDragging = true;
       // Prevent timeline scroll while dragging a clip
       ev.preventDefault();
@@ -238,6 +250,18 @@ export function Timeline({
     const onUp = () => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
+      // Don't fire double-click if we actually dragged
+      if (!isDragging) {
+        const now = Date.now();
+        const last = lastClickRef.current;
+        if (last && last.id === item.id && now - last.time < 400) {
+          // Double tap detected → open properties
+          lastClickRef.current = null;
+          onItemDoubleClick?.(item.id);
+        } else {
+          lastClickRef.current = { id: item.id, time: now };
+        }
+      }
     };
     // passive: false so we can call preventDefault() to block scroll
     window.addEventListener('touchmove', onMove, { passive: false });
