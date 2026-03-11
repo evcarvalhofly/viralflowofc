@@ -161,7 +161,9 @@ export const DEFAULT_AUDIO_DETAILS: AudioDetails = {
 
 export const DEFAULT_TEXT_DETAILS: TextDetails = {
   text: 'Texto aqui',
-  fontSize: 48,
+  // fontSize is stored as % of canvas HEIGHT (e.g. 8 = 8% of height)
+  // This ensures preview and exported video always match exactly
+  fontSize: 8,
   fontFamily: 'Inter, sans-serif',
   color: '#ffffff',
   textAlign: 'center',

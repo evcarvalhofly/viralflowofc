@@ -358,7 +358,7 @@ const ViralCut = () => {
 
   const handleAddShape = useCallback((shape: 'rect' | 'circle' | 'triangle') => {
     const shapeText = shape === 'rect' ? '▬' : shape === 'circle' ? '●' : '▲';
-    handleAddText({ text: shapeText, fontSize: 80, color: '#f472b6', posX: 50, posY: 50 });
+    handleAddText({ text: shapeText, fontSize: 15, color: '#f472b6', posX: 50, posY: 50 });
   }, [handleAddText]);
 
   const handleItemMove = useCallback((trackId: string, itemId: string, newStart: number) => {
@@ -641,7 +641,8 @@ const ViralCut = () => {
                 const x = (td.posX / 100) * outW;
                 const y = (td.posY / 100) * outH;
                 const maxW = (td.width / 100) * outW;
-                const fontSize = Math.round(td.fontSize * (outW / 1080));
+                // fontSize stored as % of canvas height — same formula used in preview
+                const fontSize = Math.round((td.fontSize / 100) * outH);
 
                 ctx.save();
                 ctx.globalAlpha = td.opacity ?? 1;
@@ -927,6 +928,9 @@ const ViralCut = () => {
             onTimeChange={setCurrentTime}
             onPlayPause={() => setIsPlaying((p) => !p)}
             projectName={project.name}
+            selectedItemId={selectedItemId}
+            onSelectItem={handleItemSelect}
+            onUpdateItem={handleUpdateItem}
           />
         </div>
 
@@ -1144,6 +1148,9 @@ const ViralCut = () => {
             onTimeChange={setCurrentTime}
             onPlayPause={() => setIsPlaying((p) => !p)}
             projectName={project.name}
+            selectedItemId={selectedItemId}
+            onSelectItem={handleItemSelect}
+            onUpdateItem={handleUpdateItem}
           />
         </div>
 
