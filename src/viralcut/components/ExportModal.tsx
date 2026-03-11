@@ -159,7 +159,7 @@ export function ExportModal({ open, onClose, onExport, exportState, project }: E
               </div>
 
               <p className="text-[10px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
-                ℹ️ O vídeo será exportado como <strong>WebM</strong> com todas as suas edições aplicadas (cortes, velocidade, filtros).
+                ℹ️ O vídeo será exportado como <strong>MP4</strong> (H.264/AAC) com todas as suas edições aplicadas (cortes, velocidade, filtros).
               </p>
             </>
           )}
