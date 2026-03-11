@@ -322,13 +322,12 @@ export function PreviewPanel({
         {activeVideoItem?.mediaFile ? (
           <canvas
             ref={canvasRef}
-            width={PREVIEW_MAX_W}
-            height={PREVIEW_MAX_H}
+            width={canvasW}
+            height={canvasH}
             style={{
               maxHeight: '100%',
               maxWidth: '100%',
               objectFit: 'contain',
-              // Apply CSS filter on canvas (GPU-accelerated)
               filter: canvasFilter !== 'none' ? canvasFilter : undefined,
               imageRendering: 'auto',
               willChange: 'filter',
