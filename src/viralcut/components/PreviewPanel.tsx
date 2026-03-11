@@ -211,7 +211,13 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onUpdate, chi
         touchAction: 'none',
       }}
       onMouseDown={handleDragStart}
-      onTouchStart={handleDragStart}
+      onTouchStart={(e) => {
+        if (e.touches.length >= 2 && isSelected) {
+          handlePinchStart(e);
+        } else {
+          handleDragStart(e);
+        }
+      }}
       onClick={(e) => { e.stopPropagation(); onSelect(); }}
     >
       {children}
