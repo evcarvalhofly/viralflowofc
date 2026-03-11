@@ -98,10 +98,17 @@ export function Timeline({
   onSplitAllAtPlayhead,
   onDeleteSelected,
 }: TimelineProps) {
-  const rulerRef = useRef<HTMLDivElement>(null);
+  const rulerScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+
+  // Sync horizontal scroll: tracks → ruler
+  const handleTrackScroll = useCallback(() => {
+    if (scrollRef.current && rulerScrollRef.current) {
+      rulerScrollRef.current.scrollLeft = scrollRef.current.scrollLeft;
+    }
+  }, []);
 
   const totalWidth = Math.max(duration * zoom + 300, 800);
   const tickInterval = zoom < 60 ? 5 : zoom < 100 ? 2 : 1;
