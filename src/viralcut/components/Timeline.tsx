@@ -105,6 +105,9 @@ export function Timeline({
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
 
+  // Double-click detection: track last click per item
+  const lastClickRef = useRef<{ id: string; time: number } | null>(null);
+
   // Sync horizontal scroll: tracks → ruler
   const handleTrackScroll = useCallback(() => {
     if (scrollRef.current && rulerScrollRef.current) {
