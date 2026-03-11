@@ -86,13 +86,20 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onUpdate, chi
     const container = containerRef.current;
     if (!container) return;
 
+    // If touch with 2+ fingers, skip drag (pinch will handle it)
+    if ('touches' in e && e.touches.length >= 2) return;
+
     const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const origPosX = posX;
     const origPosY = posY;
+    let moved = false;
 
     const onMove = (ev: MouseEvent | TouchEvent) => {
+      // If 2 fingers appear mid-drag, abort drag
+      if ('touches' in ev && (ev as TouchEvent).touches.length >= 2) return;
       ev.preventDefault();
+      moved = true;
       const cx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
       const cy = 'touches' in ev ? (ev as TouchEvent).touches[0].clientY : (ev as MouseEvent).clientY;
       const rect = container.getBoundingClientRect();
@@ -113,6 +120,45 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onUpdate, chi
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
+  };
+
+  // ── Pinch to resize (touch only, when selected) ───────────────
+  const handlePinchStart = (e: React.TouchEvent) => {
+    if (!isSelected || e.touches.length < 2) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const origWidth = width;
+    const origFontSize = td?.fontSize ?? 3.5;
+    const t0 = e.touches[0];
+    const t1 = e.touches[1];
+    const startDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+
+    const onMove = (ev: TouchEvent) => {
+      if (ev.touches.length < 2) return;
+      ev.preventDefault();
+      const a = ev.touches[0];
+      const b = ev.touches[1];
+      const dist = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+      const ratio = dist / startDist;
+      if (td) {
+        // For text: scale fontSize
+        const newFontSize = Math.max(0.5, Math.min(30, origFontSize * ratio));
+        onUpdate({ textDetails: { ...td, fontSize: newFontSize } });
+      } else if (imgd) {
+        // For images: scale width
+        const newW = Math.max(5, Math.min(100, origWidth * ratio));
+        onUpdate({ imageDetails: { ...imgd, width: newW } });
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
   };
