@@ -173,6 +173,7 @@ export function PreviewPanel({
     if (!v) return;
     const mf = activeVideoItem?.mediaFile;
     if (!mf) {
+      lastSegmentIdRef.current = null;
       // No video — clear canvas
       const canvas = canvasRef.current;
       if (canvas) {
@@ -182,18 +183,37 @@ export function PreviewPanel({
       return;
     }
 
+    const currentItemId = activeVideoItem!.item.id;
+    const segmentChanged = lastSegmentIdRef.current !== currentItemId;
+    lastSegmentIdRef.current = currentItemId;
+
+    // Src changed → reload
     if (v.src !== mf.url) {
       lastSrcRef.current = mf.url;
       v.src = mf.url;
       v.preload = 'auto';
-      // Do NOT constrain width/height — let browser decode at native res
-      // (preview quality reduction is handled by the small canvas display size)
       v.load();
+      const mediaTime = activeVideoItem!.item.mediaStart + (currentTime - activeVideoItem!.item.startTime);
+      v.oncanplay = () => {
+        v.currentTime = mediaTime;
+        v.oncanplay = null;
+        if (isPlaying) { applyVideoProps(); v.play().catch(() => {}); }
+      };
       applyVideoProps();
       return;
     }
 
     const mediaTime = activeVideoItem!.item.mediaStart + (currentTime - activeVideoItem!.item.startTime);
+
+    // Segment changed (cut jump) → always seek to the mediaStart of the new segment
+    if (segmentChanged) {
+      v.currentTime = mediaTime;
+      applyVideoProps();
+      if (isPlaying) v.play().catch(() => {});
+      return;
+    }
+
+    // Normal scrub (paused) or drift correction
     if (!isPlaying && Math.abs(v.currentTime - mediaTime) > 0.1) {
       v.currentTime = mediaTime;
     }
@@ -213,7 +233,6 @@ export function PreviewPanel({
       v.play().catch(() => {});
     } else {
       v.pause();
-      // Redraw after pause
       setTimeout(() => drawFrame(), 30);
     }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
