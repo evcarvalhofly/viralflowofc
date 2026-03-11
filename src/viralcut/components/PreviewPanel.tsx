@@ -38,9 +38,17 @@ function buildTransform(flipH = false, flipV = false) {
   return `scale(${sx}, ${sy})`;
 }
 
-// Preview resolution cap — keeps GPU load minimal
-const PREVIEW_MAX_W = 480;
-const PREVIEW_MAX_H = 270;
+// Max pixels on the longest side for preview canvas (low-res for performance)
+// The ASPECT RATIO always matches the actual video dimensions.
+const PREVIEW_MAX_PX = 480;
+
+/** Scale video dimensions down to fit within PREVIEW_MAX_PX on the longest side */
+function previewSize(w?: number, h?: number): { w: number; h: number } {
+  if (!w || !h || w === 0 || h === 0) return { w: 480, h: 270 };
+  const scale = PREVIEW_MAX_PX / Math.max(w, h);
+  // Ensure even numbers (some codecs require it)
+  return { w: Math.max(2, Math.round(w * scale / 2) * 2), h: Math.max(2, Math.round(h * scale / 2) * 2) };
+}
 
 export function PreviewPanel({
   tracks,

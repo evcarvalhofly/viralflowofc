@@ -409,11 +409,18 @@ const ViralCut = () => {
       return;
     }
 
-    const resMap: Record<string, { w: number; h: number }> = {
-      '1080p': { w: 1920, h: 1080 },
-      '720p': { w: 1280, h: 720 },
-    };
-    const { w: outW, h: outH } = resMap[opts.resolution] ?? { w: 1920, h: 1080 };
+    // ── Compute export dimensions from the ACTUAL video dimensions ──
+    // Scale maintaining aspect ratio so the longest side = target resolution.
+    // e.g. 9:16 video at "1080p" → 1080×1920, not 1920×1080.
+    const firstMf = media.find((m) => m.id === videoItems[0].mediaId);
+    const srcW = firstMf?.width ?? 1920;
+    const srcH = firstMf?.height ?? 1080;
+    const targetLongSide = opts.resolution === '1080p' ? 1920 : 1280;
+    // Don't upscale beyond original
+    const exportScale = Math.min(targetLongSide / Math.max(srcW, srcH), 1);
+    // Ensure even numbers (codec requirement)
+    const outW = Math.max(2, Math.round(srcW * exportScale / 2) * 2);
+    const outH = Math.max(2, Math.round(srcH * exportScale / 2) * 2);
     const FPS = opts.fps ?? 30;
 
     try {
