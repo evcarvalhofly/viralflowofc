@@ -19,6 +19,7 @@ interface MediaPanelProps {
   onAddText: (preset: Partial<typeof DEFAULT_TEXT_DETAILS>) => void;
   onAddShape: (shape: 'rect' | 'circle' | 'triangle') => void;
   onAddTransition: (type: string) => void;
+  defaultTab?: Tab;
 }
 
 function fmt(s: number) {
