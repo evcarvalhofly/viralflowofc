@@ -141,7 +141,18 @@ const ViralCut = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleUndo, handleRedo, selectedItemId, project.tracks, isMobile]);
 
-  // Playback ticker
+  // ── Helper: build sorted list of active segments for playback ──
+  // Used by the ticker to skip gaps (silence cuts) between items
+  const getPlayableSegments = useCallback(() => {
+    // Collect all video+audio segments sorted by startTime
+    const segs = project.tracks
+      .filter((t) => (t.type === 'video' || t.type === 'audio') && !t.muted)
+      .flatMap((t) => t.items)
+      .sort((a, b) => a.startTime - b.startTime);
+    return segs;
+  }, [project.tracks]);
+
+  // Playback ticker – skips gaps between segments (silence cuts)
   const tickRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
   useEffect(() => {
@@ -150,8 +161,25 @@ const ViralCut = () => {
         if (lastTsRef.current !== null) {
           const dt = (ts - lastTsRef.current) / 1000;
           setCurrentTime((t) => {
-            const next = t + dt;
-            if (project.duration > 0 && next >= project.duration) { setIsPlaying(false); return project.duration; }
+            let next = t + dt;
+            if (project.duration > 0 && next >= project.duration) {
+              setIsPlaying(false);
+              return project.duration;
+            }
+            // Skip gaps: if next is in a gap between segments, jump to start of next segment
+            const segs = getPlayableSegments();
+            if (segs.length > 0) {
+              // Check if next falls in a gap (not covered by any segment)
+              const coveredBySegment = segs.some((s) => next >= s.startTime && next < s.endTime);
+              if (!coveredBySegment) {
+                // Find the next segment that starts after current position
+                const nextSeg = segs.find((s) => s.startTime > t);
+                if (nextSeg) {
+                  // Jump to start of next segment
+                  next = nextSeg.startTime;
+                }
+              }
+            }
             return next;
           });
         }
@@ -164,7 +192,7 @@ const ViralCut = () => {
       lastTsRef.current = null;
     }
     return () => { if (tickRef.current) cancelAnimationFrame(tickRef.current); };
-  }, [isPlaying, project.duration]);
+  }, [isPlaying, project.duration, getPlayableSegments]);
 
   // ── Import media ──────────────────────────────────────────
   const handleImport = useCallback(async (files: FileList) => {
