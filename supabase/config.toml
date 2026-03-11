@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.analyze-viral-video]
 verify_jwt = false
+
+[functions.transcribe-audio]
+verify_jwt = false
