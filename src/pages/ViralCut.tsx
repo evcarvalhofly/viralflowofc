@@ -409,11 +409,18 @@ const ViralCut = () => {
       return;
     }
 
-    const resMap: Record<string, { w: number; h: number }> = {
-      '1080p': { w: 1920, h: 1080 },
-      '720p': { w: 1280, h: 720 },
-    };
-    const { w: outW, h: outH } = resMap[opts.resolution] ?? { w: 1920, h: 1080 };
+    // ── Compute export dimensions from the ACTUAL video dimensions ──
+    // Scale maintaining aspect ratio so the longest side = target resolution.
+    // e.g. 9:16 video at "1080p" → 1080×1920, not 1920×1080.
+    const firstMf = media.find((m) => m.id === videoItems[0].mediaId);
+    const srcW = firstMf?.width ?? 1920;
+    const srcH = firstMf?.height ?? 1080;
+    const targetLongSide = opts.resolution === '1080p' ? 1920 : 1280;
+    // Don't upscale beyond original
+    const exportScale = Math.min(targetLongSide / Math.max(srcW, srcH), 1);
+    // Ensure even numbers (codec requirement)
+    const outW = Math.max(2, Math.round(srcW * exportScale / 2) * 2);
+    const outH = Math.max(2, Math.round(srcH * exportScale / 2) * 2);
     const FPS = opts.fps ?? 30;
 
     try {
@@ -505,26 +512,12 @@ const ViralCut = () => {
             if (vd?.saturation !== undefined && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
             if (filters.length) (ctx as any).filter = filters.join(' ');
             ctx.globalAlpha = vd?.opacity ?? 1;
-
-            // Letterbox: preserve original video aspect ratio
-            const srcAR = vid.videoWidth > 0 ? vid.videoWidth / vid.videoHeight : outW / outH;
-            const dstAR = outW / outH;
-            let dx = 0, dy = 0, dw = outW, dh = outH;
-            if (srcAR > dstAR) {
-              dh = outW / srcAR;
-              dy = (outH - dh) / 2;
-            } else {
-              dw = outH * srcAR;
-              dx = (outW - dw) / 2;
-            }
-
+            // Canvas dimensions already match video AR — fill entirely, no letterbox
             if (vd?.flipH || vd?.flipV) {
-              ctx.translate(vd.flipH ? dx + dw : dx, vd.flipV ? dy + dh : dy);
+              ctx.translate(vd.flipH ? outW : 0, vd.flipV ? outH : 0);
               ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
-              ctx.drawImage(vid, 0, 0, dw, dh);
-            } else {
-              ctx.drawImage(vid, dx, dy, dw, dh);
             }
+            ctx.drawImage(vid, 0, 0, outW, outH);
             ctx.restore();
             (ctx as any).filter = 'none';
             ctx.globalAlpha = 1;

@@ -38,9 +38,17 @@ function buildTransform(flipH = false, flipV = false) {
   return `scale(${sx}, ${sy})`;
 }
 
-// Preview resolution cap — keeps GPU load minimal
-const PREVIEW_MAX_W = 480;
-const PREVIEW_MAX_H = 270;
+// Max pixels on the longest side for preview canvas (low-res for performance)
+// The ASPECT RATIO always matches the actual video dimensions.
+const PREVIEW_MAX_PX = 480;
+
+/** Scale video dimensions down to fit within PREVIEW_MAX_PX on the longest side */
+function previewSize(w?: number, h?: number): { w: number; h: number } {
+  if (!w || !h || w === 0 || h === 0) return { w: 480, h: 270 };
+  const scale = PREVIEW_MAX_PX / Math.max(w, h);
+  // Ensure even numbers (some codecs require it)
+  return { w: Math.max(2, Math.round(w * scale / 2) * 2), h: Math.max(2, Math.round(h * scale / 2) * 2) };
+}
 
 export function PreviewPanel({
   tracks,
@@ -76,6 +84,13 @@ export function PreviewPanel({
     return null;
   })();
 
+  // ── Canvas size: matches actual video AR, scaled to preview size ──
+  // ASPECT RATIO = same as original video. Only pixel count reduced for perf.
+  const { w: canvasW, h: canvasH } = previewSize(
+    activeVideoItem?.mediaFile?.width,
+    activeVideoItem?.mediaFile?.height
+  );
+
   const activeTextItems: TrackItem[] = tracks
     .filter((t) => t.type === 'text' && !t.muted)
     .flatMap((t) => t.items)
@@ -99,7 +114,7 @@ export function PreviewPanel({
     if (v.muted !== muted) v.muted = muted;
   }, [activeVideoItem, muted, volume]);
 
-  // ── Draw a frame maintaining original aspect ratio (letterbox) ──
+  // ── Draw a frame: canvas matches video AR, so draw 1:1 (no letterbox needed) ──
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
     const v = videoRef.current;
@@ -112,28 +127,14 @@ export function PreviewPanel({
 
     if (v && v.readyState >= 2 && activeVideoItem?.mediaFile && v.videoWidth > 0) {
       const vd = activeVideoItem.item.videoDetails;
-
-      // Letterbox: fit video inside canvas keeping original aspect ratio
-      const srcAR = v.videoWidth / v.videoHeight;
-      const dstAR = canvas.width / canvas.height;
-      let dw = canvas.width, dh = canvas.height, dx = 0, dy = 0;
-      if (srcAR > dstAR) {
-        dh = canvas.width / srcAR;
-        dy = (canvas.height - dh) / 2;
-      } else {
-        dw = canvas.height * srcAR;
-        dx = (canvas.width - dw) / 2;
-      }
-
       ctx.save();
       ctx.globalAlpha = vd?.opacity ?? 1;
       if (vd?.flipH || vd?.flipV) {
-        ctx.translate(vd.flipH ? dx + dw : dx, vd.flipV ? dy + dh : dy);
+        ctx.translate(vd.flipH ? canvas.width : 0, vd.flipV ? canvas.height : 0);
         ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
-        ctx.drawImage(v, 0, 0, dw, dh);
-      } else {
-        ctx.drawImage(v, dx, dy, dw, dh);
       }
+      // Canvas dimensions already match video AR — fill the whole canvas
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
       ctx.restore();
     }
   }, [activeVideoItem]);
@@ -307,13 +308,12 @@ export function PreviewPanel({
         {activeVideoItem?.mediaFile ? (
           <canvas
             ref={canvasRef}
-            width={PREVIEW_MAX_W}
-            height={PREVIEW_MAX_H}
+            width={canvasW}
+            height={canvasH}
             style={{
               maxHeight: '100%',
               maxWidth: '100%',
               objectFit: 'contain',
-              // Apply CSS filter on canvas (GPU-accelerated)
               filter: canvasFilter !== 'none' ? canvasFilter : undefined,
               imageRendering: 'auto',
               willChange: 'filter',
