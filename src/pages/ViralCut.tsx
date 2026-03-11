@@ -358,7 +358,7 @@ const ViralCut = () => {
 
   const handleAddShape = useCallback((shape: 'rect' | 'circle' | 'triangle') => {
     const shapeText = shape === 'rect' ? '▬' : shape === 'circle' ? '●' : '▲';
-    handleAddText({ text: shapeText, fontSize: 80, color: '#f472b6', posX: 50, posY: 50 });
+    handleAddText({ text: shapeText, fontSize: 15, color: '#f472b6', posX: 50, posY: 50 });
   }, [handleAddText]);
 
   const handleItemMove = useCallback((trackId: string, itemId: string, newStart: number) => {
