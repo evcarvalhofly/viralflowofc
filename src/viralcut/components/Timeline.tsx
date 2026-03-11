@@ -336,6 +336,7 @@ export function Timeline({
                     )}
                     style={{ left, width: w }}
                     onMouseDown={(e) => handleItemMouseDown(e, track, item)}
+                    onTouchStart={(e) => handleItemTouchStart(e, track, item)}
                     title={item.name}
                   >
                     {/* Thumbnail for video */}
