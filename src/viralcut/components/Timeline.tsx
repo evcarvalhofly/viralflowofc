@@ -1,6 +1,8 @@
 // ============================================================
 // Timeline – Multi-track with drag, trim, split, select
 // Supports video, audio, text, image tracks
+// Playhead: draggable by handle; click empty lane area to seek
+// Quick-split button: cuts ALL items across tracks at playhead
 // ============================================================
 import { useRef, useState, useCallback } from 'react';
 import { Lock, Volume2, VolumeX, Trash2, Film, Music, Type, Image, Scissors } from 'lucide-react';
@@ -30,6 +32,7 @@ interface TimelineProps {
   onTrackToggleMute: (trackId: string) => void;
   onTrackToggleLock: (trackId: string) => void;
   onDropMedia: (trackId: string, mediaId: string, startTime: number) => void;
+  onSplitAllAtPlayhead?: () => void;
 }
 
 function fmtRuler(s: number) {
@@ -54,7 +57,6 @@ function trackLabel(type: Track['type']) {
   }
 }
 
-/** Color classes for each track/item type */
 function itemColors(type: Track['type'], isSelected: boolean) {
   switch (type) {
     case 'video':
@@ -92,9 +94,12 @@ export function Timeline({
   onTrackToggleMute,
   onTrackToggleLock,
   onDropMedia,
+  onSplitAllAtPlayhead,
 }: TimelineProps) {
   const rulerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+  const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
 
   const totalWidth = Math.max(duration * zoom + 300, 800);
   const tickInterval = zoom < 60 ? 5 : zoom < 100 ? 2 : 1;
@@ -102,20 +107,80 @@ export function Timeline({
   const totalSeconds = Math.ceil(totalWidth / zoom);
   for (let i = 0; i <= totalSeconds; i += tickInterval) ticks.push(i);
 
-  // ── Ruler seek ──────────────────────────────────────────────
+  // ── Shared: convert clientX inside the scroll area to timeline time ──
+  const clientXToTime = useCallback((clientX: number): number => {
+    const scroll = scrollRef.current;
+    if (!scroll) return 0;
+    const rect = scroll.getBoundingClientRect();
+    // 160px label column offset
+    const x = clientX - rect.left - 160 + scroll.scrollLeft;
+    return Math.max(0, x / zoom);
+  }, [zoom]);
+
+  // ── Ruler click → seek ───────────────────────────────────────
   const handleRulerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - 160;
-    const t = Math.max(0, x / zoom);
+    const t = clientXToTime(e.clientX);
     onSeek(t);
-  }, [zoom, onSeek]);
+  }, [clientXToTime, onSeek]);
+
+  // ── Playhead drag (handle on ruler) ─────────────────────────
+  const handlePlayheadMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDraggingPlayhead(true);
+
+    const onMove = (ev: MouseEvent) => {
+      const t = clientXToTime(ev.clientX);
+      onSeek(t);
+    };
+    const onUp = () => {
+      setIsDraggingPlayhead(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [clientXToTime, onSeek]);
+
+  // Touch drag for playhead
+  const handlePlayheadTouchStart = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation();
+    setIsDraggingPlayhead(true);
+
+    const onMove = (ev: TouchEvent) => {
+      const t = clientXToTime(ev.touches[0].clientX);
+      onSeek(t);
+    };
+    const onUp = () => {
+      setIsDraggingPlayhead(false);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onUp);
+  }, [clientXToTime, onSeek]);
+
+  // ── Click on empty lane area → seek ─────────────────────────
+  const handleLaneClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Only seek if the click target is the lane itself (not a clip item)
+    if ((e.target as HTMLElement) !== e.currentTarget) return;
+    const t = clientXToTime(e.clientX);
+    onSeek(t);
+    onItemSelect(null);
+  }, [clientXToTime, onSeek, onItemSelect]);
+
+  // Touch seek on empty lane
+  const handleLaneTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement) !== e.currentTarget) return;
+    const t = clientXToTime(e.touches[0].clientX);
+    onSeek(t);
+  }, [clientXToTime, onSeek]);
 
   // ── Drag item (move) — mouse ─────────────────────────────────
   const handleItemMouseDown = (e: React.MouseEvent, track: Track, item: TrackItem) => {
     if (track.locked) return;
     e.stopPropagation();
     e.preventDefault();
-    // Select immediately on mousedown
     onItemSelect(item.id);
 
     const startX = e.clientX;
@@ -124,7 +189,6 @@ export function Timeline({
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
-      // Only start moving after a 4px threshold (so a plain click doesn't move)
       if (!dragging && Math.abs(dx) < 4) return;
       dragging = true;
       const newStart = Math.max(0, origStart + dx / zoom);
@@ -142,17 +206,14 @@ export function Timeline({
   const handleItemTouchStart = (e: React.TouchEvent, track: Track, item: TrackItem) => {
     if (track.locked) return;
     e.stopPropagation();
-    // Always select on touch
     onItemSelect(item.id);
 
     const startX = e.touches[0].clientX;
     const origStart = item.startTime;
-    let moved = false;
 
     const onMove = (ev: TouchEvent) => {
       const dx = ev.touches[0].clientX - startX;
       if (Math.abs(dx) > 4) {
-        moved = true;
         const newStart = Math.max(0, origStart + dx / zoom);
         onItemMove(track.id, item.id, newStart);
       }
@@ -201,7 +262,6 @@ export function Timeline({
     const origMediaEnd = item.mediaEnd;
     const mediaDur = media.find((m) => m.id === item.mediaId)?.duration ?? origMediaEnd;
     const minEnd = item.startTime + 0.1;
-    // For text/image items that have no media duration, allow free stretch
     const maxMediaDur = mediaDur > 0 ? mediaDur : 3600;
 
     const onMove = (ev: MouseEvent) => {
@@ -232,8 +292,17 @@ export function Timeline({
 
   const playheadX = currentTime * zoom;
 
+  // ── Count how many items would be split at currentTime ──────
+  const splitableCount = tracks.reduce((acc, t) => {
+    if (t.locked) return acc;
+    return acc + t.items.filter(
+      (i) => currentTime > i.startTime + 0.05 && currentTime < i.endTime - 0.05
+    ).length;
+  }, 0);
+
   return (
     <div className="flex flex-col h-full bg-card select-none overflow-hidden">
+
       {/* ── Ruler ── */}
       <div
         className="flex shrink-0 bg-muted/30 border-b border-border cursor-pointer relative"
@@ -241,7 +310,26 @@ export function Timeline({
         onClick={handleRulerClick}
         ref={rulerRef}
       >
-        <div className="w-[160px] shrink-0 bg-card/80 border-r border-border" />
+        {/* Label column spacer */}
+        <div className="w-[160px] shrink-0 bg-card/80 border-r border-border flex items-center justify-center gap-1 px-2">
+          {/* Quick-split-all button */}
+          <button
+            title={`Cortar todas as camadas no playhead${splitableCount > 0 ? ` (${splitableCount} itens)` : ''}`}
+            disabled={splitableCount === 0}
+            onClick={(e) => { e.stopPropagation(); onSplitAllAtPlayhead?.(); }}
+            className={cn(
+              'flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all border',
+              splitableCount > 0
+                ? 'bg-primary/15 border-primary/40 text-primary hover:bg-primary/25 cursor-pointer'
+                : 'bg-muted/40 border-border/30 text-muted-foreground/40 cursor-not-allowed'
+            )}
+          >
+            <Scissors className="h-3 w-3" />
+            <span className="hidden sm:inline">Cortar</span>
+          </button>
+        </div>
+
+        {/* Ruler ticks — uses the same scroll container as tracks */}
         <div className="relative overflow-hidden flex-1">
           <div style={{ width: totalWidth, position: 'relative', height: 28 }}>
             {ticks.map((t) => (
@@ -256,19 +344,35 @@ export function Timeline({
                 </span>
               </div>
             ))}
-            {/* Playhead on ruler */}
+
+            {/* Playhead on ruler — draggable handle */}
             <div
-              className="absolute top-0 w-0.5 h-full bg-primary z-10 pointer-events-none"
-              style={{ left: playheadX }}
+              className="absolute top-0 h-full z-20 flex flex-col items-center"
+              style={{ left: playheadX, transform: 'translateX(-50%)' }}
             >
-              <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-primary" />
+              {/* Triangle handle — grab here to drag */}
+              <div
+                className={cn(
+                  'w-5 h-3.5 flex items-center justify-center cursor-grab active:cursor-grabbing',
+                  isDraggingPlayhead && 'cursor-grabbing'
+                )}
+                onMouseDown={handlePlayheadMouseDown}
+                onTouchStart={handlePlayheadTouchStart}
+                title="Arraste para mover o playhead"
+              >
+                <svg width="14" height="10" viewBox="0 0 14 10" className="text-primary drop-shadow">
+                  <polygon points="7,10 0,0 14,0" fill="currentColor" />
+                </svg>
+              </div>
+              {/* Vertical line (pointer-events-none so it doesn't block drag) */}
+              <div className="w-0.5 flex-1 bg-primary pointer-events-none" />
             </div>
           </div>
         </div>
       </div>
 
       {/* ── Tracks ── */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0" ref={scrollRef}>
         {tracks.map((track) => (
           <div
             key={track.id}
@@ -308,18 +412,19 @@ export function Timeline({
               </button>
             </div>
 
-            {/* Track lane */}
+            {/* Track lane — click empty area to seek */}
             <div
-              className="relative overflow-x-hidden cursor-default flex-1"
-              style={{ minWidth: totalWidth }}
+              className="relative overflow-x-hidden flex-1"
+              style={{ minWidth: totalWidth, cursor: 'crosshair' }}
               onDragOver={(e) => { e.preventDefault(); setDragOver(track.id); }}
               onDragLeave={() => setDragOver(null)}
               onDrop={(e) => handleDrop(e, track.id)}
-              onClick={() => onItemSelect(null)}
+              onClick={handleLaneClick}
+              onTouchStart={handleLaneTouchStart}
             >
-              {/* Playhead line */}
+              {/* Playhead line across lane */}
               <div
-                className="absolute top-0 bottom-0 w-0.5 bg-primary/60 z-20 pointer-events-none"
+                className="absolute top-0 bottom-0 w-0.5 bg-primary/70 z-20 pointer-events-none"
                 style={{ left: playheadX }}
               />
 
@@ -355,7 +460,7 @@ export function Timeline({
                       />
                     )}
 
-                    {/* Text preview for text items */}
+                    {/* Text preview */}
                     {item.type === 'text' && item.textDetails && (
                       <span
                         className="text-[9px] px-1.5 truncate flex-1 pointer-events-none font-medium"
@@ -372,7 +477,7 @@ export function Timeline({
                       </span>
                     )}
 
-                    {/* Split button (visible on selected) */}
+                    {/* Split button (on selected item at playhead) */}
                     {isSelected && w > 40 && !isTextOrImage && (
                       <button
                         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 p-1 rounded-full bg-background/80 border border-border text-foreground/70 hover:text-primary hover:border-primary transition-colors opacity-0 group-hover:opacity-100"
