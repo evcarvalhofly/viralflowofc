@@ -68,17 +68,21 @@ interface OverlayHandleProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   isSelected: boolean;
   onSelect: () => void;
+  onOpenProperties?: () => void;
   onUpdate: (updates: Partial<TrackItem>) => void;
   children: React.ReactNode;
 }
 
-function OverlayHandle({ item, containerRef, isSelected, onSelect, onUpdate, children }: OverlayHandleProps) {
+function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenProperties, onUpdate, children }: OverlayHandleProps) {
   const td = item.textDetails;
   const imgd = item.imageDetails;
 
   const posX = td?.posX ?? imgd?.posX ?? 50;
   const posY = td?.posY ?? imgd?.posY ?? 50;
   const width = td?.width ?? imgd?.width ?? 50;
+
+  // Double-click detection ref
+  const lastTapRef = useRef<number>(0);
 
   // ── Drag to move ──────────────────────────────────────────────
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
