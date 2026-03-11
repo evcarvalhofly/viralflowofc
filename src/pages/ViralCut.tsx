@@ -580,6 +580,16 @@ const ViralCut = () => {
   const selectedItem = selectedItemId ? project.tracks.flatMap((t) => t.items).find((i) => i.id === selectedItemId) ?? null : null;
   const selectedTrackId = selectedItemId ? project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId))?.id ?? null : null;
 
+  // On mobile: selecting an item automatically opens the Editar panel
+  const handleItemSelect = useCallback((id: string | null) => {
+    setSelectedItemId(id);
+    if (isMobile && id) {
+      setMobileTab('editar');
+      setShowAutoCut(false);
+      setShowMobilePanel(true);
+    }
+  }, [isMobile]);
+
   // ────────────────────────────────────────────────────────────
   // MOBILE LANDING (no media yet)
   // ────────────────────────────────────────────────────────────
