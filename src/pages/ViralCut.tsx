@@ -641,7 +641,8 @@ const ViralCut = () => {
                 const x = (td.posX / 100) * outW;
                 const y = (td.posY / 100) * outH;
                 const maxW = (td.width / 100) * outW;
-                const fontSize = Math.round(td.fontSize * (outW / 1080));
+                // fontSize stored as % of canvas height — same formula used in preview
+                const fontSize = Math.round((td.fontSize / 100) * outH);
 
                 ctx.save();
                 ctx.globalAlpha = td.opacity ?? 1;
