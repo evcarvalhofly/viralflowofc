@@ -98,10 +98,17 @@ export function Timeline({
   onSplitAllAtPlayhead,
   onDeleteSelected,
 }: TimelineProps) {
-  const rulerRef = useRef<HTMLDivElement>(null);
+  const rulerScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+
+  // Sync horizontal scroll: tracks → ruler
+  const handleTrackScroll = useCallback(() => {
+    if (scrollRef.current && rulerScrollRef.current) {
+      rulerScrollRef.current.scrollLeft = scrollRef.current.scrollLeft;
+    }
+  }, []);
 
   const totalWidth = Math.max(duration * zoom + 300, 800);
   const tickInterval = zoom < 60 ? 5 : zoom < 100 ? 2 : 1;
@@ -314,10 +321,9 @@ export function Timeline({
         className="flex shrink-0 bg-muted/30 border-b border-border cursor-pointer relative"
         style={{ height: 28 }}
         onClick={handleRulerClick}
-        ref={rulerRef}
       >
-        {/* Label column spacer */}
-        <div className="w-[160px] shrink-0 bg-card/80 border-r border-border flex items-center justify-center gap-1 px-2">
+        {/* Label column spacer — fixed width, never scrolls */}
+        <div className="w-[160px] shrink-0 bg-card/80 border-r border-border flex items-center justify-center gap-1 px-2 z-20">
           {/* Quick-split-all button */}
           <button
             title={`Cortar todas as camadas no playhead${splitableCount > 0 ? ` (${splitableCount} itens)` : ''}`}
@@ -349,8 +355,8 @@ export function Timeline({
           </button>
         </div>
 
-        {/* Ruler ticks — uses the same scroll container as tracks */}
-        <div className="relative overflow-hidden flex-1">
+        {/* Ruler ticks — scrolls in sync with tracks via rulerScrollRef */}
+        <div className="relative overflow-hidden flex-1" ref={rulerScrollRef}>
           <div style={{ width: totalWidth, position: 'relative', height: 28 }}>
             {ticks.map((t) => (
               <div
@@ -392,7 +398,11 @@ export function Timeline({
       </div>
 
       {/* ── Tracks ── */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0" ref={scrollRef}>
+      <div
+        className="flex-1 overflow-x-auto overflow-y-auto min-h-0"
+        ref={scrollRef}
+        onScroll={handleTrackScroll}
+      >
         {tracks.map((track) => (
           <div
             key={track.id}
@@ -400,10 +410,10 @@ export function Timeline({
               'flex border-b border-border relative',
               dragOver === track.id && 'ring-1 ring-inset ring-primary/40 bg-primary/5'
             )}
-            style={{ height: TRACK_H[track.type] ?? 56 }}
+            style={{ height: TRACK_H[track.type] ?? 56, minWidth: '100%' }}
           >
-            {/* Track label */}
-            <div className="w-[160px] shrink-0 flex items-center gap-1.5 px-2 bg-card/90 border-r border-border z-10">
+            {/* Track label — sticky so it stays visible when scrolling horizontally */}
+            <div className="sticky left-0 w-[160px] shrink-0 flex items-center gap-1.5 px-2 bg-card border-r border-border z-10">
               <div className="p-1 rounded text-muted-foreground shrink-0">
                 <TrackIcon type={track.type} />
               </div>
