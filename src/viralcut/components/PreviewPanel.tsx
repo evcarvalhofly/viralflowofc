@@ -614,6 +614,7 @@ export function PreviewPanel({
                   containerRef={overlayContainerRef}
                   isSelected={selectedItemId === item.id}
                   onSelect={() => onSelectItem?.(item.id)}
+                  onOpenProperties={() => onOpenProperties?.(item.id)}
                   onUpdate={(updates) => onUpdateItem?.(trackId, item.id, updates)}
                 >
                   <img
