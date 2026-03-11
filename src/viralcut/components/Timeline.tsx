@@ -1,8 +1,9 @@
 // ============================================================
 // Timeline – Multi-track with drag, trim, split, select
+// Supports video, audio, text, image tracks
 // ============================================================
 import { useRef, useState, useCallback } from 'react';
-import { Lock, Volume2, VolumeX, Trash2, Film, Music, Scissors } from 'lucide-react';
+import { Lock, Volume2, VolumeX, Trash2, Film, Music, Type, Image, Scissors } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +31,44 @@ function fmtRuler(s: number) {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function TrackIcon({ type }: { type: Track['type'] }) {
+  if (type === 'video') return <Film className="h-3.5 w-3.5" />;
+  if (type === 'audio') return <Music className="h-3.5 w-3.5" />;
+  if (type === 'text') return <Type className="h-3.5 w-3.5" />;
+  return <Image className="h-3.5 w-3.5" />;
+}
+
+function trackLabel(type: Track['type']) {
+  switch (type) {
+    case 'video': return 'Vídeo';
+    case 'audio': return 'Áudio';
+    case 'text': return 'Texto';
+    case 'image': return 'Imagem';
+  }
+}
+
+/** Color classes for each track/item type */
+function itemColors(type: Track['type'], isSelected: boolean) {
+  switch (type) {
+    case 'video':
+      return isSelected
+        ? 'bg-primary/30 border-primary shadow-lg shadow-primary/20'
+        : 'bg-primary/15 border-primary/40 hover:border-primary/70';
+    case 'audio':
+      return isSelected
+        ? 'bg-violet-500/30 border-violet-400 shadow-lg shadow-violet-500/20'
+        : 'bg-violet-500/15 border-violet-500/40 hover:border-violet-400/70';
+    case 'text':
+      return isSelected
+        ? 'bg-amber-500/30 border-amber-400 shadow-lg shadow-amber-500/20'
+        : 'bg-amber-500/15 border-amber-500/40 hover:border-amber-400/70';
+    case 'image':
+      return isSelected
+        ? 'bg-emerald-500/30 border-emerald-400 shadow-lg shadow-emerald-500/20'
+        : 'bg-emerald-500/15 border-emerald-500/40 hover:border-emerald-400/70';
+  }
 }
 
 export function Timeline({
@@ -61,17 +100,13 @@ export function Timeline({
   // ── Ruler seek ──────────────────────────────────────────────
   const handleRulerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - 160; // subtract label offset
+    const x = e.clientX - rect.left - 160;
     const t = Math.max(0, x / zoom);
     onSeek(t);
   }, [zoom, onSeek]);
 
   // ── Drag item (move) ─────────────────────────────────────────
-  const handleItemMouseDown = (
-    e: React.MouseEvent,
-    track: Track,
-    item: TrackItem,
-  ) => {
+  const handleItemMouseDown = (e: React.MouseEvent, track: Track, item: TrackItem) => {
     if (track.locked) return;
     e.stopPropagation();
     e.preventDefault();
@@ -94,11 +129,7 @@ export function Timeline({
   };
 
   // ── Trim left handle ────────────────────────────────────────
-  const handleTrimLeft = (
-    e: React.MouseEvent,
-    track: Track,
-    item: TrackItem,
-  ) => {
+  const handleTrimLeft = (e: React.MouseEvent, track: Track, item: TrackItem) => {
     if (track.locked) return;
     e.stopPropagation();
     e.preventDefault();
@@ -106,15 +137,13 @@ export function Timeline({
     const startX = e.clientX;
     const origStart = item.startTime;
     const origMediaStart = item.mediaStart;
-    const maxTrim = item.endTime - origStart - 0.1; // keep at least 0.1s
+    const maxTrim = item.endTime - origStart - 0.1;
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
       const delta = dx / zoom;
       const clampedDelta = Math.max(-origMediaStart, Math.min(maxTrim, delta));
-      const newStart = origStart + clampedDelta;
-      const newMediaStart = origMediaStart + clampedDelta;
-      onItemTrim(track.id, item.id, newStart, item.endTime, newMediaStart, item.mediaEnd);
+      onItemTrim(track.id, item.id, origStart + clampedDelta, item.endTime, origMediaStart + clampedDelta, item.mediaEnd);
     };
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
@@ -125,11 +154,7 @@ export function Timeline({
   };
 
   // ── Trim right handle ────────────────────────────────────────
-  const handleTrimRight = (
-    e: React.MouseEvent,
-    track: Track,
-    item: TrackItem,
-  ) => {
+  const handleTrimRight = (e: React.MouseEvent, track: Track, item: TrackItem) => {
     if (track.locked) return;
     e.stopPropagation();
     e.preventDefault();
@@ -139,11 +164,13 @@ export function Timeline({
     const origMediaEnd = item.mediaEnd;
     const mediaDur = media.find((m) => m.id === item.mediaId)?.duration ?? origMediaEnd;
     const minEnd = item.startTime + 0.1;
+    // For text/image items that have no media duration, allow free stretch
+    const maxMediaDur = mediaDur > 0 ? mediaDur : 3600;
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
       const delta = dx / zoom;
-      const newEnd = Math.max(minEnd, Math.min(item.startTime + mediaDur - item.mediaStart, origEnd + delta));
+      const newEnd = Math.max(minEnd, Math.min(item.startTime + maxMediaDur - item.mediaStart, origEnd + delta));
       const newMediaEnd = item.mediaStart + (newEnd - item.startTime);
       onItemTrim(track.id, item.id, item.startTime, newEnd, item.mediaStart, newMediaEnd);
     };
@@ -217,12 +244,10 @@ export function Timeline({
             {/* Track label */}
             <div className="w-[160px] shrink-0 flex items-center gap-1.5 px-2 bg-card/90 border-r border-border z-10">
               <div className="p-1 rounded text-muted-foreground shrink-0">
-                {track.type === 'video'
-                  ? <Film className="h-3.5 w-3.5" />
-                  : <Music className="h-3.5 w-3.5" />}
+                <TrackIcon type={track.type} />
               </div>
               <span className="text-[11px] font-medium text-foreground capitalize flex-1 truncate">
-                {track.type === 'video' ? 'Vídeo' : 'Áudio'}
+                {trackLabel(track.type)}
               </span>
               <button
                 className={cn(
@@ -267,6 +292,7 @@ export function Timeline({
                 const left = item.startTime * zoom;
                 const m = media.find((x) => x.id === item.mediaId);
                 const isSelected = selectedItemId === item.id;
+                const isTextOrImage = item.type === 'text' || item.type === 'image';
 
                 return (
                   <div
@@ -274,19 +300,13 @@ export function Timeline({
                     className={cn(
                       'absolute top-1.5 bottom-1.5 rounded-lg border overflow-visible flex items-center group transition-shadow',
                       track.locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing',
-                      track.type === 'video'
-                        ? isSelected
-                          ? 'bg-primary/30 border-primary shadow-lg shadow-primary/20'
-                          : 'bg-primary/15 border-primary/40 hover:border-primary/70'
-                        : isSelected
-                          ? 'bg-violet-500/30 border-violet-400 shadow-lg shadow-violet-500/20'
-                          : 'bg-violet-500/15 border-violet-500/40 hover:border-violet-400/70'
+                      itemColors(track.type, isSelected)
                     )}
                     style={{ left, width: w }}
                     onMouseDown={(e) => handleItemMouseDown(e, track, item)}
                     title={item.name}
                   >
-                    {/* Thumbnail */}
+                    {/* Thumbnail for video */}
                     {m?.thumbnail && (
                       <img
                         src={m.thumbnail}
@@ -296,13 +316,25 @@ export function Timeline({
                       />
                     )}
 
-                    {/* Name */}
-                    <span className="text-[10px] font-medium px-1.5 truncate text-foreground/90 flex-1 pointer-events-none">
-                      {item.name}
-                    </span>
+                    {/* Text preview for text items */}
+                    {item.type === 'text' && item.textDetails && (
+                      <span
+                        className="text-[9px] px-1.5 truncate flex-1 pointer-events-none font-medium"
+                        style={{ color: item.textDetails.color }}
+                      >
+                        {item.textDetails.text || item.name}
+                      </span>
+                    )}
+
+                    {/* Name for non-text */}
+                    {item.type !== 'text' && (
+                      <span className="text-[10px] font-medium px-1.5 truncate text-foreground/90 flex-1 pointer-events-none">
+                        {item.name}
+                      </span>
+                    )}
 
                     {/* Split button (visible on selected) */}
-                    {isSelected && w > 40 && (
+                    {isSelected && w > 40 && !isTextOrImage && (
                       <button
                         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 p-1 rounded-full bg-background/80 border border-border text-foreground/70 hover:text-primary hover:border-primary transition-colors opacity-0 group-hover:opacity-100"
                         title="Dividir no playhead"
@@ -327,14 +359,12 @@ export function Timeline({
                     {/* ── Trim handles ── */}
                     {!track.locked && (
                       <>
-                        {/* Left trim */}
                         <div
                           className="absolute left-0 top-0 bottom-0 w-2.5 cursor-col-resize z-30 flex items-center justify-center group/trim"
                           onMouseDown={(e) => handleTrimLeft(e, track, item)}
                         >
                           <div className="w-1 h-5 rounded-full bg-white/60 group-hover/trim:bg-white transition-colors" />
                         </div>
-                        {/* Right trim */}
                         <div
                           className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize z-30 flex items-center justify-center group/trim"
                           onMouseDown={(e) => handleTrimRight(e, track, item)}

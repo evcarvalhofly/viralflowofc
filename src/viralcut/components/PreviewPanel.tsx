@@ -1,9 +1,9 @@
 // ============================================================
-// PreviewPanel – Video preview with playback controls
+// PreviewPanel – Video preview with text/image overlays + effects
 // ============================================================
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Maximize2,
+  Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
 } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,19 @@ function fmt(s: number) {
   return `${m}:${String(sec).padStart(2, '0')}.${ms}`;
 }
 
+/** Build CSS filter string from video/image details */
+function buildFilter(brightness = 1, contrast = 1, saturation = 1) {
+  return `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`;
+}
+
+/** Build CSS transform for flips */
+function buildTransform(flipH = false, flipV = false) {
+  const sx = flipH ? -1 : 1;
+  const sy = flipV ? -1 : 1;
+  if (sx === 1 && sy === 1) return undefined;
+  return `scale(${sx}, ${sy})`;
+}
+
 export function PreviewPanel({
   tracks,
   media,
@@ -37,39 +50,102 @@ export function PreviewPanel({
   projectName,
 }: PreviewPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
-  const isDraggingRef = useRef(false);
 
-  // Find active video item at currentTime
-  const activeItem = (() => {
+  // ── Find active items at currentTime ─────────────────────────
+  const activeVideoItem = (() => {
     for (const track of tracks) {
-      if (track.type !== 'video') continue;
+      if (track.type !== 'video' || track.muted) continue;
       for (const item of track.items) {
         if (currentTime >= item.startTime && currentTime < item.endTime) {
-          return { item, media: media.find((m) => m.id === item.mediaId) };
+          return { item, mediaFile: media.find((m) => m.id === item.mediaId) };
         }
       }
     }
     return null;
   })();
 
-  // Sync video element
+  const activeTextItems: TrackItem[] = tracks
+    .filter((t) => t.type === 'text' && !t.muted)
+    .flatMap((t) => t.items)
+    .filter((i) => currentTime >= i.startTime && currentTime < i.endTime);
+
+  const activeImageItems: { item: TrackItem; mediaFile?: MediaFile }[] = tracks
+    .filter((t) => t.type === 'image' && !t.muted)
+    .flatMap((t) => t.items)
+    .filter((i) => currentTime >= i.startTime && currentTime < i.endTime)
+    .map((item) => ({ item, mediaFile: media.find((m) => m.id === item.mediaId) }));
+
+  // ── Sync video element ────────────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !activeItem?.media) return;
-    const mediaTime = activeItem.item.mediaStart + (currentTime - activeItem.item.startTime);
+    if (!v || !activeVideoItem?.mediaFile) return;
+    const mediaTime = activeVideoItem.item.mediaStart + (currentTime - activeVideoItem.item.startTime);
     if (Math.abs(v.currentTime - mediaTime) > 0.15) {
       v.currentTime = mediaTime;
     }
-  }, [currentTime, activeItem]);
+  }, [currentTime, activeVideoItem]);
 
+  // Apply playback rate from videoDetails
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const rate = activeVideoItem?.item.videoDetails?.playbackRate ?? 1;
+    v.playbackRate = rate;
+  }, [activeVideoItem]);
+
+  // Apply volume from videoDetails
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const itemVolume = activeVideoItem?.item.videoDetails?.volume ?? 1;
+    v.volume = Math.min(1, itemVolume) * (muted ? 0 : volume);
+    v.muted = muted;
+  }, [activeVideoItem, muted, volume]);
+
+  // Play/pause sync
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     if (isPlaying) v.play().catch(() => {});
     else v.pause();
-  }, [isPlaying]);
+  }, [isPlaying, activeVideoItem?.item.id]);
+
+  // ── Audio tracks ──────────────────────────────────────────────
+  useEffect(() => {
+    const activeAudioItems = tracks
+      .filter((t) => t.type === 'audio' && !t.muted)
+      .flatMap((t) => t.items)
+      .filter((i) => currentTime >= i.startTime && currentTime < i.endTime);
+
+    activeAudioItems.forEach((item) => {
+      const mf = media.find((m) => m.id === item.mediaId);
+      if (!mf) return;
+      if (!audioRefs.current.has(item.id)) {
+        const audio = new Audio(mf.url);
+        audio.preload = 'auto';
+        audioRefs.current.set(item.id, audio);
+      }
+      const audio = audioRefs.current.get(item.id)!;
+      const ad = item.audioDetails;
+      const mediaTime = item.mediaStart + (currentTime - item.startTime);
+      if (Math.abs(audio.currentTime - mediaTime) > 0.2) {
+        audio.currentTime = mediaTime;
+      }
+      audio.volume = Math.min(1, (ad?.volume ?? 1)) * (muted ? 0 : volume);
+      audio.playbackRate = ad?.playbackRate ?? 1;
+      if (isPlaying && audio.paused) audio.play().catch(() => {});
+      else if (!isPlaying && !audio.paused) audio.pause();
+    });
+
+    // Pause audio items not currently active
+    audioRefs.current.forEach((audio, id) => {
+      const isActive = activeAudioItems.some((i) => i.id === id);
+      if (!isActive && !audio.paused) audio.pause();
+    });
+  }, [currentTime, isPlaying, tracks, media, muted, volume]);
 
   const handleScrub = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (duration <= 0) return;
@@ -80,17 +156,33 @@ export function PreviewPanel({
 
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  // Video CSS effects
+  const vd = activeVideoItem?.item.videoDetails;
+  const videoStyle: React.CSSProperties = {
+    maxHeight: '100%',
+    maxWidth: '100%',
+    objectFit: 'contain',
+    opacity: vd?.opacity ?? 1,
+    filter: buildFilter(vd?.brightness, vd?.contrast, vd?.saturation),
+    transform: buildTransform(vd?.flipH, vd?.flipV),
+    borderWidth: vd?.borderWidth ? `${vd.borderWidth}px` : undefined,
+    borderColor: vd?.borderWidth ? (vd.borderColor ?? '#000') : undefined,
+    borderStyle: vd?.borderWidth ? 'solid' : undefined,
+    borderRadius: vd?.borderRadius ? `${vd.borderRadius}%` : undefined,
+  };
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Preview canvas */}
       <div className="flex-1 min-h-0 flex items-center justify-center bg-black/90 relative overflow-hidden">
-        {activeItem?.media ? (
+
+        {/* Video layer */}
+        {activeVideoItem?.mediaFile ? (
           <video
             ref={videoRef}
-            key={activeItem.media.id}
-            src={activeItem.media.url}
-            muted={muted}
-            className="max-h-full max-w-full object-contain"
+            key={activeVideoItem.mediaFile.id}
+            src={activeVideoItem.mediaFile.url}
+            style={videoStyle}
             preload="auto"
             playsInline
           />
@@ -103,8 +195,70 @@ export function PreviewPanel({
           </div>
         )}
 
+        {/* Image overlays */}
+        {activeImageItems.map(({ item, mediaFile }) => {
+          if (!mediaFile) return null;
+          const imgd = item.imageDetails;
+          return (
+            <img
+              key={item.id}
+              src={mediaFile.url}
+              alt=""
+              style={{
+                position: 'absolute',
+                left: `${imgd?.posX ?? 50}%`,
+                top: `${imgd?.posY ?? 50}%`,
+                width: `${imgd?.width ?? 50}%`,
+                height: `${imgd?.height ?? 50}%`,
+                transform: `translate(-50%, -50%) ${buildTransform(imgd?.flipH, imgd?.flipV) ?? ''}`.trim(),
+                objectFit: 'contain',
+                opacity: imgd?.opacity ?? 1,
+                filter: buildFilter(imgd?.brightness, imgd?.contrast, imgd?.saturation),
+                pointerEvents: 'none',
+              }}
+            />
+          );
+        })}
+
+        {/* Text overlays */}
+        {activeTextItems.map((item) => {
+          const td = item.textDetails;
+          if (!td) return null;
+          const shadow = td.boxShadow;
+          return (
+            <div
+              key={item.id}
+              style={{
+                position: 'absolute',
+                left: `${td.posX}%`,
+                top: `${td.posY}%`,
+                width: `${td.width}%`,
+                transform: 'translate(-50%, -50%)',
+                fontSize: td.fontSize,
+                fontFamily: td.fontFamily,
+                color: td.color,
+                textAlign: td.textAlign,
+                textDecoration: td.textDecoration !== 'none' ? td.textDecoration : undefined,
+                opacity: td.opacity,
+                backgroundColor: td.backgroundColor !== 'transparent' ? td.backgroundColor : undefined,
+                padding: td.backgroundColor !== 'transparent' ? '0.25em 0.5em' : undefined,
+                borderRadius: 4,
+                textShadow: shadow && (shadow.x || shadow.y || shadow.blur)
+                  ? `${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.color}`
+                  : undefined,
+                pointerEvents: 'none',
+                lineHeight: 1.2,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {td.text}
+            </div>
+          );
+        })}
+
         {/* Timecode overlay */}
-        <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded px-2 py-0.5 text-[10px] font-mono text-white/80">
+        <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded px-2 py-0.5 text-[10px] font-mono text-white/80 pointer-events-none">
           {fmt(currentTime)}
         </div>
       </div>
@@ -115,12 +269,10 @@ export function PreviewPanel({
           className="h-1.5 rounded-full bg-muted cursor-pointer relative group"
           onClick={handleScrub}
         >
-          {/* Played */}
           <div
             className="absolute left-0 top-0 h-full rounded-full gradient-viral transition-none"
             style={{ width: `${pct}%` }}
           />
-          {/* Thumb */}
           <div
             className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-primary shadow-md border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
             style={{ left: `${pct}%` }}
@@ -130,12 +282,10 @@ export function PreviewPanel({
 
       {/* Controls */}
       <div className="flex items-center gap-2 px-3 pb-2.5 shrink-0">
-        {/* Time */}
         <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-[72px]">
           {fmt(currentTime)} / {fmt(duration)}
         </span>
 
-        {/* Playback */}
         <div className="flex items-center gap-0.5 mx-auto">
           <button
             className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
@@ -159,7 +309,6 @@ export function PreviewPanel({
           </button>
         </div>
 
-        {/* Volume */}
         <div className="flex items-center gap-1.5 w-[72px] justify-end">
           <button
             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
