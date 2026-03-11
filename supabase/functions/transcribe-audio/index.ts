@@ -31,9 +31,15 @@ Deno.serve(async (req) => {
 
     console.log('[transcribe-audio] file:', audioFile.name, audioFile.size, 'bytes | lang:', language);
 
-    // Convert audio file to base64
+    // Convert audio file to base64 (chunk-based to avoid call stack overflow on large files)
     const audioBytes = await audioFile.arrayBuffer();
-    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBytes)));
+    const uint8 = new Uint8Array(audioBytes);
+    let binary = '';
+    const CHUNK = 8192;
+    for (let i = 0; i < uint8.length; i += CHUNK) {
+      binary += String.fromCharCode(...uint8.subarray(i, i + CHUNK));
+    }
+    const base64Audio = btoa(binary);
 
     const mimeType = audioFile.type || 'audio/wav';
 
