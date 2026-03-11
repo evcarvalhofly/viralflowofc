@@ -696,8 +696,8 @@ const ViralCut = () => {
         </div>
 
         {/* Timeline */}
-        <div className="shrink-0 border-t border-border" style={{ height: '22vh' }}>
-          <div className="flex items-center gap-2 px-2 py-1 bg-card/60 border-b border-border">
+        <div className="flex-1 min-h-0 border-t border-border flex flex-col overflow-hidden">
+          <div className="flex items-center gap-2 px-2 py-1 bg-card/60 border-b border-border shrink-0">
             <span className="text-[10px] font-semibold text-foreground flex-1">Timeline</span>
             <button
               className="p-1 rounded bg-muted/60 text-muted-foreground hover:text-foreground"
@@ -709,7 +709,7 @@ const ViralCut = () => {
             <input ref={importRef} type="file" accept="video/*,audio/*,image/*" multiple className="hidden"
               onChange={(e) => e.target.files && handleImport(e.target.files)} />
           </div>
-          <div style={{ height: 'calc(100% - 32px)' }}>
+          <div className="flex-1 min-h-0">
             <Timeline
               tracks={project.tracks}
               media={media}
@@ -921,9 +921,9 @@ const ViralCut = () => {
         )}
       </div>
 
-      {/* Timeline */}
-      <div className="shrink-0 border-t border-border" style={{ height: 220 }}>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-card/60 border-b border-border">
+      {/* Timeline — flex layout: fills remaining height */}
+      <div className="flex-none border-t border-border flex flex-col" style={{ height: 'clamp(160px, 28vh, 260px)' }}>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-card/60 border-b border-border shrink-0">
           <span className="text-[11px] font-semibold text-foreground uppercase tracking-wide flex-1">Timeline</span>
           <span className="text-[10px] text-muted-foreground hidden sm:block">
             Espaço = play/pause · Del = deletar · Arrastar borda = cortar
@@ -953,7 +953,7 @@ const ViralCut = () => {
             <PanelRight className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div style={{ height: 188 }}>
+        <div className="flex-1 min-h-0">
           <Timeline
             tracks={project.tracks}
             media={media}

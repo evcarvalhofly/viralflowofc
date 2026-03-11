@@ -7,7 +7,12 @@ import { Lock, Volume2, VolumeX, Trash2, Film, Music, Type, Image, Scissors } fr
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
 
-const TRACK_H = 56;
+const TRACK_H: Record<string, number> = {
+  video: 56,
+  image: 56,
+  audio: 34,
+  text: 34,
+};
 
 interface TimelineProps {
   tracks: Track[];
@@ -231,7 +236,7 @@ export function Timeline({
       </div>
 
       {/* ── Tracks ── */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
         {tracks.map((track) => (
           <div
             key={track.id}
@@ -239,7 +244,7 @@ export function Timeline({
               'flex border-b border-border relative',
               dragOver === track.id && 'ring-1 ring-inset ring-primary/40 bg-primary/5'
             )}
-            style={{ height: TRACK_H }}
+            style={{ height: TRACK_H[track.type] ?? 56 }}
           >
             {/* Track label */}
             <div className="w-[160px] shrink-0 flex items-center gap-1.5 px-2 bg-card/90 border-r border-border z-10">
