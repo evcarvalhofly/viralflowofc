@@ -34,11 +34,12 @@ function MediaIcon({ type }: { type: MediaFile['type'] }) {
   return <Image className="h-3.5 w-3.5" />;
 }
 
+// fontSize is stored as % of canvas height (e.g. 3.5 = 3.5% of height)
 const TEXT_PRESETS = [
-  { label: 'Título', fontSize: 72, fontFamily: 'Inter, sans-serif', color: '#ffffff', textAlign: 'center' as const, posY: 50 },
-  { label: 'Subtítulo', fontSize: 42, fontFamily: 'Inter, sans-serif', color: '#e2e8f0', textAlign: 'center' as const, posY: 70 },
-  { label: 'Legenda', fontSize: 28, fontFamily: 'Inter, sans-serif', color: '#ffffff', textAlign: 'center' as const, posY: 88, backgroundColor: 'rgba(0,0,0,0.6)' },
-  { label: 'Destaque', fontSize: 56, fontFamily: 'Inter, sans-serif', color: '#f472b6', textAlign: 'center' as const, posY: 50 },
+  { label: 'Título', fontSize: 6, fontFamily: 'Inter, sans-serif', color: '#ffffff', textAlign: 'center' as const, posY: 50 },
+  { label: 'Subtítulo', fontSize: 4, fontFamily: 'Inter, sans-serif', color: '#e2e8f0', textAlign: 'center' as const, posY: 70 },
+  { label: 'Legenda', fontSize: 3.5, fontFamily: 'Inter, sans-serif', color: '#ffffff', textAlign: 'center' as const, posY: 88, backgroundColor: 'rgba(0,0,0,0.6)' },
+  { label: 'Destaque', fontSize: 5, fontFamily: 'Inter, sans-serif', color: '#f472b6', textAlign: 'center' as const, posY: 50 },
 ];
 
 const TRANSITIONS = [
