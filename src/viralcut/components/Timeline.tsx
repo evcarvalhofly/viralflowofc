@@ -341,6 +341,7 @@ export function Timeline({
                     )}
                     style={{ left, width: w }}
                     onMouseDown={(e) => handleItemMouseDown(e, track, item)}
+                    onClick={(e) => { e.stopPropagation(); onItemSelect(item.id); }}
                     onTouchStart={(e) => handleItemTouchStart(e, track, item)}
                     title={item.name}
                   >
