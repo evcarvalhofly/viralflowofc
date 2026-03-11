@@ -92,6 +92,7 @@ export function Timeline({
   onItemTrim,
   onItemDelete,
   onItemSelect,
+  onItemDoubleClick,
   onItemSplit,
   onTrackToggleMute,
   onTrackToggleLock,
