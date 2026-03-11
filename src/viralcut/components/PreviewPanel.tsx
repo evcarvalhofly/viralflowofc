@@ -183,9 +183,8 @@ export function PreviewPanel({
       lastSrcRef.current = mf.url;
       v.src = mf.url;
       v.preload = 'auto';
-      // Set tiny resolution hint on the video element
-      v.width = PREVIEW_MAX_W;
-      v.height = PREVIEW_MAX_H;
+      // Do NOT constrain width/height — let browser decode at native res
+      // (preview quality reduction is handled by the small canvas display size)
       v.load();
       applyVideoProps();
       return;
