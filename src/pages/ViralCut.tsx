@@ -166,16 +166,23 @@ const ViralCut = () => {
   };
 
   // ── Manual silence edit from timeline ────────────────────────
+  // Use refs to avoid stale closure & re-render loop
+  const durationRef = useRef(state.duration);
+  const modeRef = useRef(state.mode);
+  durationRef.current = state.duration;
+  modeRef.current = state.mode;
+
   const handleSilencesChange = useCallback((newSilences: SilenceRange[]) => {
-    const config = getAutoCutConfig(state.mode);
+    const config = getAutoCutConfig(modeRef.current);
     const newKeep = buildKeepSegments(
-      state.duration,
+      durationRef.current,
       newSilences,
       config.paddingMs,
       config.mergeGap
     );
-    patch({ silences: newSilences, keepSegments: newKeep });
-  }, [state.duration, state.mode]);
+    setState((s) => ({ ...s, silences: newSilences, keepSegments: newKeep }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Computed flags ────────────────────────────────────────────
   const isAnalyzing = state.step === 'analyzing';
