@@ -20,6 +20,7 @@ interface PreviewPanelProps {
   selectedItemId?: string | null;
   onSelectItem?: (id: string | null) => void;
   onUpdateItem?: (trackId: string, itemId: string, updates: Partial<TrackItem>) => void;
+  onOpenProperties?: (id: string) => void;
 }
 
 function fmt(s: number) {
