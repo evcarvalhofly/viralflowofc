@@ -1,7 +1,8 @@
 // ============================================================
 // PreviewPanel – Video preview with text/image overlays + effects
-// Optimised for smooth playback: minimal re-renders, immediate
-// playbackRate + volume application, debounced scrub sync.
+// LOW-QUALITY PREVIEW MODE: renders video via downscaled canvas
+// at ~360p to ensure smooth playback even with speed changes,
+// multiple layers, and CSS filters. Full quality only on export.
 // ============================================================
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
@@ -37,6 +38,10 @@ function buildTransform(flipH = false, flipV = false) {
   return `scale(${sx}, ${sy})`;
 }
 
+// Preview resolution cap — keeps GPU load minimal
+const PREVIEW_MAX_W = 480;
+const PREVIEW_MAX_H = 270;
+
 export function PreviewPanel({
   tracks,
   media,
@@ -47,15 +52,18 @@ export function PreviewPanel({
   onPlayPause,
   projectName,
 }: PreviewPanelProps) {
+  // Hidden video element used purely for decoding
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Canvas shown to the user at low resolution
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number | null>(null);
+
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
-  // Track last synced video src to avoid re-setting currentTime on src change
   const lastSrcRef = useRef<string>('');
-  const lastSeekRef = useRef<number>(-1);
 
-  // ── Derived active items (computed inline, not state) ─────
+  // ── Derived active items ───────────────────────────────────
   const activeVideoItem = (() => {
     for (const track of tracks) {
       if (track.type !== 'video' || track.muted) continue;
@@ -79,8 +87,7 @@ export function PreviewPanel({
     .filter((i) => currentTime >= i.startTime && currentTime < i.endTime)
     .map((item) => ({ item, mediaFile: media.find((m) => m.id === item.mediaId) }));
 
-  // ── Directly apply playbackRate + volume to video element ──
-  // Called imperatively so we avoid waiting for a React re-render cycle
+  // ── Apply video props imperatively ─────────────────────────
   const applyVideoProps = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -92,31 +99,94 @@ export function PreviewPanel({
     if (v.muted !== muted) v.muted = muted;
   }, [activeVideoItem, muted, volume]);
 
+  // ── Draw a single frame to the low-res canvas ─────────────
+  const drawFrame = useCallback(() => {
+    const canvas = canvasRef.current;
+    const v = videoRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (v && v.readyState >= 2 && activeVideoItem?.mediaFile) {
+      const vd = activeVideoItem.item.videoDetails;
+      ctx.save();
+      // Apply opacity
+      ctx.globalAlpha = vd?.opacity ?? 1;
+      // Apply flip via transform
+      if (vd?.flipH || vd?.flipV) {
+        ctx.translate(
+          vd.flipH ? canvas.width : 0,
+          vd.flipV ? canvas.height : 0
+        );
+        ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+      }
+      // CSS filter applied on canvas element itself (hardware accelerated)
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    } else if (!activeVideoItem) {
+      // Draw placeholder background (already black via bg)
+    }
+  }, [activeVideoItem]);
+
+  // ── RAF render loop while playing ─────────────────────────
+  useEffect(() => {
+    const loop = () => {
+      drawFrame();
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    if (isPlaying) {
+      rafRef.current = requestAnimationFrame(loop);
+    } else {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      // Draw one frame when paused
+      drawFrame();
+    }
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [isPlaying, drawFrame]);
+
+  // ── Also redraw on currentTime change (scrubbing) ─────────
+  useEffect(() => {
+    if (!isPlaying) drawFrame();
+  }, [currentTime, isPlaying, drawFrame]);
+
   // ── Sync video src + seek ──────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     const mf = activeVideoItem?.mediaFile;
-    if (!mf) return;
+    if (!mf) {
+      // No video — clear canvas
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
 
-    // If src changed, let onloadeddata handle the seek
     if (v.src !== mf.url) {
       lastSrcRef.current = mf.url;
-      lastSeekRef.current = -1;
       v.src = mf.url;
       v.preload = 'auto';
+      // Set tiny resolution hint on the video element
+      v.width = PREVIEW_MAX_W;
+      v.height = PREVIEW_MAX_H;
       v.load();
       applyVideoProps();
       return;
     }
 
-    // Seek only when difference is meaningful (>150ms) to avoid stutter
     const mediaTime = activeVideoItem!.item.mediaStart + (currentTime - activeVideoItem!.item.startTime);
-    if (Math.abs(v.currentTime - mediaTime) > 0.15 && !isPlaying) {
+    if (!isPlaying && Math.abs(v.currentTime - mediaTime) > 0.1) {
       v.currentTime = mediaTime;
-      lastSeekRef.current = mediaTime;
     }
-
     applyVideoProps();
   }, [currentTime, activeVideoItem, isPlaying, applyVideoProps]);
 
@@ -125,21 +195,20 @@ export function PreviewPanel({
     const v = videoRef.current;
     if (!v) return;
     if (isPlaying) {
-      // Seek to correct position before playing
       if (activeVideoItem) {
         const mediaTime = activeVideoItem.item.mediaStart + (currentTime - activeVideoItem.item.startTime);
-        if (Math.abs(v.currentTime - mediaTime) > 0.3) {
-          v.currentTime = mediaTime;
-        }
+        if (Math.abs(v.currentTime - mediaTime) > 0.3) v.currentTime = mediaTime;
       }
       applyVideoProps();
       v.play().catch(() => {});
     } else {
       v.pause();
+      // Redraw after pause
+      setTimeout(() => drawFrame(), 30);
     }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Immediately apply rate/volume when those change ───────
+  // ── Apply rate/volume immediately when they change ────────
   useEffect(() => {
     applyVideoProps();
   }, [applyVideoProps]);
@@ -162,9 +231,7 @@ export function PreviewPanel({
       const audio = audioRefs.current.get(item.id)!;
       const ad = item.audioDetails;
       const mediaTime = item.mediaStart + (currentTime - item.startTime);
-      if (Math.abs(audio.currentTime - mediaTime) > 0.2) {
-        audio.currentTime = mediaTime;
-      }
+      if (Math.abs(audio.currentTime - mediaTime) > 0.2) audio.currentTime = mediaTime;
       audio.volume = Math.min(1, (ad?.volume ?? 1)) * (muted ? 0 : volume);
       audio.playbackRate = ad?.playbackRate ?? 1;
       if (isPlaying && audio.paused) audio.play().catch(() => {});
@@ -172,10 +239,14 @@ export function PreviewPanel({
     });
 
     audioRefs.current.forEach((audio, id) => {
-      const isActive = activeAudioItems.some((i) => i.id === id);
-      if (!isActive && !audio.paused) audio.pause();
+      if (!activeAudioItems.some((i) => i.id === id) && !audio.paused) audio.pause();
     });
   }, [currentTime, isPlaying, tracks, media, muted, volume]);
+
+  // ── Canvas CSS filter (reflects video effects) ────────────
+  const vd = activeVideoItem?.item.videoDetails;
+  const canvasFilter = buildFilter(vd?.brightness, vd?.contrast, vd?.saturation);
+  const canvasTransform = (vd?.flipH || vd?.flipV) ? undefined : undefined; // handled in drawFrame
 
   // ── Scrubber ──────────────────────────────────────────────
   const scrubbing = useRef(false);
@@ -211,35 +282,35 @@ export function PreviewPanel({
 
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  // Video CSS effects
-  const vd = activeVideoItem?.item.videoDetails;
-  const videoStyle: React.CSSProperties = {
-    maxHeight: '100%',
-    maxWidth: '100%',
-    objectFit: 'contain',
-    opacity: vd?.opacity ?? 1,
-    filter: buildFilter(vd?.brightness, vd?.contrast, vd?.saturation),
-    transform: buildTransform(vd?.flipH, vd?.flipV),
-    // NOTE: no borderWidth/radius here to avoid layout thrash — applied via wrapper
-    willChange: 'filter, opacity, transform',
-  };
-
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Preview canvas */}
+      {/* Hidden video element — decodes at full speed, never shown */}
+      <video
+        ref={videoRef}
+        style={{ display: 'none' }}
+        preload="auto"
+        playsInline
+        muted={false}
+        crossOrigin="anonymous"
+      />
+
+      {/* Preview canvas — low-res display */}
       <div className="flex-1 min-h-0 flex items-center justify-center bg-black/90 relative overflow-hidden">
 
-        {/* Video layer */}
         {activeVideoItem?.mediaFile ? (
-          <video
-            ref={videoRef}
-            key={activeVideoItem.mediaFile.id}
-            src={activeVideoItem.mediaFile.url}
-            style={videoStyle}
-            preload="auto"
-            playsInline
-            // Lower decoding priority allows UI to stay responsive
-            {...({ decoding: 'async' } as any)}
+          <canvas
+            ref={canvasRef}
+            width={PREVIEW_MAX_W}
+            height={PREVIEW_MAX_H}
+            style={{
+              maxHeight: '100%',
+              maxWidth: '100%',
+              objectFit: 'contain',
+              // Apply CSS filter on canvas (GPU-accelerated)
+              filter: canvasFilter !== 'none' ? canvasFilter : undefined,
+              imageRendering: 'auto',
+              willChange: 'filter',
+            }}
           />
         ) : (
           <div className="flex flex-col items-center gap-2 text-muted-foreground/40 select-none">
@@ -313,8 +384,9 @@ export function PreviewPanel({
         })}
 
         {/* Timecode overlay */}
-        <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded px-2 py-0.5 text-[10px] font-mono text-white/80 pointer-events-none">
+        <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded px-2 py-0.5 text-[10px] font-mono text-white/80 pointer-events-none select-none">
           {fmt(currentTime)}
+          <span className="ml-1 text-white/40 text-[8px]">LQ</span>
         </div>
       </div>
 
