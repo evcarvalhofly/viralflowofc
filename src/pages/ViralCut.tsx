@@ -142,7 +142,7 @@ const ViralCut = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [handleUndo, handleRedo, selectedItemId, project.tracks, isMobile, handleSplitAllAtPlayhead]);
+  }, [handleUndo, handleRedo, selectedItemId, project.tracks, isMobile]);
 
   // Ref to always-fresh tracks for RAF callbacks (avoids stale closure)
   const tracksRef = useRef(project.tracks);
