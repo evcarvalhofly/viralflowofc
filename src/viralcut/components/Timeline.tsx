@@ -403,6 +403,8 @@ export function Timeline({
         ref={scrollRef}
         onScroll={handleTrackScroll}
       >
+        {/* Inner wrapper with explicit full timeline width — ensures border-b spans entire scrollable area */}
+        <div style={{ width: totalWidth + 160, minWidth: '100%' }}>
         {tracks.map((track) => (
           <div
             key={track.id}
@@ -410,7 +412,7 @@ export function Timeline({
               'flex border-b border-border relative',
               dragOver === track.id && 'ring-1 ring-inset ring-primary/40 bg-primary/5'
             )}
-            style={{ height: TRACK_H[track.type] ?? 56, minWidth: '100%' }}
+            style={{ height: TRACK_H[track.type] ?? 56 }}
           >
             {/* Track label — sticky so it stays visible when scrolling horizontally */}
             <div className="sticky left-0 w-[160px] shrink-0 flex items-center gap-1.5 px-2 bg-card border-r border-border z-10">
@@ -444,8 +446,8 @@ export function Timeline({
 
             {/* Track lane — click empty area to seek */}
             <div
-              className="relative overflow-x-hidden flex-1"
-              style={{ minWidth: totalWidth, cursor: 'crosshair' }}
+              className="relative flex-1"
+              style={{ width: totalWidth, cursor: 'crosshair' }}
               onDragOver={(e) => { e.preventDefault(); setDragOver(track.id); }}
               onDragLeave={() => setDragOver(null)}
               onDrop={(e) => handleDrop(e, track.id)}
