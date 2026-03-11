@@ -641,7 +641,11 @@ const ViralCut = () => {
       setExportState({ status: 'encoding', progress: 97, label: 'Preparando download…' });
 
       const outputData = await ffmpeg.readFile('output.mp4');
-      const mp4Blob = new Blob([outputData], { type: 'video/mp4' });
+      // FileData may be Uint8Array<SharedArrayBuffer> — copy to a plain ArrayBuffer for Blob
+      const outputArray = outputData instanceof Uint8Array
+        ? new Uint8Array(outputData.buffer.slice(0) as ArrayBuffer)
+        : (outputData as Uint8Array);
+      const mp4Blob = new Blob([outputArray], { type: 'video/mp4' });
       const url = URL.createObjectURL(mp4Blob);
       const a = document.createElement('a');
       a.href = url;
