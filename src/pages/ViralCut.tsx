@@ -411,6 +411,33 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
   }, [pushHistory, isMobile]);
 
+  // ── Split ALL items at playhead across every unlocked track ──
+  const handleSplitAllAtPlayhead = useCallback(() => {
+    const t = currentTime;
+    setProject((p) => {
+      let changed = false;
+      const tracks = p.tracks.map((track) => {
+        if (track.locked) return track;
+        const newItems: typeof track.items = [];
+        for (const item of track.items) {
+          if (t > item.startTime + 0.05 && t < item.endTime - 0.05) {
+            const mediaAtSplit = item.mediaStart + (t - item.startTime);
+            newItems.push({ ...item, id: item.id + '_L', endTime: t, mediaEnd: mediaAtSplit });
+            newItems.push({ ...item, id: item.id + '_R', startTime: t, mediaStart: mediaAtSplit });
+            changed = true;
+          } else {
+            newItems.push(item);
+          }
+        }
+        return { ...track, items: newItems };
+      });
+      if (!changed) return p;
+      pushHistory(tracks);
+      return { ...p, tracks, duration: calcProjectDuration(tracks) };
+    });
+    setSelectedItemId(null);
+  }, [currentTime, pushHistory]);
+
   // ── Export: Canvas+AudioContext → WebM segments → FFmpeg → MP4 ──
   // 1. Plays each segment in real-time capturing to a WebM blob
   // 2. Passes all blobs to FFmpeg.wasm which concatenates + re-encodes as MP4
