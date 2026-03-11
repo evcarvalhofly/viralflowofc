@@ -974,6 +974,7 @@ const ViralCut = () => {
               onItemTrim={handleItemTrim}
               onItemDelete={handleItemDelete}
               onItemSelect={handleItemSelect}
+              onItemDoubleClick={handleItemDoubleClick}
               onItemSplit={handleItemSplit}
               onTrackToggleMute={handleToggleMute}
               onTrackToggleLock={handleToggleLock}
