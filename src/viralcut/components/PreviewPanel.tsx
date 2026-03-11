@@ -267,7 +267,7 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
         />
       )}
 
-      {/* Move icon indicator when selected */}
+      {/* Move/edit indicator when selected */}
       {isSelected && (
         <div
           style={{
@@ -277,14 +277,14 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
             transform: 'translateX(-50%)',
             background: 'hsl(var(--primary))',
             borderRadius: 4,
-            padding: '1px 4px',
+            padding: '1px 6px',
             fontSize: 9,
             color: 'white',
             whiteSpace: 'nowrap',
             pointerEvents: 'none',
           }}
         >
-          <Move style={{ display: 'inline', width: 10, height: 10 }} /> mover
+          <Move style={{ display: 'inline', width: 10, height: 10 }} /> mover · 2x clique = editar
         </div>
       )}
     </div>
