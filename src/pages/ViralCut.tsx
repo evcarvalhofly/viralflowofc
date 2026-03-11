@@ -928,6 +928,9 @@ const ViralCut = () => {
             onTimeChange={setCurrentTime}
             onPlayPause={() => setIsPlaying((p) => !p)}
             projectName={project.name}
+            selectedItemId={selectedItemId}
+            onSelectItem={handleItemSelect}
+            onUpdateItem={handleUpdateItem}
           />
         </div>
 
