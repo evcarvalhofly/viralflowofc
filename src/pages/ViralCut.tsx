@@ -608,6 +608,7 @@ const ViralCut = () => {
               return;
             }
 
+            // ── Draw video frame ──────────────────────────────
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, outW, outH);
             ctx.save();
@@ -625,6 +626,72 @@ const ViralCut = () => {
             ctx.restore();
             (ctx as any).filter = 'none';
             ctx.globalAlpha = 1;
+
+            // ── Draw text overlays active at this moment ──────
+            // currentProjectTime = segment's startTime + elapsed playback
+            const currentProjectTime = item.startTime + elapsed * playRate;
+            const textTracks = project.tracks.filter((t) => t.type === 'text' && !t.muted);
+            for (const tt of textTracks) {
+              for (const ti of tt.items) {
+                if (currentProjectTime < ti.startTime || currentProjectTime > ti.endTime) continue;
+                const td = ti.textDetails;
+                if (!td) continue;
+
+                const scale = outW / 100; // posX/posY are percentages of canvas width
+                const x = (td.posX / 100) * outW;
+                const y = (td.posY / 100) * outH;
+                const maxW = (td.width / 100) * outW;
+                const fontSize = Math.round(td.fontSize * (outW / 1080));
+
+                ctx.save();
+                ctx.globalAlpha = td.opacity ?? 1;
+                (ctx as any).filter = 'none';
+
+                // Background
+                if (td.backgroundColor && td.backgroundColor !== 'transparent') {
+                  ctx.fillStyle = td.backgroundColor;
+                  ctx.fillRect(x - maxW / 2, y - fontSize * 1.2, maxW, fontSize * 1.5);
+                }
+
+                // Shadow
+                if (td.boxShadow?.blur > 0) {
+                  ctx.shadowColor = td.boxShadow.color;
+                  ctx.shadowOffsetX = td.boxShadow.x;
+                  ctx.shadowOffsetY = td.boxShadow.y;
+                  ctx.shadowBlur = td.boxShadow.blur;
+                }
+
+                ctx.font = `bold ${fontSize}px ${td.fontFamily || 'Inter, sans-serif'}`;
+                ctx.fillStyle = td.color || '#ffffff';
+                ctx.textAlign = (td.textAlign as CanvasTextAlign) || 'center';
+                ctx.textBaseline = 'middle';
+
+                // Word-wrap
+                const words = (td.text || '').split(' ');
+                let line = '';
+                const lineHeight = fontSize * 1.35;
+                const lines: string[] = [];
+                for (const word of words) {
+                  const test = line ? `${line} ${word}` : word;
+                  if (ctx.measureText(test).width > maxW && line) {
+                    lines.push(line);
+                    line = word;
+                  } else {
+                    line = test;
+                  }
+                }
+                if (line) lines.push(line);
+
+                const totalH = lines.length * lineHeight;
+                lines.forEach((l, li) => {
+                  ctx.fillText(l, x, y - totalH / 2 + li * lineHeight + lineHeight / 2, maxW);
+                });
+
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.restore();
+              }
+            }
 
             rafId = requestAnimationFrame(renderFrame);
           };
