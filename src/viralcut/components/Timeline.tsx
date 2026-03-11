@@ -115,13 +115,18 @@ export function Timeline({
     if (track.locked) return;
     e.stopPropagation();
     e.preventDefault();
+    // Select immediately on mousedown
     onItemSelect(item.id);
 
     const startX = e.clientX;
     const origStart = item.startTime;
+    let dragging = false;
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
+      // Only start moving after a 4px threshold (so a plain click doesn't move)
+      if (!dragging && Math.abs(dx) < 4) return;
+      dragging = true;
       const newStart = Math.max(0, origStart + dx / zoom);
       onItemMove(track.id, item.id, newStart);
     };
