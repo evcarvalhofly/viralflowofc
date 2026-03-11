@@ -165,6 +165,18 @@ const ViralCut = () => {
     patch({ subtitleOptions: { ...state.subtitleOptions, ...partial } });
   };
 
+  // ── Manual silence edit from timeline ────────────────────────
+  const handleSilencesChange = useCallback((newSilences: SilenceRange[]) => {
+    const config = getAutoCutConfig(state.mode);
+    const newKeep = buildKeepSegments(
+      state.duration,
+      newSilences,
+      config.paddingMs,
+      config.mergeGap
+    );
+    patch({ silences: newSilences, keepSegments: newKeep });
+  }, [state.duration, state.mode]);
+
   // ── Computed flags ────────────────────────────────────────────
   const isAnalyzing = state.step === 'analyzing';
   const isTranscribing = state.step === 'transcribing';
@@ -315,6 +327,7 @@ const ViralCut = () => {
                     keepSegments={state.keepSegments}
                     currentTime={currentTime}
                     duration={state.duration}
+                    onSilencesChange={hasSegments ? handleSilencesChange : undefined}
                   />
                 )}
 

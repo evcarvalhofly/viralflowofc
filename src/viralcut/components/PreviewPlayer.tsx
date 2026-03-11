@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Scissors } from 'lucide-react';
 import { SubtitleItem, SubtitleOptions, Segment } from '../types';
 import { SubtitleOverlay } from './SubtitleOverlay';
 import { cn } from '@/lib/utils';
@@ -26,18 +26,49 @@ export function PreviewPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
+  // Whether to play only kept segments (preview mode)
+  const [previewMode, setPreviewMode] = useState(false);
+
+  const hasSegments = keepSegments.length > 0;
 
   // Keep video muted state in sync
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
   }, [muted]);
 
+  // Auto-enable preview mode when segments are first set
+  useEffect(() => {
+    if (hasSegments) setPreviewMode(true);
+    else setPreviewMode(false);
+  }, [hasSegments]);
+
+  // Skip over removed regions during playback
   const handleTimeUpdate = useCallback(() => {
-    const t = videoRef.current?.currentTime ?? 0;
+    const v = videoRef.current;
+    if (!v) return;
+    const t = v.currentTime;
     setCurrentTime(t);
     onTimeUpdate?.(t);
-  }, [onTimeUpdate]);
+
+    if (!previewMode || keepSegments.length === 0) return;
+
+    // Check if we're inside a "removed" gap between kept segments
+    const inKeep = keepSegments.some((seg) => t >= seg.start && t < seg.end);
+    if (!inKeep) {
+      // Find the next kept segment start
+      const next = keepSegments.find((seg) => seg.start > t);
+      if (next) {
+        v.currentTime = next.start;
+      } else {
+        // Past all kept segments — stop
+        v.pause();
+        setPlaying(false);
+        // Rewind to first kept segment
+        const first = keepSegments[0];
+        if (first) v.currentTime = first.start;
+      }
+    }
+  }, [onTimeUpdate, previewMode, keepSegments]);
 
   const handleLoadedMetadata = useCallback(() => {
     const d = videoRef.current?.duration ?? 0;
@@ -45,9 +76,20 @@ export function PreviewPlayer({
     onDurationChange?.(d);
   }, [onDurationChange]);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
+
+    // If in preview mode and time is outside any segment, jump to first segment
+    if (previewMode && hasSegments) {
+      const inKeep = keepSegments.some(
+        (seg) => v.currentTime >= seg.start && v.currentTime < seg.end
+      );
+      if (!inKeep) {
+        v.currentTime = keepSegments[0].start;
+      }
+    }
+
     if (v.paused) {
       v.play();
       setPlaying(true);
@@ -55,9 +97,15 @@ export function PreviewPlayer({
       v.pause();
       setPlaying(false);
     }
-  };
+  }, [previewMode, hasSegments, keepSegments]);
 
-  const handleEnded = () => setPlaying(false);
+  const handleEnded = () => {
+    setPlaying(false);
+    // Rewind to first kept segment if in preview mode
+    if (previewMode && keepSegments.length > 0 && videoRef.current) {
+      videoRef.current.currentTime = keepSegments[0].start;
+    }
+  };
 
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -78,12 +126,13 @@ export function PreviewPlayer({
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   // Mark cut regions on the scrubber
-  const cutRegions = keepSegments.length > 0
-    ? keepSegments.map((seg) => ({
-        left: (seg.start / duration) * 100,
-        width: ((seg.end - seg.start) / duration) * 100,
-      }))
-    : [];
+  const cutRegions =
+    hasSegments && duration > 0
+      ? keepSegments.map((seg) => ({
+          left: (seg.start / duration) * 100,
+          width: ((seg.end - seg.start) / duration) * 100,
+        }))
+      : [];
 
   return (
     <div className="rounded-xl overflow-hidden bg-black relative group shadow-2xl">
@@ -110,6 +159,14 @@ export function PreviewPlayer({
           />
         )}
 
+        {/* Preview mode badge */}
+        {previewMode && hasSegments && (
+          <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm rounded-full px-2.5 py-1 text-[10px] font-medium text-primary border border-primary/30">
+            <Scissors className="h-3 w-3" />
+            Preview do corte
+          </div>
+        )}
+
         {/* Play/Pause large button on hover */}
         <div
           className={cn(
@@ -133,20 +190,27 @@ export function PreviewPlayer({
       <div className="bg-[hsl(220,25%,7%)] px-4 py-3 space-y-2">
         {/* Scrubber */}
         <div
-          className="relative h-2 bg-muted rounded-full cursor-pointer overflow-hidden"
+          className="relative h-2 bg-muted rounded-full cursor-pointer"
           onClick={seek}
         >
-          {/* Keep regions highlight */}
-          {cutRegions.map((r, i) => (
-            <div
-              key={i}
-              className="absolute top-0 h-full bg-primary/30 rounded-full"
-              style={{ left: `${r.left}%`, width: `${r.width}%` }}
-            />
-          ))}
+          {/* Removed regions (dark overlay) */}
+          {hasSegments && duration > 0 && (
+            <div className="absolute inset-0 rounded-full overflow-hidden">
+              {/* full bar dimmed */}
+              <div className="absolute inset-0 bg-destructive/20" />
+              {/* kept segments on top */}
+              {cutRegions.map((r, i) => (
+                <div
+                  key={i}
+                  className="absolute top-0 h-full bg-primary/35"
+                  style={{ left: `${r.left}%`, width: `${r.width}%` }}
+                />
+              ))}
+            </div>
+          )}
           {/* Progress */}
           <div
-            className="absolute top-0 left-0 h-full bg-primary rounded-full pointer-events-none"
+            className="absolute top-0 left-0 h-full bg-primary rounded-full pointer-events-none z-10"
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -168,7 +232,24 @@ export function PreviewPlayer({
             </button>
             <span>{fmt(currentTime)}</span>
           </div>
-          <span>{fmt(duration)}</span>
+
+          <div className="flex items-center gap-3">
+            {hasSegments && (
+              <button
+                onClick={() => setPreviewMode((p) => !p)}
+                className={cn(
+                  'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-colors',
+                  previewMode
+                    ? 'border-primary/50 text-primary bg-primary/10'
+                    : 'border-border text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Scissors className="h-2.5 w-2.5" />
+                {previewMode ? 'Preview ON' : 'Preview OFF'}
+              </button>
+            )}
+            <span>{fmt(duration)}</span>
+          </div>
         </div>
       </div>
     </div>
