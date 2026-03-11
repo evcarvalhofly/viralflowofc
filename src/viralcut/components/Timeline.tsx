@@ -562,6 +562,7 @@ export function Timeline({
             Arraste mídia aqui ou clique em "+ Adicionar" no painel esquerdo
           </div>
         )}
+        </div>{/* end inner width wrapper */}
       </div>
     </div>
   );
