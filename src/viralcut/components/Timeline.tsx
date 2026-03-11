@@ -236,7 +236,7 @@ export function Timeline({
       </div>
 
       {/* ── Tracks ── */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
         {tracks.map((track) => (
           <div
             key={track.id}
