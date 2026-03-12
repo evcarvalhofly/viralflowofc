@@ -26,6 +26,9 @@ export function Toolbar({
   canUndo,
   canRedo,
   onExport,
+  onSave,
+  onExportJson,
+  onImportJson,
 }: ToolbarProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(projectName);
