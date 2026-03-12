@@ -18,6 +18,8 @@ import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { exportTimelineWithFFmpeg } from '@/viralcut/export/exportTimelineWithFFmpeg';
+import { canUseFastExport } from '@/viralcut/export/fast/canUseFastExport';
+import { exportTimelineFast } from '@/viralcut/export/fast/exportTimelineFast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
