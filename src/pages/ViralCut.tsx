@@ -1,7 +1,5 @@
 // ============================================================
-// ViralCut – Main Editor Page (Refactored)
-// Responsibilities separated into: project state, history,
-// persistence, playback, timeline ops, export.
+// ViralCut – Main Editor Page
 // ============================================================
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
@@ -9,7 +7,7 @@ import {
   DEFAULT_TEXT_DETAILS, DEFAULT_VIDEO_DETAILS, DEFAULT_AUDIO_DETAILS, DEFAULT_IMAGE_DETAILS
 } from '@/viralcut/types';
 import { createId, createDefaultProject } from '@/viralcut/store';
-import { sanitizeTracks, sanitizeProject, validateProjectForExport, MIN_CLIP_DURATION } from '@/viralcut/utils/sanitize';
+import { sanitizeTracks, sanitizeProject, MIN_CLIP_DURATION } from '@/viralcut/utils/sanitize';
 import { useEditorHistory } from '@/viralcut/hooks/useEditorHistory';
 import { useProjectPersistence } from '@/viralcut/hooks/useProjectPersistence';
 import { MediaPanel } from '@/viralcut/components/MediaPanel';
@@ -19,10 +17,11 @@ import { Toolbar } from '@/viralcut/components/Toolbar';
 import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
+import { exportTimelineContinuous } from '@/viralcut/export/exportTimelineContinuous';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
-  PanelLeft, PanelRight, Scissors, Music, Type, Layers, Image, Zap,
-  Upload, Plus, Wand2, X, ZoomIn, ZoomOut, Save, FileDown, FileUp
+  PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
+  Upload, Plus, Wand2, X, ZoomIn, ZoomOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
