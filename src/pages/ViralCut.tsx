@@ -615,15 +615,27 @@ const ViralCut = () => {
         } catch { /* CORS – continue without audio */ }
 
         await new Promise<void>((res, rej) => {
+          let resolved = false;
+          const done = () => { if (!resolved) { resolved = true; res(); } };
+          const failTimer = setTimeout(() => done(), 8000);
+
           const onMeta = () => {
             vid.removeEventListener('loadedmetadata', onMeta);
             vid.currentTime = item.mediaStart;
-            const onSeeked = () => { vid.removeEventListener('seeked', onSeeked); res(); };
+            const onSeeked = () => {
+              vid.removeEventListener('seeked', onSeeked);
+              clearTimeout(failTimer);
+              done();
+            };
             vid.addEventListener('seeked', onSeeked);
-            setTimeout(res, 3000);
+            // Fallback if seeked never fires (e.g. some mobile browsers)
+            setTimeout(done, 4000);
           };
           vid.addEventListener('loadedmetadata', onMeta);
-          vid.addEventListener('error', () => rej(new Error(`Falha ao carregar: ${mf.name}`)));
+          vid.addEventListener('error', (e) => {
+            clearTimeout(failTimer);
+            rej(new Error(`Falha ao carregar: ${mf.name}`));
+          });
           vid.load();
         });
 
