@@ -286,7 +286,7 @@ function TextView({ onAddText }: { onAddText: (content?: string) => void }) {
 }
 
 function SettingsView() {
-  const activeProject = useProjectStore((s) => s.getActiveOrNull());
+  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
   const setAspectRatio = useProjectStore((s) => s.setAspectRatio);
   const updateSettings = useProjectStore((s) => s.updateSettings);
 
