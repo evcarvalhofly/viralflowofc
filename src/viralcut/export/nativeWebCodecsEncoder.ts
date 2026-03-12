@@ -25,29 +25,40 @@ export interface NativeExportOptions {
 
 const log = (...a: unknown[]) => console.log('[NativeEncoder]', ...a);
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ── Dimension resolver ──────────────────────────────────────
 function resolveOutputDimensions(
   projectWidth: number,
   projectHeight: number,
   resolution: '720p' | '1080p'
 ): { width: number; height: number } {
+  if (!projectWidth || !projectHeight) {
+    return resolution === '1080p'
+      ? { width: 1920, height: 1080 }
+      : { width: 1280, height: 720 };
+  }
+
   const isVertical = projectHeight > projectWidth;
+  const targetLongSide = resolution === '1080p' ? 1920 : 1280;
 
   let w: number, h: number;
   if (isVertical) {
-    // Vertical: scale by height to fit target long side
-    h = resolution === '1080p' ? 1920 : 1280;
+    // Vertical: scale by height (long side)
+    h = targetLongSide;
     w = Math.round((projectWidth / projectHeight) * h);
   } else {
-    // Horizontal / square: scale by width
-    w = resolution === '1080p' ? 1920 : 1280;
+    // Horizontal / square: scale by width (long side)
+    w = targetLongSide;
     h = Math.round((projectHeight / projectWidth) * w);
   }
 
-  // CRITICAL: H.264 requires even dimensions
+  // CRITICAL: H.264 requires even dimensions, minimum 2
   return {
-    width: Math.floor(w / 2) * 2,
-    height: Math.floor(h / 2) * 2,
+    width: Math.max(2, Math.floor(w / 2) * 2),
+    height: Math.max(2, Math.floor(h / 2) * 2),
   };
 }
 
@@ -116,7 +127,6 @@ async function renderFrame(
   for (const track of project.tracks) {
     if (track.muted) continue;
 
-    // Sort items so they render in chronological z-order
     const activeItems = track.items.filter(
       (item) => t >= item.startTime && t < item.endTime
     );
@@ -180,23 +190,15 @@ async function renderVideoItem(
       ctx.translate(-outputWidth / 2, -outputHeight / 2);
     }
 
-    // Cover-fit video into output canvas (letterbox/pillarbox)
+    // CONTAIN-fit: scale to fit without cropping, preserve aspect ratio
     const vidW = el.videoWidth || outputWidth;
     const vidH = el.videoHeight || outputHeight;
-    const vidAr = vidW / vidH;
-    const canvasAr = outputWidth / outputHeight;
-    let dw: number, dh: number, dx: number, dy: number;
-    if (vidAr > canvasAr) {
-      dh = outputHeight;
-      dw = dh * vidAr;
-      dx = (outputWidth - dw) / 2;
-      dy = 0;
-    } else {
-      dw = outputWidth;
-      dh = dw / vidAr;
-      dx = 0;
-      dy = (outputHeight - dh) / 2;
-    }
+
+    const scale = Math.min(outputWidth / vidW, outputHeight / vidH);
+    const dw = Math.round(vidW * scale);
+    const dh = Math.round(vidH * scale);
+    const dx = Math.round((outputWidth - dw) / 2);
+    const dy = Math.round((outputHeight - dh) / 2);
 
     ctx.drawImage(el, dx, dy, dw, dh);
     ctx.restore();
@@ -287,7 +289,6 @@ function renderTextItem(
     ctx.fillRect(pxX - textW / 2 - 8, pxY - fontSizePx / 2 - 4, textW + 16, fontSizePx + 8);
   }
 
-  // Text
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.fillStyle = td.color || '#ffffff';
@@ -320,22 +321,20 @@ async function mixAudio(
   sampleRate: number
 ): Promise<Float32Array[]> {
   const numSamples = Math.ceil(outputDuration * sampleRate);
-  const left = new Float32Array(numSamples);
-  const right = new Float32Array(numSamples);
-
   const audioCtx = new OfflineAudioContext(2, numSamples, sampleRate);
 
   const decodeAudioFile = async (file: File): Promise<AudioBuffer | null> => {
     try {
       const ab = await file.arrayBuffer();
-      return await audioCtx.decodeAudioData(ab);
+      // Use a copy to prevent detached buffer issues
+      const copy = ab.slice(0);
+      return await audioCtx.decodeAudioData(copy);
     } catch (err) {
       log('Audio decode error:', err);
       return null;
     }
   };
 
-  // Process all audio-producing tracks: audio tracks + video tracks (their audio)
   for (const track of project.tracks) {
     if (track.muted) continue;
     if (track.type !== 'audio' && track.type !== 'video') continue;
@@ -376,13 +375,20 @@ async function mixAudio(
       }
 
       srcNode.connect(gainNode).connect(audioCtx.destination);
-      srcNode.start(item.startTime, item.mediaStart, item.endTime - item.startTime);
+
+      // Clamp duration to avoid exceeding buffer length
+      const requestedDuration = Math.max(0, item.endTime - item.startTime);
+      const maxAvailable = Math.max(0, buf.duration - item.mediaStart);
+      const safeDuration = Math.min(requestedDuration, maxAvailable);
+
+      if (safeDuration > 0.001) {
+        srcNode.start(item.startTime, item.mediaStart, safeDuration);
+      }
     }
   }
 
   const rendered = await audioCtx.startRendering();
 
-  // Return as interleaved stereo channels
   const l = rendered.getChannelData(0);
   const r = rendered.numberOfChannels > 1 ? rendered.getChannelData(1) : rendered.getChannelData(0);
   return [l, r];
@@ -442,23 +448,60 @@ export async function exportTimelineNativeWebCodecs(
     fastStart: 'in-memory',
   });
 
-  // ── Video Encoder ───────────────────────────────────────────
+  // ── Video Encoder with codec candidates ─────────────────────
   const videoChunks: { chunk: EncodedVideoChunk; meta?: EncodedVideoChunkMetadata }[] = [];
+  let encoderFailed: Error | null = null;
 
   const videoEncoder = new VideoEncoder({
-    output: (chunk, meta) => videoChunks.push({ chunk, meta }),
-    error: (e) => { throw new Error(`VideoEncoder error: ${e.message}`); },
+    output: (chunk, meta) => {
+      if (!encoderFailed) videoChunks.push({ chunk, meta });
+    },
+    error: (e) => {
+      encoderFailed = new Error(`VideoEncoder error: ${e.message}`);
+      log('VideoEncoder error:', e);
+    },
   });
 
-  await videoEncoder.configure({
-    codec: 'avc1.42001F', // H.264 Baseline Level 3.1
-    width: outputWidth,
-    height: outputHeight,
-    bitrate: opts.resolution === '1080p' ? 6_000_000 : 3_500_000,
-    framerate: fps,
-    hardwareAcceleration: 'prefer-hardware',
-    latencyMode: 'quality',
-  });
+  // Try codec candidates in order of preference
+  const codecCandidates = ['avc1.42001F', 'avc1.42E01E', 'avc1.4D401F'];
+  const bitrate = opts.resolution === '1080p' ? 5_000_000 : 3_000_000;
+
+  let configured = false;
+  for (const codec of codecCandidates) {
+    try {
+      const support = await VideoEncoder.isConfigSupported({
+        codec,
+        width: outputWidth,
+        height: outputHeight,
+        bitrate,
+        framerate: fps,
+        hardwareAcceleration: 'prefer-hardware',
+        latencyMode: 'quality',
+      });
+
+      if (!support.supported) continue;
+
+      videoEncoder.configure({
+        codec,
+        width: outputWidth,
+        height: outputHeight,
+        bitrate,
+        framerate: fps,
+        hardwareAcceleration: 'prefer-hardware',
+        latencyMode: 'quality',
+      });
+
+      configured = true;
+      log('VideoEncoder configured with codec:', codec);
+      break;
+    } catch (err) {
+      log('Failed to configure codec', codec, err);
+    }
+  }
+
+  if (!configured) {
+    throw new Error('Não foi possível configurar o VideoEncoder para esta resolução. Tente 720p.');
+  }
 
   // ── Render & encode each video frame ──────────────────────
   const totalFrames = Math.ceil(totalDuration * fps);
@@ -483,6 +526,7 @@ export async function exportTimelineNativeWebCodecs(
 
   for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
     if (signal?.aborted) throw new Error('Exportação cancelada.');
+    if (encoderFailed) throw encoderFailed;
 
     const t = frameIdx * frameInterval;
     const timestampUs = Math.round(t * 1_000_000); // microseconds
@@ -494,13 +538,16 @@ export async function exportTimelineNativeWebCodecs(
       duration: Math.round(frameInterval * 1_000_000),
     });
 
-    const isKeyFrame = frameIdx % (fps * 2) === 0; // keyframe every 2s
-    videoEncoder.encode(videoFrame, { keyFrame: isKeyFrame });
-    videoFrame.close(); // Release GPU memory immediately
+    try {
+      const isKeyFrame = frameIdx % (fps * 2) === 0; // keyframe every 2s
+      videoEncoder.encode(videoFrame, { keyFrame: isKeyFrame });
+    } finally {
+      videoFrame.close(); // Release GPU memory immediately
+    }
 
-    // Every 30 frames yield to the GC to prevent OOM on mobile
-    if (frameIdx % 30 === 0) {
-      await new Promise(r => setTimeout(r, 1));
+    // Every 15 frames yield to the GC to prevent OOM on mobile
+    if (frameIdx % 15 === 0) {
+      await delay(0);
     }
 
     // Report progress (frames are 5%→70%)
@@ -510,6 +557,7 @@ export async function exportTimelineNativeWebCodecs(
     }
   }
 
+  if (encoderFailed) throw encoderFailed;
   await videoEncoder.flush();
   log(`Video encoding done — ${videoChunks.length} chunks`);
 
@@ -533,9 +581,14 @@ export async function exportTimelineNativeWebCodecs(
       log(`Audio mixing done: ${leftCh.length} samples`);
       const CHUNK_SIZE = SAMPLE_RATE; // 1s chunks
 
+      let audioEncodeError: Error | null = null;
+
       const audioEncoder = new AudioEncoder({
         output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-        error: (e) => log('AudioEncoder error:', e),
+        error: (e) => {
+          audioEncodeError = new Error(`AudioEncoder error: ${e.message}`);
+          log('AudioEncoder error:', e);
+        },
       });
 
       audioEncoder.configure({
@@ -549,6 +602,7 @@ export async function exportTimelineNativeWebCodecs(
       let offset = 0;
       while (offset < totalSamples) {
         if (signal?.aborted) throw new Error('Exportação cancelada.');
+        if (audioEncodeError) throw audioEncodeError;
 
         const size = Math.min(CHUNK_SIZE, totalSamples - offset);
         const interleaved = new Float32Array(size * 2);
@@ -571,6 +625,7 @@ export async function exportTimelineNativeWebCodecs(
         offset += size;
       }
 
+      if (audioEncodeError) throw audioEncodeError;
       await audioEncoder.flush();
       log('Audio encoding done');
     } catch (audioErr) {

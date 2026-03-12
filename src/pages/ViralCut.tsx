@@ -19,12 +19,23 @@ import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { canUseFastExport } from '@/viralcut/export/fast/canUseFastExport';
 import { exportTimelineNativeWebCodecs } from '@/viralcut/export/nativeWebCodecsEncoder';
+import { exportTimelineWithFFmpeg } from '@/viralcut/export/exportTimelineWithFFmpeg';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
   Upload, Plus, Wand2, X, ZoomIn, ZoomOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// ── Detect aspect ratio from video dimensions ────────────────
+function detectAspectRatio(width?: number, height?: number): Project['aspectRatio'] {
+  if (!width || !height) return '16:9';
+  const ratio = width / height;
+  if (Math.abs(ratio - 9 / 16) < 0.08) return '9:16';
+  if (Math.abs(ratio - 1) < 0.08) return '1:1';
+  if (Math.abs(ratio - 4 / 5) < 0.08) return '4:5';
+  return '16:9';
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 async function generateThumbnail(file: File): Promise<string | undefined> {
@@ -262,6 +273,17 @@ const ViralCut = () => {
           imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS } : undefined,
         };
         const newTracks = tracks.map((t) => t.id === track!.id ? { ...t, items: [...t.items, item] } : t);
+
+        // Auto-adjust project dimensions when the first video is imported
+        const isFirstVideoOfProject =
+          targetType === 'video' &&
+          !p.tracks.some((t) => t.type === 'video' && t.items.length > 0);
+
+        if (isFirstVideoOfProject && width && height) {
+          const aspectRatio = detectAspectRatio(width, height);
+          return { ...p, tracks: newTracks, width, height, aspectRatio };
+        }
+
         return { ...p, tracks: newTracks };
       }, { pushHistory: true });
     }
@@ -469,7 +491,7 @@ const ViralCut = () => {
   }, [currentTime, updateProject]);
   splitAllRef.current = handleSplitAllAtPlayhead;
 
-  // ── Export – fast WebCodecs engine with FFmpeg fallback ──
+  // ── Export – fast WebCodecs engine with automatic FFmpeg fallback ──
   const exportAbortRef = useRef<AbortController | null>(null);
 
   const handleExport = useCallback(async (opts: ExportOptions) => {
@@ -477,7 +499,7 @@ const ViralCut = () => {
     const abortCtrl = new AbortController();
     exportAbortRef.current = abortCtrl;
 
-    setExportState({ status: 'preparing', progress: 2, label: 'Iniciando Aceleração por GPU…' });
+    setExportState({ status: 'preparing', progress: 2, label: 'Preparando exportação…' });
     if (isMobile) setShowMobilePanel(false);
 
     const handleProgress = (progress: number, label: string) => {
@@ -487,35 +509,62 @@ const ViralCut = () => {
     const fileName = `${project.name || 'viralcut-export'}_${opts.resolution}_${opts.fps}fps`;
 
     try {
-      if (!canUseFastExport()) {
-        throw new Error('Seu navegador não suporta exportação por GPU. Use o Chrome ou Edge atualizado.');
+      let blob: Blob | null = null;
+
+      if (canUseFastExport()) {
+        try {
+          console.log('[ViralCut] Tentando exportação nativa WebCodecs (GPU)…');
+          setExportState({ status: 'preparing', progress: 3, label: 'Iniciando aceleração por GPU…' });
+
+          blob = await exportTimelineNativeWebCodecs(
+            project,
+            media,
+            { fps: opts.fps, resolution: opts.resolution, fileName },
+            handleProgress,
+            abortCtrl.signal
+          );
+        } catch (gpuErr: any) {
+          if (abortCtrl.signal.aborted || gpuErr?.message === 'Exportação cancelada.') {
+            setExportState({ status: 'idle', progress: 0, label: '' });
+            return;
+          }
+          console.warn('[ViralCut] GPU falhou, tentando FFmpeg:', gpuErr?.message);
+          setExportState({ status: 'preparing', progress: 6, label: 'GPU falhou, usando modo compatível…' });
+
+          blob = await exportTimelineWithFFmpeg(
+            project,
+            media,
+            { fps: opts.fps, resolution: opts.resolution, projectName: fileName },
+            handleProgress,
+            abortCtrl.signal
+          );
+        }
+      } else {
+        console.log('[ViralCut] WebCodecs indisponível, usando FFmpeg…');
+        blob = await exportTimelineWithFFmpeg(
+          project,
+          media,
+          { fps: opts.fps, resolution: opts.resolution, projectName: fileName },
+          handleProgress,
+          abortCtrl.signal
+        );
       }
 
-      console.log('[ViralCut] Iniciando exportação nativa WebCodecs (sem marca d\'água)');
-
-      const mp4Blob = await exportTimelineNativeWebCodecs(
-        project,
-        media,
-        { fps: opts.fps, resolution: opts.resolution, fileName },
-        handleProgress,
-        abortCtrl.signal
-      );
-
-      if (!mp4Blob || mp4Blob.size < 1024) {
-        throw new Error(`Arquivo exportado inválido (${mp4Blob?.size ?? 0} bytes). Verifique os clipes.`);
+      if (!blob || blob.size < 1024) {
+        throw new Error(`Arquivo exportado inválido (${blob?.size ?? 0} bytes). Verifique os clipes na timeline.`);
       }
 
-      const dlUrl = URL.createObjectURL(mp4Blob);
+      const dlUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = dlUrl;
       a.download = `${fileName}.mp4`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
 
-      setExportState({ status: 'done', progress: 100, label: 'Vídeo exportado via GPU Nativa!' });
+      setExportState({ status: 'done', progress: 100, label: 'Vídeo exportado com sucesso!' });
 
     } catch (err: any) {
-      console.error('[ViralCut] Erro na exportação nativa WebCodecs:', err);
+      console.error('[ViralCut] Erro final na exportação:', err);
 
       if (err?.message === 'Exportação cancelada.' || abortCtrl.signal.aborted) {
         setExportState({ status: 'idle', progress: 0, label: '' });
@@ -526,7 +575,7 @@ const ViralCut = () => {
         status: 'error',
         progress: 0,
         label: '',
-        error: `Erro na GPU: ${err.message}. Tente reduzir a resolução para 720p.`
+        error: `Erro ao exportar: ${err?.message ?? 'falha desconhecida'}`,
       });
     }
   }, [project, media, isMobile]);
