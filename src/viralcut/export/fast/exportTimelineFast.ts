@@ -146,7 +146,6 @@ export async function exportTimelineFast(
         throw new Error(`Falha no encoder: ${(result as any).error?.message ?? 'erro desconhecido'}`);
       }
       // type === 'success' with FileSystemFileHandle: data is undefined (written to disk)
-      // We trust the file was written — no further blob validation needed
       log('Export to disk complete via showSaveFilePicker');
 
     } else {
@@ -158,6 +157,18 @@ export async function exportTimelineFast(
   } finally {
     if (abortListener && signal) {
       signal.removeEventListener('abort', abortListener);
+    }
+    // ── PASSO 3: Liberar recursos da GPU após exportação ───
+    try {
+      if (typeof (composition as any).destroy === 'function') {
+        (composition as any).destroy();
+        log('Composition destroyed — GPU memory released');
+      } else if (typeof (composition as any).dispose === 'function') {
+        (composition as any).dispose();
+        log('Composition disposed — GPU memory released');
+      }
+    } catch (disposeErr) {
+      log('Warning: could not dispose composition:', disposeErr);
     }
   }
 
