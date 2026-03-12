@@ -286,7 +286,12 @@ function TextView({ onAddText }: { onAddText: (content?: string) => void }) {
 }
 
 function SettingsView() {
-  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
+  const projects = useProjectStore((s) => s.projects);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  );
   const setAspectRatio = useProjectStore((s) => s.setAspectRatio);
   const updateSettings = useProjectStore((s) => s.updateSettings);
 
