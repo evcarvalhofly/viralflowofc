@@ -549,13 +549,18 @@ const ViralCut = () => {
             handleProgress,
             abortCtrl.signal
           );
+          // Validate before download
+          console.log('[ViralCut] FFmpeg fallback blob size:', mp4Blob?.size ?? 0);
+          if (!mp4Blob || mp4Blob.size <= 1024) {
+            throw new Error(`FFmpeg fallback gerou arquivo inválido (${mp4Blob?.size ?? 0} bytes)`);
+          }
           const dlUrl = URL.createObjectURL(mp4Blob);
           const a = document.createElement('a');
           a.href = dlUrl;
           a.download = `${fileName}.mp4`;
           a.click();
           setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
-          setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+          setExportState({ status: 'done', progress: 100, label: 'Vídeo exportado com sucesso!' });
           return;
         } catch (fallbackErr: any) {
           console.error('[ViralCut] FFmpeg fallback also failed:', fallbackErr);
