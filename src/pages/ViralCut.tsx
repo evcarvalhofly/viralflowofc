@@ -1019,7 +1019,18 @@ const ViralCut = () => {
         {/* Timeline */}
         <div className="flex-1 min-h-0 border-t border-border flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 px-2 py-1 bg-card/60 border-b border-border shrink-0">
-            <span className="text-[10px] font-semibold text-foreground flex-1">Timeline</span>
+            <span className="text-[10px] font-semibold text-foreground">Timeline</span>
+            {/* Zoom controls */}
+            <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg px-1 py-0.5">
+              <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.max(20, z - 20))} title="Zoom out">
+                <ZoomOut className="h-3 w-3" />
+              </button>
+              <span className="text-[10px] font-mono text-muted-foreground w-9 text-center tabular-nums">{zoom}px/s</span>
+              <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.min(300, z + 20))} title="Zoom in">
+                <ZoomIn className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="flex-1" />
             <button
               className="p-1 rounded bg-muted/60 text-muted-foreground hover:text-foreground"
               onClick={() => importRef.current?.click()}
