@@ -17,7 +17,7 @@ import { Toolbar } from '@/viralcut/components/Toolbar';
 import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
-import { exportTimelineContinuous } from '@/viralcut/export/exportTimelineContinuous';
+import { exportTimelineWithFFmpeg } from '@/viralcut/export/exportTimelineWithFFmpeg';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
