@@ -615,15 +615,27 @@ const ViralCut = () => {
         } catch { /* CORS – continue without audio */ }
 
         await new Promise<void>((res, rej) => {
+          let resolved = false;
+          const done = () => { if (!resolved) { resolved = true; res(); } };
+          const failTimer = setTimeout(() => done(), 8000);
+
           const onMeta = () => {
             vid.removeEventListener('loadedmetadata', onMeta);
             vid.currentTime = item.mediaStart;
-            const onSeeked = () => { vid.removeEventListener('seeked', onSeeked); res(); };
+            const onSeeked = () => {
+              vid.removeEventListener('seeked', onSeeked);
+              clearTimeout(failTimer);
+              done();
+            };
             vid.addEventListener('seeked', onSeeked);
-            setTimeout(res, 3000);
+            // Fallback if seeked never fires (e.g. some mobile browsers)
+            setTimeout(done, 4000);
           };
           vid.addEventListener('loadedmetadata', onMeta);
-          vid.addEventListener('error', () => rej(new Error(`Falha ao carregar: ${mf.name}`)));
+          vid.addEventListener('error', (e) => {
+            clearTimeout(failTimer);
+            rej(new Error(`Falha ao carregar: ${mf.name}`));
+          });
           vid.load();
         });
 
@@ -772,12 +784,21 @@ const ViralCut = () => {
 
       const ffmpeg = new FFmpeg();
 
-      // Load FFmpeg WASM core from CDN
-      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      });
+      // Load FFmpeg WASM core from CDN (jsDelivr is more reliable than unpkg)
+      const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+      try {
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+      } catch {
+        // Fallback to unpkg if jsDelivr fails
+        const fallbackURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+      }
 
       setExportState({ status: 'encoding', progress: 72, label: 'Processando com FFmpeg…' });
 
@@ -843,9 +864,14 @@ const ViralCut = () => {
 
     } catch (err: any) {
       console.error('Export error:', err);
+      // Provide a helpful message — FFmpeg CDN load failures are the most common cause
+      let errMsg = err?.message ?? 'Tente novamente';
+      if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('load')) {
+        errMsg = 'Falha ao carregar FFmpeg (verifique a conexão com a internet)';
+      }
       setExportState({
         status: 'error', progress: 0, label: '',
-        error: `Erro ao exportar: ${err?.message ?? 'Tente novamente'}`,
+        error: `Erro ao exportar: ${errMsg}`,
       });
     }
   }, [project, media, isMobile]);
