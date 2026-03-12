@@ -86,7 +86,7 @@ export function ExportModal({ open, onClose, onExport, exportState, project }: E
 
           {done && (
             <div className="rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-primary text-center font-medium">
-              ✓ Download iniciado com sucesso!
+              ✓ Vídeo exportado com sucesso!
             </div>
           )}
 
