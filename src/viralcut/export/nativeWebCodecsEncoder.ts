@@ -550,7 +550,7 @@ export async function exportTimelineNativeWebCodecs(
         }
 
         const audioData = new AudioData({
-          format: 'f32-interleaved',
+          format: 'f32-interleaved' as AudioSampleFormat,
           sampleRate: SAMPLE_RATE,
           numberOfFrames: size,
           numberOfChannels: 2,
