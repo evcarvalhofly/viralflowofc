@@ -3,6 +3,7 @@
 // Converts a ViralCut TrackItem (text) into a core.TextClip.
 // fontSize in ViralCut is % of canvas height.
 // posX/posY are % of canvas dimensions.
+// Uses the REAL @diffusionstudio/core TextClip API.
 // ============================================================
 import * as core from '@diffusionstudio/core';
 import { TrackItem, Project } from '@/viralcut/types';
@@ -20,7 +21,7 @@ export async function mapTextClip(
   const pxX = ((td.posX) / 100) * project.width;
   const pxY = ((td.posY) / 100) * project.height;
 
-  const clip = new core.TextClip({
+  const clipProps: ConstructorParameters<typeof core.TextClip>[0] = {
     text: td.text,
     delay: item.startTime,
     duration,
@@ -28,13 +29,14 @@ export async function mapTextClip(
     y: pxY,
     fontSize: fontSizePx,
     fontFamily: td.fontFamily,
-    color: td.color,
+    // TextClip.color requires `#${string}` hex format
+    color: (td.color.startsWith('#') ? td.color : '#ffffff') as `#${string}`,
     opacity: td.opacity,
     align: td.textAlign as 'left' | 'center' | 'right',
     ...(td.backgroundColor && td.backgroundColor !== 'transparent'
-      ? { background: { color: td.backgroundColor, padding: 4 } }
+      ? { background: { color: td.backgroundColor as `#${string}`, padding: 4 } }
       : {}),
-  });
+  };
 
-  return clip;
+  return new core.TextClip(clipProps);
 }

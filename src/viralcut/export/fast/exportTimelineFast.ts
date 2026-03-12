@@ -42,13 +42,9 @@ export async function exportTimelineFast(
 
   onProgress?.(10, 'Inicializando encoder…');
 
-  // Resolution multiplier: 1 = original, 2 = 2x
-  // For 1080p, we scale to match the project width/height (already set on composition)
-  const fpsValue = opts.fps;
-
   const encoder = new core.Encoder(composition, {
     video: {
-      fps: fpsValue,
+      fps: opts.fps,
     },
   });
 
@@ -60,48 +56,55 @@ export async function exportTimelineFast(
     onProgress(pct, `Exportando… ${Math.round((event.progress / total) * 100)}%`);
   };
 
-  // Wire abort
+  // Wire abort via encoder.cancel()
+  let abortListener: (() => void) | null = null;
   if (signal) {
-    signal.addEventListener('abort', () => {
+    abortListener = () => {
       try { encoder.cancel(); } catch { /* ignore */ }
-    });
+    };
+    signal.addEventListener('abort', abortListener);
   }
 
   const suggestedName = opts.fileName.endsWith('.mp4')
     ? opts.fileName
     : `${opts.fileName}.mp4`;
 
-  // Try showSaveFilePicker (Chromium) → direct-to-disk, no RAM spike
-  const supportsFilePicker =
-    typeof window !== 'undefined' && 'showSaveFilePicker' in window;
+  try {
+    // Try showSaveFilePicker (Chromium) → direct-to-disk, no RAM spike
+    const supportsFilePicker =
+      typeof window !== 'undefined' && 'showSaveFilePicker' in window;
 
-  if (supportsFilePicker) {
-    try {
-      const handle = await (window as any).showSaveFilePicker({
-        suggestedName,
-        types: [
-          {
-            description: 'Arquivo de Vídeo MP4',
-            accept: { 'video/mp4': ['.mp4'] },
-          },
-        ],
-      });
+    if (supportsFilePicker) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName,
+          types: [
+            {
+              description: 'Arquivo de Vídeo MP4',
+              accept: { 'video/mp4': ['.mp4'] },
+            },
+          ],
+        });
 
-      log('Using showSaveFilePicker for direct-to-disk export');
-      onProgress?.(12, 'Exportando…');
-      await encoder.render(handle, signal);
-    } catch (err: any) {
-      // User cancelled the file picker
-      if (err?.name === 'AbortError') {
-        throw new Error('Exportação cancelada.');
+        log('Using showSaveFilePicker for direct-to-disk export');
+        onProgress?.(12, 'Exportando…');
+        await encoder.render(handle);
+      } catch (err: any) {
+        if (err?.name === 'AbortError' || signal?.aborted) {
+          throw new Error('Exportação cancelada.');
+        }
+        // Picker not available in this context — fall back to blob
+        log('showSaveFilePicker failed, falling back to blob:', err?.message);
+        await exportWithBlobFallback(encoder, suggestedName);
       }
-      // Picker not available in this browser — fall back to blob
-      log('showSaveFilePicker failed, falling back to blob:', err?.message);
-      await exportWithBlobFallback(encoder, suggestedName, signal);
+    } else {
+      log('showSaveFilePicker not available, using blob fallback');
+      await exportWithBlobFallback(encoder, suggestedName);
     }
-  } else {
-    log('showSaveFilePicker not available, using blob fallback');
-    await exportWithBlobFallback(encoder, suggestedName, signal);
+  } finally {
+    if (abortListener && signal) {
+      signal.removeEventListener('abort', abortListener);
+    }
   }
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
@@ -111,27 +114,28 @@ export async function exportTimelineFast(
 
 async function exportWithBlobFallback(
   encoder: core.Encoder,
-  fileName: string,
-  signal?: AbortSignal
+  fileName: string
 ): Promise<void> {
-  // When showSaveFilePicker is unavailable, render to a Blob then trigger download
-  const chunks: Uint8Array[] = [];
-
-  // render() without a file handle is not directly supported,
-  // so we fall through to a WritableStream-based approach
-  const writableStream = new WritableStream<Uint8Array>({
-    write(chunk) {
-      chunks.push(chunk);
-    },
-  });
-
-  await encoder.render(writableStream as any, signal);
-
-  const blob = new Blob(chunks, { type: 'video/mp4' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  // render() with a string filename downloads directly in supported browsers
+  // For others, render to WritableStream and collect chunks
+  try {
+    await encoder.render(fileName);
+  } catch {
+    // Last resort: render to a string name which Diffusion handles as a download
+    log('String render failed, trying WritableStream…');
+    const chunks: Uint8Array[] = [];
+    const writableStream = new WritableStream<Uint8Array>({
+      write(chunk) {
+        chunks.push(new Uint8Array(chunk));
+      },
+    });
+    await encoder.render(writableStream);
+    const blob = new Blob(chunks, { type: 'video/mp4' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
 }

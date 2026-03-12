@@ -2,6 +2,7 @@
 // ViralCut – Image Clip Mapper
 // Converts a ViralCut TrackItem (image) into a core.ImageClip.
 // posX/posY are % of canvas dimensions in ViralCut.
+// Uses the REAL @diffusionstudio/core API (Effect plain objects).
 // ============================================================
 import * as core from '@diffusionstudio/core';
 import { TrackItem, Project } from '@/viralcut/types';
@@ -26,6 +27,17 @@ export async function mapImageClip(
   const pxW = Math.round(((id?.width ?? 50) / 100) * project.width);
   const pxH = Math.round(((id?.height ?? 50) / 100) * project.height);
 
+  const effects: core.Effect[] = [];
+  if (id?.brightness !== undefined && Math.abs(id.brightness - 1) > 0.01) {
+    effects.push({ type: 'brightness', value: id.brightness * 100 });
+  }
+  if (id?.contrast !== undefined && Math.abs(id.contrast - 1) > 0.01) {
+    effects.push({ type: 'contrast', value: id.contrast * 100 });
+  }
+  if (id?.saturation !== undefined && Math.abs(id.saturation - 1) > 0.01) {
+    effects.push({ type: 'saturate', value: id.saturation * 100 });
+  }
+
   const clip = new core.ImageClip(source, {
     delay: item.startTime,
     duration,
@@ -34,24 +46,10 @@ export async function mapImageClip(
     width: pxW,
     height: pxH,
     opacity: id?.opacity ?? 1,
+    scaleX: id?.flipH ? -1 : 1,
+    scaleY: id?.flipV ? -1 : 1,
+    effects,
   });
-
-  const effects: core.Effect[] = [];
-  if (id?.brightness !== undefined && Math.abs(id.brightness - 1) > 0.01) {
-    effects.push(new core.BrightnessEffect({ brightness: id.brightness }));
-  }
-  if (id?.contrast !== undefined && Math.abs(id.contrast - 1) > 0.01) {
-    effects.push(new core.ContrastEffect({ contrast: id.contrast }));
-  }
-  if (id?.saturation !== undefined && Math.abs(id.saturation - 1) > 0.01) {
-    effects.push(new core.SaturationEffect({ saturation: id.saturation }));
-  }
-  if (effects.length > 0) {
-    clip.filters = effects;
-  }
-
-  if (id?.flipH) clip.scale(-1, 1);
-  if (id?.flipV) clip.scale(1, -1);
 
   return clip;
 }

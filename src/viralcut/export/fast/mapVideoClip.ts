@@ -1,6 +1,10 @@
 // ============================================================
 // ViralCut – Video Clip Mapper
 // Converts a ViralCut TrackItem (video) into a core.VideoClip.
+// Uses the REAL @diffusionstudio/core API:
+//   - effects: Effect[] (plain objects with type + value)
+//   - scaleX / scaleY (number properties on the clip)
+//   - No BrightnessEffect/ContrastEffect classes
 // ============================================================
 import * as core from '@diffusionstudio/core';
 import { TrackItem } from '@/viralcut/types';
@@ -19,43 +23,34 @@ export async function mapVideoClip(
   const vd = item.videoDetails;
   const duration = item.endTime - item.startTime;
 
-  const clip = new core.VideoClip(source, {
-    // trim into the source media
-    range: [item.mediaStart, item.mediaEnd] as [number, number],
-    // position on the composition timeline
-    delay: item.startTime,
-    duration,
-    // visual
-    opacity: vd?.opacity ?? 1,
-    volume: vd?.volume ?? 1,
-    position: 'center',
-  });
-
-  // Apply CSS filter effects
+  // Build effects array using plain Effect objects (not class instances)
   const effects: core.Effect[] = [];
 
   if (vd?.brightness !== undefined && Math.abs(vd.brightness - 1) > 0.01) {
-    effects.push(new core.BrightnessEffect({ brightness: vd.brightness }));
+    // Core uses CSS % values: 1.0 = 100%, 1.5 = 150%
+    effects.push({ type: 'brightness', value: vd.brightness * 100 });
   }
   if (vd?.contrast !== undefined && Math.abs(vd.contrast - 1) > 0.01) {
-    effects.push(new core.ContrastEffect({ contrast: vd.contrast }));
+    effects.push({ type: 'contrast', value: vd.contrast * 100 });
   }
   if (vd?.saturation !== undefined && Math.abs(vd.saturation - 1) > 0.01) {
-    effects.push(new core.SaturationEffect({ saturation: vd.saturation }));
+    effects.push({ type: 'saturate', value: vd.saturation * 100 });
   }
 
-  if (effects.length > 0) {
-    clip.filters = effects;
-  }
+  const clip = new core.VideoClip(source, {
+    range: [item.mediaStart, item.mediaEnd] as [number, number],
+    delay: item.startTime,
+    duration,
+    opacity: vd?.opacity ?? 1,
+    volume: vd?.volume ?? 1,
+    position: 'center',
+    scaleX: vd?.flipH ? -1 : 1,
+    scaleY: vd?.flipV ? -1 : 1,
+    effects,
+  });
 
-  // Flip transforms
-  if (vd?.flipH) clip.scale(-1, 1);
-  if (vd?.flipV) clip.scale(1, -1);
-
-  // Playback rate
   if (vd?.playbackRate !== undefined && Math.abs(vd.playbackRate - 1) > 0.01) {
-    // @ts-expect-error playbackRate may not be in types but is supported at runtime
-    clip.playbackRate = vd.playbackRate;
+    (clip as any).playbackRate = vd.playbackRate;
   }
 
   return clip;
