@@ -123,10 +123,12 @@ async function exportWithBlobFallback(
   } catch {
     // Last resort: render to a string name which Diffusion handles as a download
     log('String render failed, trying WritableStream…');
-    const chunks: Uint8Array[] = [];
+    const chunks: ArrayBuffer[] = [];
     const writableStream = new WritableStream<Uint8Array>({
       write(chunk) {
-        chunks.push(new Uint8Array(chunk));
+        // Copy to a plain ArrayBuffer to avoid SharedArrayBuffer issues
+        const buf = chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer;
+        chunks.push(buf);
       },
     });
     await encoder.render(writableStream);
