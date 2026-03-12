@@ -273,6 +273,17 @@ const ViralCut = () => {
           imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS } : undefined,
         };
         const newTracks = tracks.map((t) => t.id === track!.id ? { ...t, items: [...t.items, item] } : t);
+
+        // Auto-adjust project dimensions when the first video is imported
+        const isFirstVideoOfProject =
+          targetType === 'video' &&
+          !p.tracks.some((t) => t.type === 'video' && t.items.length > 0);
+
+        if (isFirstVideoOfProject && width && height) {
+          const aspectRatio = detectAspectRatio(width, height);
+          return { ...p, tracks: newTracks, width, height, aspectRatio };
+        }
+
         return { ...p, tracks: newTracks };
       }, { pushHistory: true });
     }
