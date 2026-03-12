@@ -1,16 +1,13 @@
 // ============================================================
 // Toolbar – Top bar with project name, zoom, export
 // ============================================================
-import { Scissors, Download, ZoomIn, ZoomOut, Undo2, Redo2, Edit2, Check } from 'lucide-react';
+import { Scissors, Download, Undo2, Redo2, Edit2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
 interface ToolbarProps {
   projectName: string;
   onProjectNameChange: (name: string) => void;
-  zoom: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;

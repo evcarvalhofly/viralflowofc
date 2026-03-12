@@ -1183,9 +1183,6 @@ const ViralCut = () => {
       <Toolbar
         projectName={project.name}
         onProjectNameChange={(name) => setProject((p) => ({ ...p, name }))}
-        zoom={zoom}
-        onZoomIn={() => setZoom((z) => Math.min(300, z + 20))}
-        onZoomOut={() => setZoom((z) => Math.max(20, z - 20))}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
