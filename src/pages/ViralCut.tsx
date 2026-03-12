@@ -480,7 +480,7 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
-      const mp4Blob = await exportTimelineContinuous(
+      const mp4Blob = await exportTimelineWithFFmpeg(
         project,
         media,
         { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
