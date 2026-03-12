@@ -471,7 +471,54 @@ const ViralCut = () => {
   splitAllRef.current = handleSplitAllAtPlayhead;
 
   // ── Export ────────────────────────────────────────────────
+  // ── Export (continuous single-pass engine) ────────────────
+  const exportAbortRef = useRef<AbortController | null>(null);
+
   const handleExport = useCallback(async (opts: ExportOptions) => {
+    // Cancel any in-progress export
+    exportAbortRef.current?.abort();
+    const abortCtrl = new AbortController();
+    exportAbortRef.current = abortCtrl;
+
+    setExportState({ status: 'preparing', progress: 2, label: 'Preparando…' });
+    if (isMobile) setShowMobilePanel(false);
+
+    try {
+      const mp4Blob = await exportTimelineContinuous(
+        project,
+        media,
+        {
+          resolution: opts.resolution,
+          fps: opts.fps,
+          projectName: project.name,
+        },
+        (progress, label) => setExportState({ status: 'encoding', progress, label }),
+        abortCtrl.signal
+      );
+
+      setExportState({ status: 'encoding', progress: 98, label: 'Iniciando download…' });
+
+      const dlUrl = URL.createObjectURL(mp4Blob);
+      const a = document.createElement('a');
+      a.href = dlUrl;
+      a.download = `${project.name}_${opts.resolution}_${opts.fps}fps.mp4`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
+
+      setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+    } catch (err: any) {
+      if (err?.message === 'Exportação cancelada.') {
+        setExportState({ status: 'idle', progress: 0, label: '' });
+        return;
+      }
+      console.error('[ViralCut] Export error:', err);
+      let errMsg = err?.message ?? 'Tente novamente';
+      if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('load')) {
+        errMsg = 'Falha ao carregar FFmpeg (verifique a conexão com a internet)';
+      }
+      setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${errMsg}` });
+    }
+  }, [project, media, isMobile]);
     setExportState({ status: 'preparing', progress: 2, label: 'Preparando…' });
     if (isMobile) setShowMobilePanel(false);
 
