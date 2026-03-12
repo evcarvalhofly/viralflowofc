@@ -488,11 +488,10 @@ export function PreviewPanel({
   useEffect(() => { applyVideoProps(); }, [applyVideoProps]);
 
   // ── Background preloading of NEXT clip ────────────────────
-  // When < 1.5s left in current clip, load next clip into inactive slot
+  // Start preloading the next clip as soon as we enter any clip.
+  // Also refresh every tick when < 4s left (bigger window = fewer black flashes).
   useEffect(() => {
-    if (!activeVideoItem || !nextVideoItem) return;
-    const timeLeft = activeVideoItem.item.endTime - currentTime;
-    if (timeLeft > 1.5) return; // not time yet
+    if (!nextVideoItem) return;
 
     const nextMf = nextVideoItem.mediaFile;
     if (!nextMf) return;
@@ -500,8 +499,14 @@ export function PreviewPanel({
     const nextItem = nextVideoItem.item;
     const targetMediaTime = nextItem.mediaStart;
 
-    // Don't re-preload if already preloaded for this clip
+    // Only start if not already preloaded/preloading for this clip
     if (preloadRef.current?.itemId === nextItem.id) return;
+
+    // Throttle: only start when we're reasonably close (within 4s)
+    if (activeVideoItem) {
+      const timeLeft = activeVideoItem.item.endTime - currentTime;
+      if (timeLeft > 4) return;
+    }
 
     const pv = getPreloadVideo();
     if (!pv) return;
