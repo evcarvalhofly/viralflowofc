@@ -5,7 +5,7 @@
 // Quick-split button: cuts ALL items across tracks at playhead
 // ============================================================
 import { useRef, useState, useCallback } from 'react';
-import { Lock, Volume2, VolumeX, Trash2, Film, Music, Type, Image, Scissors } from 'lucide-react';
+import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
 
