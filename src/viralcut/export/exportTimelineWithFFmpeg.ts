@@ -173,7 +173,9 @@ export async function exportTimelineWithFFmpeg(
   onProgress(28, 'Iniciando exportação com FFmpeg…');
 
   const crf = opts.resolution === '1080p' ? 23 : 26;
-  const preset = 'ultrafast';
+  // 'fast' gives noticeably better quality than 'ultrafast' with a small speed trade-off.
+  // On mobile/WASM the absolute encoding time is dominated by I/O and decoding, not the preset.
+  const preset = 'fast';
 
   const ffmpegArgs = [
     ...inputArgs,
