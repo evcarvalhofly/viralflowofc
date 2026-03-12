@@ -44,10 +44,10 @@ export async function mapTextClip(
     ...(td.backgroundColor && td.backgroundColor !== 'transparent'
       ? {
           background: {
-            color: (td.backgroundColor.startsWith('#')
+            fill: (td.backgroundColor.startsWith('#')
               ? td.backgroundColor
               : '#000000') as `#${string}`,
-            padding: 4,
+            padding: { x: 8, y: 4 },
           },
         }
       : {}),
