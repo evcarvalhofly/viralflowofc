@@ -496,7 +496,12 @@ export async function exportTimelineNativeWebCodecs(
 
     const isKeyFrame = frameIdx % (fps * 2) === 0; // keyframe every 2s
     videoEncoder.encode(videoFrame, { keyFrame: isKeyFrame });
-    videoFrame.close();
+    videoFrame.close(); // Release GPU memory immediately
+
+    // Every 30 frames yield to the GC to prevent OOM on mobile
+    if (frameIdx % 30 === 0) {
+      await new Promise(r => setTimeout(r, 1));
+    }
 
     // Report progress (frames are 5%→70%)
     if (frameIdx % 5 === 0) {
