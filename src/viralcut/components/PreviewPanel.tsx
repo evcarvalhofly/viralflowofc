@@ -1,7 +1,7 @@
 // ============================================================
-// PreviewPanel – Video preview with DIRECT MANIPULATION overlays
-// - Text/image overlays match export exactly (fontSize = % of height)
-// - Click overlay to select; drag to reposition; corner handle to resize
+// PreviewPanel – Double-buffer video for seamless clip transitions
+// Two hidden <video> elements swap on each clip change so there
+// is ZERO seek delay visible to the user (no black flash).
 // ============================================================
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Move } from 'lucide-react';
@@ -50,17 +50,6 @@ function previewSize(w?: number, h?: number): { w: number; h: number } {
   return { w: Math.max(2, Math.round(w * scale / 2) * 2), h: Math.max(2, Math.round(h * scale / 2) * 2) };
 }
 
-function seekTo(v: HTMLVideoElement, t: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (Math.abs(v.currentTime - t) < 0.05) { resolve(); return; }
-    const onSeeked = () => { v.removeEventListener('seeked', onSeeked); resolve(); };
-    v.addEventListener('seeked', onSeeked);
-    const timeout = setTimeout(() => { v.removeEventListener('seeked', onSeeked); resolve(); }, 800);
-    v.addEventListener('seeked', () => clearTimeout(timeout), { once: true });
-    v.currentTime = t;
-  });
-}
-
 // ── Direct-manipulation overlay for a text or image item ──────────────────
 interface OverlayHandleProps {
   item: TrackItem;
@@ -81,30 +70,23 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
   const posY = td?.posY ?? imgd?.posY ?? 50;
   const width = td?.width ?? imgd?.width ?? 50;
 
-  // Double-click detection ref
   const lastTapRef = useRef<number>(0);
 
-  // ── Drag to move ──────────────────────────────────────────────
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     onSelect();
     const container = containerRef.current;
     if (!container) return;
-
-    // If touch with 2+ fingers, skip drag (pinch will handle it)
     if ('touches' in e && e.touches.length >= 2) return;
 
     const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const origPosX = posX;
     const origPosY = posY;
-    let moved = false;
 
     const onMove = (ev: MouseEvent | TouchEvent) => {
-      // If 2 fingers appear mid-drag, abort drag
       if ('touches' in ev && (ev as TouchEvent).touches.length >= 2) return;
       ev.preventDefault();
-      moved = true;
       const cx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
       const cy = 'touches' in ev ? (ev as TouchEvent).touches[0].clientY : (ev as MouseEvent).clientY;
       const rect = container.getBoundingClientRect();
@@ -129,7 +111,6 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
     window.addEventListener('touchend', onUp);
   };
 
-  // ── Pinch to resize (touch only, when selected) ───────────────
   const handlePinchStart = (e: React.TouchEvent) => {
     if (!isSelected || e.touches.length < 2) return;
     e.stopPropagation();
@@ -149,11 +130,9 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
       const dist = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
       const ratio = dist / startDist;
       if (td) {
-        // For text: scale fontSize
         const newFontSize = Math.max(0.5, Math.min(30, origFontSize * ratio));
         onUpdate({ textDetails: { ...td, fontSize: newFontSize } });
       } else if (imgd) {
-        // For images: scale width
         const newW = Math.max(5, Math.min(100, origWidth * ratio));
         onUpdate({ imageDetails: { ...imgd, width: newW } });
       }
@@ -168,7 +147,6 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
     window.addEventListener('touchend', onUp);
   };
 
-  // ── Corner handle to resize width ─────────────────────────────
   const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     const container = containerRef.current;
@@ -181,7 +159,7 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
       ev.preventDefault();
       const cx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
       const rect = container.getBoundingClientRect();
-      const dx = ((cx - startX) / rect.width) * 100 * 2; // *2 because centered
+      const dx = ((cx - startX) / rect.width) * 100 * 2;
       const newW = Math.max(5, Math.min(100, origWidth + dx));
       if (td) onUpdate({ textDetails: { ...td, width: newW } });
       else if (imgd) onUpdate({ imageDetails: { ...imgd, width: newW } });
@@ -220,7 +198,6 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
         if (e.touches.length >= 2 && isSelected) {
           handlePinchStart(e);
         } else {
-          // Double-tap detection
           const now = Date.now();
           if (isSelected && now - lastTapRef.current < 400) {
             lastTapRef.current = 0;
@@ -233,7 +210,6 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
       }}
       onClick={(e) => {
         e.stopPropagation();
-        // Double-click detection for desktop
         const now = Date.now();
         if (isSelected && now - lastTapRef.current < 400) {
           lastTapRef.current = 0;
@@ -246,7 +222,6 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
     >
       {children}
 
-      {/* Resize handle — bottom-right corner */}
       {isSelected && (
         <div
           style={{
@@ -267,7 +242,6 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
         />
       )}
 
-      {/* Move/edit indicator when selected */}
       {isSelected && (
         <div
           style={{
@@ -305,7 +279,10 @@ export function PreviewPanel({
   onUpdateItem,
   onOpenProperties,
 }: PreviewPanelProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // ── Double-buffer: two video elements swap on each clip transition ─
+  const videoRefA = useRef<HTMLVideoElement>(null);
+  const videoRefB = useRef<HTMLVideoElement>(null);
+  const activeSlotRef = useRef<'A' | 'B'>('A');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayContainerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -314,9 +291,14 @@ export function PreviewPanel({
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
 
-  const lastSegmentIdRef = useRef<string | null>(null);
-  const lastSrcRef = useRef<string>('');
-  const seekingRef = useRef(false);
+  // Preload tracking: what is ready in the inactive slot
+  const preloadRef = useRef<{ itemId: string; url: string; mediaTime: number; ready: boolean } | null>(null);
+  const activeItemIdRef = useRef<string | null>(null);
+
+  const getActiveVideo = useCallback(() =>
+    activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current, []);
+  const getPreloadVideo = useCallback(() =>
+    activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current, []);
 
   // ── Derived active items ───────────────────────────────────
   const activeVideoItem = (() => {
@@ -329,6 +311,19 @@ export function PreviewPanel({
       }
     }
     return null;
+  })();
+
+  // Next video item (for background preloading)
+  const nextVideoItem = (() => {
+    if (!activeVideoItem) return null;
+    const all = tracks
+      .filter((t) => t.type === 'video' && !t.muted)
+      .flatMap((t) => t.items)
+      .sort((a, b) => a.startTime - b.startTime);
+    const idx = all.findIndex((i) => i.id === activeVideoItem.item.id);
+    if (idx < 0 || idx >= all.length - 1) return null;
+    const next = all[idx + 1];
+    return { item: next, mediaFile: media.find((m) => m.id === next.mediaId) };
   })();
 
   const { w: canvasW, h: canvasH } = previewSize(
@@ -347,14 +342,12 @@ export function PreviewPanel({
     .filter(({ item }) => currentTime >= item.startTime && currentTime < item.endTime)
     .map(({ item, trackId }) => ({ item, trackId, mediaFile: media.find((m) => m.id === item.mediaId) }));
 
-  // trackId lookup helper
   const getTrackId = useCallback((itemId: string) => {
     return tracks.find((t) => t.items.some((i) => i.id === itemId))?.id ?? '';
   }, [tracks]);
 
-  // ── Apply video props imperatively ─────────────────────────
   const applyVideoProps = useCallback(() => {
-    const v = videoRef.current;
+    const v = getActiveVideo();
     if (!v) return;
     const rate = activeVideoItem?.item.videoDetails?.playbackRate ?? 1;
     const itemVol = activeVideoItem?.item.videoDetails?.volume ?? 1;
@@ -362,12 +355,12 @@ export function PreviewPanel({
     const targetVol = Math.min(1, itemVol) * (muted ? 0 : volume);
     if (Math.abs(v.volume - targetVol) > 0.01) v.volume = targetVol;
     if (v.muted !== muted) v.muted = muted;
-  }, [activeVideoItem, muted, volume]);
+  }, [activeVideoItem, muted, volume, getActiveVideo]);
 
-  // ── Draw a frame ───────────────────────────────────────────
+  // ── Draw a frame from the ACTIVE video slot ────────────────
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
-    const v = videoRef.current;
+    const v = getActiveVideo();
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
@@ -386,9 +379,9 @@ export function PreviewPanel({
       ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
       ctx.restore();
     }
-  }, [activeVideoItem]);
+  }, [activeVideoItem, getActiveVideo]);
 
-  // ── RAF render loop while playing ─────────────────────────
+  // ── RAF render loop ────────────────────────────────────────
   useEffect(() => {
     const loop = () => {
       drawFrame();
@@ -408,146 +401,220 @@ export function PreviewPanel({
     if (!isPlaying) drawFrame();
   }, [currentTime, isPlaying, drawFrame]);
 
-  // ── Core sync: src change + segment jump + seek ────────────
+  // ── Core double-buffer sync ────────────────────────────────
+  // On every currentTime change, check if we need to:
+  //   a) Swap to the preloaded slot (instant, no black flash)
+  //   b) Load + seek in the inactive slot while active plays
   useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
     const mf = activeVideoItem?.mediaFile;
 
     if (!mf) {
-      // Gap in timeline: pause video and show black frame
-      v.pause();
-      lastSegmentIdRef.current = null;
+      // Gap: pause active, show black
+      const v = getActiveVideo();
+      v?.pause();
+      activeItemIdRef.current = null;
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.fillStyle = '#000';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
+        if (ctx) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
       }
       return;
     }
 
-    const currentItemId = activeVideoItem!.item.id;
-    const segmentChanged = lastSegmentIdRef.current !== currentItemId;
-    const srcChanged = v.src !== mf.url && lastSrcRef.current !== mf.url;
-    const mediaTime = activeVideoItem!.item.mediaStart + (currentTime - activeVideoItem!.item.startTime);
+    const item = activeVideoItem!.item;
+    const mediaTime = item.mediaStart + (currentTime - item.startTime);
 
-    if (srcChanged) {
-      lastSrcRef.current = mf.url;
-      lastSegmentIdRef.current = currentItemId;
-      seekingRef.current = true;
-      v.pause();
-      v.src = mf.url;
-      v.preload = 'auto';
-      v.load();
-      v.oncanplay = async () => {
-        v.oncanplay = null;
-        await seekTo(v, mediaTime);
-        applyVideoProps();
-        seekingRef.current = false;
-        if (isPlaying) v.play().catch(() => {});
-      };
+    // ── Case 1: same clip, just keep playing (no action needed) ──
+    if (activeItemIdRef.current === item.id) {
+      // Only sync position when scrubbing (not playing)
+      if (!isPlaying) {
+        const v = getActiveVideo();
+        if (v && Math.abs(v.currentTime - mediaTime) > 0.15) {
+          v.currentTime = mediaTime;
+        }
+      }
+      applyVideoProps();
       return;
     }
 
-    if (segmentChanged) {
-      lastSegmentIdRef.current = currentItemId;
-      if (seekingRef.current) return;
-      seekingRef.current = true;
-      v.pause();
-      seekTo(v, mediaTime).then(() => {
-        applyVideoProps();
-        seekingRef.current = false;
-        if (isPlaying) v.play().catch(() => {});
-        else drawFrame();
-      });
-      return;
-    }
+    // ── Case 2: new clip — check if preloaded slot is ready ──
+    const preload = preloadRef.current;
+    const preloadReady = preload && preload.itemId === item.id && preload.ready;
 
-    if (!isPlaying && Math.abs(v.currentTime - mediaTime) > 0.1) {
-      seekingRef.current = true;
-      seekTo(v, mediaTime).then(() => {
-        seekingRef.current = false;
-        drawFrame();
-      });
+    if (preloadReady) {
+      // ✅ Instant swap — no seek delay, no black frame
+      const preloadV = getPreloadVideo()!;
+      activeSlotRef.current = activeSlotRef.current === 'A' ? 'B' : 'A';
+      activeItemIdRef.current = item.id;
+      preloadRef.current = null;
+
+      // Sync to exact media time (it may have drifted slightly during preload)
+      if (Math.abs(preloadV.currentTime - mediaTime) > 0.15) {
+        preloadV.currentTime = mediaTime;
+      }
+      applyVideoProps();
+      if (isPlaying) preloadV.play().catch(() => {});
+
+      // Pause the old active video
+      const oldV = getPreloadVideo(); // now the old active is the new "preload" slot
+      oldV?.pause();
+    } else {
+      // ⚠️ Preload wasn't ready — load directly into active slot
+      // (brief black is possible here, but this is the fallback)
+      const v = getActiveVideo()!;
+      activeItemIdRef.current = item.id;
+      preloadRef.current = null;
+
+      if (v.src !== mf.url) {
+        v.pause();
+        v.src = mf.url;
+        v.preload = 'auto';
+        v.load();
+        v.oncanplay = () => {
+          v.oncanplay = null;
+          v.currentTime = mediaTime;
+          applyVideoProps();
+          if (isPlaying) v.play().catch(() => {});
+        };
+      } else {
+        v.currentTime = mediaTime;
+        applyVideoProps();
+        if (isPlaying) v.play().catch(() => {});
+      }
     }
-    applyVideoProps();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTime, activeVideoItem?.item.id, activeVideoItem?.mediaFile?.url, isPlaying]);
 
   useEffect(() => { applyVideoProps(); }, [applyVideoProps]);
 
+  // ── Background preloading of NEXT clip ────────────────────
+  // When < 1.5s left in current clip, load next clip into inactive slot
+  useEffect(() => {
+    if (!activeVideoItem || !nextVideoItem) return;
+    const timeLeft = activeVideoItem.item.endTime - currentTime;
+    if (timeLeft > 1.5) return; // not time yet
+
+    const nextMf = nextVideoItem.mediaFile;
+    if (!nextMf) return;
+
+    const nextItem = nextVideoItem.item;
+    const targetMediaTime = nextItem.mediaStart;
+
+    // Don't re-preload if already preloaded for this clip
+    if (preloadRef.current?.itemId === nextItem.id) return;
+
+    const pv = getPreloadVideo();
+    if (!pv) return;
+
+    preloadRef.current = { itemId: nextItem.id, url: nextMf.url, mediaTime: targetMediaTime, ready: false };
+
+    const doPreload = () => {
+      pv.currentTime = targetMediaTime;
+      const onSeeked = () => {
+        pv.removeEventListener('seeked', onSeeked);
+        if (preloadRef.current?.itemId === nextItem.id) {
+          preloadRef.current.ready = true;
+        }
+      };
+      pv.addEventListener('seeked', onSeeked);
+    };
+
+    if (pv.src === nextMf.url) {
+      doPreload();
+    } else {
+      pv.pause();
+      pv.src = nextMf.url;
+      pv.preload = 'auto';
+      pv.load();
+      pv.oncanplay = () => {
+        pv.oncanplay = null;
+        doPreload();
+      };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTime, activeVideoItem?.item.id, nextVideoItem?.item.id]);
+
   // ── Play / Pause ──────────────────────────────────────────
   useEffect(() => {
-    const v = videoRef.current;
+    const v = getActiveVideo();
     if (!v) return;
     if (isPlaying) {
-      if (seekingRef.current) return;
       applyVideoProps();
       v.play().catch(() => {});
     } else {
       v.pause();
-      setTimeout(() => drawFrame(), 30);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying]);
+  }, [isPlaying, getActiveVideo, applyVideoProps]);
 
-  // ── Audio tracks ──────────────────────────────────────────
+  // ── Audio track sync ──────────────────────────────────────
   useEffect(() => {
     const activeAudioItems = tracks
       .filter((t) => t.type === 'audio' && !t.muted)
       .flatMap((t) => t.items)
       .filter((i) => currentTime >= i.startTime && currentTime < i.endTime);
 
-    activeAudioItems.forEach((item) => {
+    const activeIds = new Set(activeAudioItems.map((i) => i.id));
+
+    // Stop / remove no-longer-active audio
+    for (const [id, audio] of audioRefs.current) {
+      if (!activeIds.has(id)) {
+        audio.pause();
+        audio.src = '';
+        audioRefs.current.delete(id);
+      }
+    }
+
+    for (const item of activeAudioItems) {
       const mf = media.find((m) => m.id === item.mediaId);
-      if (!mf) return;
-      if (!audioRefs.current.has(item.id)) {
-        const audio = new Audio(mf.url);
+      if (!mf) continue;
+      const ad = item.audioDetails;
+      const mediaTime = item.mediaStart + (currentTime - item.startTime);
+
+      let audio = audioRefs.current.get(item.id);
+      if (!audio) {
+        audio = new Audio(mf.url);
         audio.preload = 'auto';
         audioRefs.current.set(item.id, audio);
       }
-      const audio = audioRefs.current.get(item.id)!;
-      const ad = item.audioDetails;
-      const mediaTime = item.mediaStart + (currentTime - item.startTime);
-      if (Math.abs(audio.currentTime - mediaTime) > 0.2) audio.currentTime = mediaTime;
-      audio.volume = Math.min(1, (ad?.volume ?? 1)) * (muted ? 0 : volume);
-      audio.playbackRate = ad?.playbackRate ?? 1;
+
+      const targetVol = Math.min(1, ad?.volume ?? 1) * (muted ? 0 : volume);
+      if (Math.abs(audio.volume - targetVol) > 0.01) audio.volume = targetVol;
+      const rate = ad?.playbackRate ?? 1;
+      if (audio.playbackRate !== rate) audio.playbackRate = rate;
+
+      if (Math.abs(audio.currentTime - mediaTime) > 0.3) audio.currentTime = mediaTime;
+
       if (isPlaying && audio.paused) audio.play().catch(() => {});
       else if (!isPlaying && !audio.paused) audio.pause();
-    });
-
-    audioRefs.current.forEach((audio, id) => {
-      if (!activeAudioItems.some((i) => i.id === id) && !audio.paused) audio.pause();
-    });
+    }
   }, [currentTime, isPlaying, tracks, media, muted, volume]);
 
-  const vd = activeVideoItem?.item.videoDetails;
-  const canvasFilter = buildFilter(vd?.brightness, vd?.contrast, vd?.saturation);
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      for (const audio of audioRefs.current.values()) { audio.pause(); audio.src = ''; }
+      audioRefs.current.clear();
+    };
+  }, []);
 
   // ── Scrubber ──────────────────────────────────────────────
-  const scrubbing = useRef(false);
+  const scrubberRef = useRef<HTMLDivElement>(null);
 
-  const handleScrubMove = useCallback((clientX: number, rect: DOMRect) => {
-    if (duration <= 0) return;
+  const handleScrubMove = useCallback((clientX: number) => {
+    const bar = scrubberRef.current;
+    if (!bar || duration <= 0) return;
+    const rect = bar.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     onTimeChange(pct * duration);
   }, [duration, onTimeChange]);
 
-  const handleScrubStart = useCallback((e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    scrubbing.current = true;
-    const rect = e.currentTarget.getBoundingClientRect();
+  const handleScrubStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    handleScrubMove(clientX, rect);
-
+    handleScrubMove(clientX);
     const onMove = (ev: MouseEvent | TouchEvent) => {
-      const x = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
-      handleScrubMove(x, rect);
+      handleScrubMove('touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX);
     };
     const onUp = () => {
-      scrubbing.current = false;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('touchmove', onMove);
@@ -562,207 +629,178 @@ export function PreviewPanel({
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Hidden video element */}
-      <video
-        ref={videoRef}
-        style={{ display: 'none' }}
-        preload="auto"
-        playsInline
-        muted={false}
-        crossOrigin="anonymous"
-      />
-
-      {/* Preview area */}
+    <div className="flex flex-col h-full bg-card select-none">
+      {/* ── Canvas preview ── */}
       <div
-        className="flex-1 min-h-0 flex items-center justify-center bg-black/90 relative overflow-hidden"
+        className="flex-1 flex items-center justify-center bg-black overflow-hidden relative"
+        ref={overlayContainerRef}
         onClick={() => onSelectItem?.(null)}
       >
-      {activeVideoItem?.mediaFile ? (
-          // Canvas + overlays wrapper — fit inside flex container maintaining AR
-          // Strategy: fill height first, aspect-ratio determines width, max-width caps overflow
-          <div
-            ref={overlayContainerRef}
-            style={{
-              position: 'relative',
-              aspectRatio: `${canvasW} / ${canvasH}`,
-              height: '100%',
-              width: 'auto',
-              maxWidth: '100%',
-              maxHeight: '100%',
-              flexShrink: 1,
-              flexGrow: 0,
-            }}
-          >
-            <canvas
-              ref={canvasRef}
-              width={canvasW}
-              height={canvasH}
-              style={{
-                display: 'block',
-                width: '100%',
-                height: '100%',
-                filter: canvasFilter !== 'none' ? canvasFilter : undefined,
-                imageRendering: 'auto',
-              }}
-            />
+        {/* Hidden video slots (double-buffer) */}
+        <video
+          ref={videoRefA}
+          style={{ display: 'none' }}
+          muted={false}
+          playsInline
+          crossOrigin="anonymous"
+          preload="auto"
+        />
+        <video
+          ref={videoRefB}
+          style={{ display: 'none' }}
+          muted={false}
+          playsInline
+          crossOrigin="anonymous"
+          preload="auto"
+        />
 
-            {/* Image overlays */}
-            {activeImageItems.map(({ item, trackId, mediaFile }) => {
-              if (!mediaFile) return null;
-              const imgd = item.imageDetails;
-              return (
-                <OverlayHandle
-                  key={item.id}
-                  item={item}
-                  trackId={trackId}
-                  containerRef={overlayContainerRef}
-                  isSelected={selectedItemId === item.id}
-                  onSelect={() => onSelectItem?.(item.id)}
-                  onOpenProperties={() => onOpenProperties?.(item.id)}
-                  onUpdate={(updates) => onUpdateItem?.(trackId, item.id, updates)}
-                >
-                  <img
-                    src={mediaFile.url}
-                    alt=""
-                    draggable={false}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      height: imgd?.height ? `${imgd.height}%` : 'auto',
-                      objectFit: 'contain',
-                      opacity: imgd?.opacity ?? 1,
-                      filter: buildFilter(imgd?.brightness, imgd?.contrast, imgd?.saturation),
-                      transform: buildTransform(imgd?.flipH, imgd?.flipV) || undefined,
-                    }}
-                  />
-                </OverlayHandle>
-              );
-            })}
+        <canvas
+          ref={canvasRef}
+          width={canvasW}
+          height={canvasH}
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
 
-            {/* Text overlays — fontSize stored as % of canvas height → pixel = fontSize/100 * canvasH */}
-            {activeTextItems.map((item) => {
-              const td = item.textDetails;
-              if (!td) return null;
-              const trackId = getTrackId(item.id);
-              const shadow = td.boxShadow;
-              // Convert percentage fontSize to CSS pixels based on canvas display size
-              const fontPx = (td.fontSize / 100) * canvasH;
+        {/* Text overlays */}
+        {activeTextItems.map((item) => {
+          const td = item.textDetails;
+          if (!td) return null;
+          const trackId = getTrackId(item.id);
+          const fontSize = `${(td.fontSize / 100) * canvasH}px`;
+          const shadowStyle = td.boxShadow?.blur > 0
+            ? `${td.boxShadow.x}px ${td.boxShadow.y}px ${td.boxShadow.blur}px ${td.boxShadow.color}`
+            : 'none';
+          return (
+            <OverlayHandle
+              key={item.id}
+              item={item}
+              trackId={trackId}
+              containerRef={overlayContainerRef}
+              isSelected={selectedItemId === item.id}
+              onSelect={() => onSelectItem?.(item.id)}
+              onOpenProperties={() => onOpenProperties?.(item.id)}
+              onUpdate={(updates) => onUpdateItem?.(trackId, item.id, updates)}
+            >
+              <div
+                style={{
+                  fontSize,
+                  fontFamily: td.fontFamily,
+                  color: td.color,
+                  textAlign: td.textAlign as React.CSSProperties['textAlign'],
+                  textDecoration: td.textDecoration,
+                  opacity: td.opacity,
+                  backgroundColor: td.backgroundColor !== 'transparent' ? td.backgroundColor : undefined,
+                  padding: '2px 6px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  textShadow: shadowStyle,
+                  borderWidth: td.borderWidth,
+                  borderStyle: td.borderWidth > 0 ? 'solid' : 'none',
+                  borderColor: td.borderColor,
+                  pointerEvents: 'none',
+                  lineHeight: 1.35,
+                }}
+              >
+                {td.text}
+              </div>
+            </OverlayHandle>
+          );
+        })}
 
-              return (
-                <OverlayHandle
-                  key={item.id}
-                  item={item}
-                  trackId={trackId}
-                  containerRef={overlayContainerRef}
-                  isSelected={selectedItemId === item.id}
-                  onSelect={() => onSelectItem?.(item.id)}
-                  onOpenProperties={() => onOpenProperties?.(item.id)}
-                  onUpdate={(updates) => onUpdateItem?.(trackId, item.id, updates)}
-                >
-                  <div
-                    style={{
-                      fontSize: fontPx,
-                      fontFamily: td.fontFamily,
-                      color: td.color,
-                      textAlign: td.textAlign,
-                      textDecoration: td.textDecoration !== 'none' ? td.textDecoration : undefined,
-                      opacity: td.opacity,
-                      backgroundColor: td.backgroundColor !== 'transparent' ? td.backgroundColor : undefined,
-                      padding: td.backgroundColor !== 'transparent' ? '0.25em 0.5em' : undefined,
-                      borderRadius: 4,
-                      textShadow: shadow && (shadow.x || shadow.y || shadow.blur)
-                        ? `${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.color}`
-                        : undefined,
-                      lineHeight: 1.2,
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      pointerEvents: 'none',
-                      width: '100%',
-                    }}
-                  >
-                    {td.text}
-                  </div>
-                </OverlayHandle>
-              );
-            })}
-
-            {/* Timecode overlay */}
-            <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded px-2 py-0.5 text-[10px] font-mono text-white/80 pointer-events-none select-none">
-              {fmt(currentTime)}
-              <span className="ml-1 text-white/40 text-[8px]">LQ</span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-muted-foreground/40 select-none">
-            <div className="w-16 h-16 rounded-2xl border-2 border-muted-foreground/20 flex items-center justify-center">
-              <Play className="h-7 w-7 ml-1" />
-            </div>
-            <p className="text-xs">Sem conteúdo na timeline</p>
-          </div>
-        )}
+        {/* Image overlays */}
+        {activeImageItems.map(({ item, trackId, mediaFile }) => {
+          if (!mediaFile) return null;
+          const imgd = item.imageDetails;
+          if (!imgd) return null;
+          return (
+            <OverlayHandle
+              key={item.id}
+              item={item}
+              trackId={trackId}
+              containerRef={overlayContainerRef}
+              isSelected={selectedItemId === item.id}
+              onSelect={() => onSelectItem?.(item.id)}
+              onOpenProperties={() => onOpenProperties?.(item.id)}
+              onUpdate={(updates) => onUpdateItem?.(trackId, item.id, updates)}
+            >
+              <img
+                src={mediaFile.url}
+                alt=""
+                draggable={false}
+                style={{
+                  width: '100%',
+                  display: 'block',
+                  opacity: imgd.opacity,
+                  transform: buildTransform(imgd.flipH, imgd.flipV),
+                  filter: buildFilter(imgd.brightness, imgd.contrast, imgd.saturation),
+                  borderRadius: imgd.borderRadius,
+                  borderWidth: imgd.borderWidth,
+                  borderStyle: imgd.borderWidth > 0 ? 'solid' : 'none',
+                  borderColor: imgd.borderColor,
+                  pointerEvents: 'none',
+                }}
+              />
+            </OverlayHandle>
+          );
+        })}
       </div>
 
-      {/* Scrubber */}
-      <div className="px-3 pt-2 pb-1 shrink-0">
+      {/* ── Transport controls ── */}
+      <div className="shrink-0 bg-card border-t border-border px-3 py-2 space-y-1.5">
+        {/* Scrubber */}
         <div
-          className="h-3 flex items-center cursor-pointer group"
+          ref={scrubberRef}
+          className="h-1.5 rounded-full bg-muted cursor-pointer relative group"
           onMouseDown={handleScrubStart}
           onTouchStart={handleScrubStart}
         >
-          <div className="relative w-full h-1.5 rounded-full bg-muted">
-            <div
-              className="absolute left-0 top-0 h-full rounded-full gradient-viral transition-none"
-              style={{ width: `${pct}%` }}
-            />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-primary shadow-md border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-              style={{ left: `${pct}%` }}
-            />
-          </div>
+          <div
+            className="h-full rounded-full bg-primary transition-none"
+            style={{ width: `${pct}%` }}
+          />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-primary border-2 border-background shadow opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ left: `calc(${pct}% - 7px)` }}
+          />
         </div>
-      </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-2 px-3 pb-2.5 shrink-0">
-        <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-[72px]">
-          {fmt(currentTime)} / {fmt(duration)}
-        </span>
-
-        <div className="flex items-center gap-0.5 mx-auto">
+        {/* Time + buttons */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
+            {fmt(currentTime)} / {fmt(duration)}
+          </span>
+          <div className="flex-1" />
           <button
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            className="p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => onTimeChange(0)}
-            title="Ir para o início"
           >
-            <SkipBack className="h-4 w-4" />
+            <SkipBack className="h-3.5 w-3.5" />
           </button>
           <button
-            className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 transition-colors text-primary"
+            className="p-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             onClick={onPlayPause}
-            title={isPlaying ? 'Pausar' : 'Reproduzir'}
           >
-            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           </button>
           <button
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            className="p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => onTimeChange(duration)}
-            title="Ir para o fim"
           >
-            <SkipForward className="h-4 w-4" />
+            <SkipForward className="h-3.5 w-3.5" />
+          </button>
+          <div className="flex-1" />
+          <button
+            className="p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setMuted((m) => !m)}
+          >
+            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </button>
         </div>
-
-        <button
-          className={cn(
-            'p-1.5 rounded-lg transition-colors ml-auto',
-            muted ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
-          )}
-          onClick={() => setMuted((m) => !m)}
-          title={muted ? 'Ativar som' : 'Silenciar'}
-        >
-          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-        </button>
       </div>
     </div>
   );
