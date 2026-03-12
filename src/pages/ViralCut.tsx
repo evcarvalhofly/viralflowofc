@@ -492,7 +492,7 @@ const ViralCut = () => {
   }, [currentTime, updateProject]);
   splitAllRef.current = handleSplitAllAtPlayhead;
 
-  // ── Export – fast WebCodecs engine with automatic FFmpeg fallback ──
+  // ── Export – smart routing: complex→native only, simple→native+ffmpeg fallback ──
   const exportAbortRef = useRef<AbortController | null>(null);
 
   const handleExport = useCallback(async (opts: ExportOptions) => {
@@ -512,43 +512,71 @@ const ViralCut = () => {
     try {
       let blob: Blob | null = null;
 
-      if (canUseFastExport()) {
-        try {
-          console.log('[ViralCut] Tentando exportação nativa WebCodecs (GPU)…');
-          setExportState({ status: 'preparing', progress: 3, label: 'Iniciando aceleração por GPU…' });
+      // Analyse complexity BEFORE choosing engine
+      const complexity  = analyzeProjectComplexity(project);
+      const fastProbe   = await canUseFastExport();
 
-          blob = await exportTimelineNativeWebCodecs(
-            project,
-            media,
-            { fps: opts.fps, resolution: opts.resolution, fileName },
-            handleProgress,
-            abortCtrl.signal
-          );
-        } catch (gpuErr: any) {
-          if (abortCtrl.signal.aborted || gpuErr?.message === 'Exportação cancelada.') {
-            setExportState({ status: 'idle', progress: 0, label: '' });
-            return;
-          }
-          console.warn('[ViralCut] GPU falhou, tentando FFmpeg:', gpuErr?.message);
-          setExportState({ status: 'preparing', progress: 6, label: 'GPU falhou, usando modo compatível…' });
+      console.log(
+        `[ViralCut Export] complexity=${JSON.stringify({ isComplex: complexity.isComplex, hasText: complexity.hasText, hasImage: complexity.hasImage, hasVisualOverlap: complexity.hasVisualOverlap })} ` +
+        `fastExport=${fastProbe.ok} (${fastProbe.reason ?? 'ok'}) mobile=${isMobile}`
+      );
 
-          blob = await exportTimelineWithFFmpeg(
-            project,
-            media,
-            { fps: opts.fps, resolution: opts.resolution, projectName: fileName },
-            handleProgress,
-            abortCtrl.signal
+      if (complexity.isComplex) {
+        // Complex project (text, images, overlays) MUST use native compositor.
+        // FFmpeg cannot handle these correctly.
+        if (!fastProbe.ok) {
+          throw new Error(
+            `Este projeto usa texto, imagens ou camadas simultâneas e exige exportação nativa (WebCodecs). ` +
+            `Motivo: ${fastProbe.reason || 'WebCodecs indisponível'}. ` +
+            `Use Chrome ou Edge no computador.`
           );
         }
-      } else {
-        console.log('[ViralCut] WebCodecs indisponível, usando FFmpeg…');
-        blob = await exportTimelineWithFFmpeg(
-          project,
-          media,
-          { fps: opts.fps, resolution: opts.resolution, projectName: fileName },
-          handleProgress,
-          abortCtrl.signal
+
+        console.log('[ViralCut Export] Rota: native (projeto complexo — texto/imagens/camadas)');
+        setExportState({ status: 'preparing', progress: 3, label: 'Iniciando compositor nativo…' });
+
+        blob = await exportTimelineNativeWebCodecs(
+          project, media,
+          { fps: opts.fps, resolution: opts.resolution, fileName },
+          handleProgress, abortCtrl.signal
         );
+
+      } else {
+        // Simple project: try native first for speed, fallback to FFmpeg
+        if (fastProbe.ok) {
+          try {
+            console.log('[ViralCut Export] Rota: native (projeto simples, GPU disponível)');
+            setExportState({ status: 'preparing', progress: 3, label: 'Iniciando aceleração por GPU…' });
+
+            blob = await exportTimelineNativeWebCodecs(
+              project, media,
+              { fps: opts.fps, resolution: opts.resolution, fileName },
+              handleProgress, abortCtrl.signal
+            );
+          } catch (nativeErr: any) {
+            if (abortCtrl.signal.aborted || nativeErr?.message === 'Exportação cancelada.') {
+              setExportState({ status: 'idle', progress: 0, label: '' });
+              return;
+            }
+            console.warn('[ViralCut Export] Native falhou, usando FFmpeg:', nativeErr?.message);
+            setExportState({ status: 'preparing', progress: 6, label: 'GPU falhou, usando modo compatível (FFmpeg)…' });
+
+            blob = await exportTimelineWithFFmpeg(
+              project, media,
+              { fps: opts.fps, resolution: opts.resolution, projectName: fileName },
+              handleProgress, abortCtrl.signal
+            );
+          }
+        } else {
+          console.log(`[ViralCut Export] Rota: FFmpeg (WebCodecs indisponível: ${fastProbe.reason})`);
+          setExportState({ status: 'preparing', progress: 4, label: 'Preparando exportação via FFmpeg…' });
+
+          blob = await exportTimelineWithFFmpeg(
+            project, media,
+            { fps: opts.fps, resolution: opts.resolution, projectName: fileName },
+            handleProgress, abortCtrl.signal
+          );
+        }
       }
 
       if (!blob || blob.size < 1024) {
@@ -556,16 +584,16 @@ const ViralCut = () => {
       }
 
       const dlUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = dlUrl;
-      a.download = `${fileName}.mp4`;
+      const a     = document.createElement('a');
+      a.href      = dlUrl;
+      a.download  = `${fileName}.mp4`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
 
       setExportState({ status: 'done', progress: 100, label: 'Vídeo exportado com sucesso!' });
 
     } catch (err: any) {
-      console.error('[ViralCut] Erro final na exportação:', err);
+      console.error('[ViralCut Export] Erro final:', err);
 
       if (err?.message === 'Exportação cancelada.' || abortCtrl.signal.aborted) {
         setExportState({ status: 'idle', progress: 0, label: '' });
