@@ -46,6 +46,9 @@ export interface ImageProps {
   posY: number;   // % of canvas height (center)
   width: number;  // % of canvas width
   height: number; // % of canvas height
+  brightness: number;
+  contrast: number;
+  saturation: number;
 }
 
 export interface CompositionItem {
