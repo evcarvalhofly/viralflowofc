@@ -84,15 +84,13 @@ export async function exportTimelineWithFFmpeg(
     .filter((t) => !t.muted && (t.type === 'video' || t.type === 'audio'))
     .flatMap((t) => t.items);
 
-  const firstMf = mediaMap.get(allVideoItems[0]?.mediaId ?? '');
-  const srcW = firstMf?.width ?? 1920;
-  const srcH = firstMf?.height ?? 1080;
-  const targetLongSide = opts.resolution === '1080p' ? 1920 : 1280;
-  const exportScale = Math.min(targetLongSide / Math.max(srcW, srcH), 1);
-  const outW = Math.max(2, Math.round((srcW * exportScale) / 2) * 2);
-  const outH = Math.max(2, Math.round((srcH * exportScale) / 2) * 2);
+  // Always use the exact user-chosen resolution — never inherit from the source video.
+  const outW = opts.resolution === '1080p' ? 1920 : 1280;
+  const outH = opts.resolution === '1080p' ? 1080 : 720;
   const FPS = opts.fps;
 
+  exportLog(`[EXPORT] selected resolution: ${opts.resolution} → ${outW}×${outH}`);
+  exportLog(`[EXPORT] selected fps: ${FPS}`);
   exportLog(`Resolução: ${outW}×${outH} @ ${FPS}fps | ${allVideoItems.length} clips de vídeo`);
 
   // ── 4. Load FFmpeg ─────────────────────────────────────────
