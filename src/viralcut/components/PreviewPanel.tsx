@@ -539,6 +539,41 @@ export function PreviewPanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTime, activeVideoItem?.item.id, nextVideoItem?.item.id]);
 
+  // ── Immediately preload next clip as soon as active clip changes ──────────
+  // This ensures short clips (< 4s) always have preload started
+  useEffect(() => {
+    if (!nextVideoItem) return;
+    const nextMf = nextVideoItem.mediaFile;
+    if (!nextMf) return;
+    const nextItem = nextVideoItem.item;
+    if (preloadRef.current?.itemId === nextItem.id) return;
+
+    const pv = getPreloadVideo();
+    if (!pv) return;
+
+    preloadRef.current = { itemId: nextItem.id, url: nextMf.url, mediaTime: nextItem.mediaStart, ready: false };
+
+    const doPreload = () => {
+      pv.currentTime = nextItem.mediaStart;
+      const onSeeked = () => {
+        pv.removeEventListener('seeked', onSeeked);
+        if (preloadRef.current?.itemId === nextItem.id) preloadRef.current.ready = true;
+      };
+      pv.addEventListener('seeked', onSeeked);
+    };
+
+    if (pv.src === nextMf.url) {
+      doPreload();
+    } else {
+      pv.pause();
+      pv.src = nextMf.url;
+      pv.preload = 'auto';
+      pv.load();
+      pv.oncanplay = () => { pv.oncanplay = null; doPreload(); };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeVideoItem?.item.id]);
+
   // ── Play / Pause ──────────────────────────────────────────
   useEffect(() => {
     const v = getActiveVideo();
