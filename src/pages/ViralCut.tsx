@@ -20,6 +20,7 @@ import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/
 import { canUseFastExport } from '@/viralcut/export/fast/canUseFastExport';
 import { exportTimelineNativeWebCodecs } from '@/viralcut/export/nativeWebCodecsEncoder';
 import { exportTimelineWithFFmpeg } from '@/viralcut/export/exportTimelineWithFFmpeg';
+import { analyzeProjectComplexity } from '@/viralcut/export/shared/analyzeProjectComplexity';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
