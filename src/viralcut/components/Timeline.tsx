@@ -582,17 +582,22 @@ export function Timeline({
                     {/* ── Trim handles ── */}
                     {!track.locked && (
                       <>
+                        {/* Left trim — wider touch target on mobile */}
                         <div
-                          className="absolute left-0 top-0 bottom-0 w-2.5 cursor-col-resize z-30 flex items-center justify-center group/trim"
+                          className="absolute left-0 top-0 bottom-0 w-5 cursor-col-resize z-30 flex items-center justify-center group/trim touch-none"
                           onMouseDown={(e) => handleTrimLeft(e, track, item)}
+                          onTouchStart={(e) => handleTrimLeft(e, track, item)}
                         >
-                          <div className="w-1 h-5 rounded-full bg-white/60 group-hover/trim:bg-white transition-colors" />
+                          <div className="w-1.5 h-6 rounded-full bg-white/70 group-hover/trim:bg-white transition-colors" />
                         </div>
+                        {/* Right trim — wider touch target on mobile */}
                         <div
-                          className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize z-30 flex items-center justify-center group/trim"
+                          className="absolute right-0 top-0 bottom-0 w-5 cursor-col-resize z-30 flex items-center justify-center group/trim touch-none"
                           onMouseDown={(e) => handleTrimRight(e, track, item)}
+                          onTouchStart={(e) => handleTrimRight(e, track, item)}
                         >
-                          <div className="w-1 h-5 rounded-full bg-white/60 group-hover/trim:bg-white transition-colors" />
+                          <div className="w-1.5 h-6 rounded-full bg-white/70 group-hover/trim:bg-white transition-colors" />
+                        </div>
                         </div>
                       </>
                     )}
