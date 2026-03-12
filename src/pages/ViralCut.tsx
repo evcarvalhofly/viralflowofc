@@ -181,7 +181,7 @@ const ViralCut = () => {
   const tracksRef = useRef(project.tracks);
   useEffect(() => { tracksRef.current = project.tracks; }, [project.tracks]);
 
-  // Playback ticker – skips gaps between segments (silence cuts)
+  // Playback ticker – advances in real time; gaps show black frames (no skipping)
   const tickRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
   useEffect(() => {
@@ -190,22 +190,10 @@ const ViralCut = () => {
         if (lastTsRef.current !== null) {
           const dt = (ts - lastTsRef.current) / 1000;
           setCurrentTime((t) => {
-            let next = t + dt;
+            const next = t + dt;
             if (project.duration > 0 && next >= project.duration) {
               setIsPlaying(false);
               return project.duration;
-            }
-            // Skip gaps between cut segments: jump to next segment start
-            const segs = tracksRef.current
-              .filter((tr) => (tr.type === 'video' || tr.type === 'audio') && !tr.muted)
-              .flatMap((tr) => tr.items)
-              .sort((a, b) => a.startTime - b.startTime);
-            if (segs.length > 0) {
-              const covered = segs.some((s) => next >= s.startTime && next < s.endTime);
-              if (!covered) {
-                const nextSeg = segs.find((s) => s.startTime > t);
-                if (nextSeg) next = nextSeg.startTime;
-              }
             }
             return next;
           });
@@ -513,7 +501,6 @@ const ViralCut = () => {
       const ctx = canvas.getContext('2d', { alpha: false })!;
 
       const segmentBlobs: Blob[] = [];
-      const totalSegments = videoItems.length;
 
       const webmMimePrefs = [
         'video/webm;codecs=vp9,opus',
@@ -524,10 +511,62 @@ const ViralCut = () => {
       ];
       const segMimeType = webmMimePrefs.find((c) => MediaRecorder.isTypeSupported(c)) ?? 'video/webm';
 
+      // Helper: record a black frame segment for gap duration
+      const recordBlackSegment = async (gapDuration: number) => {
+        const audioCtx = new AudioContext();
+        const audioDestination = audioCtx.createMediaStreamDestination();
+        const videoStream = canvas.captureStream(FPS);
+        const combinedStream = new MediaStream([
+          ...videoStream.getVideoTracks(),
+          ...audioDestination.stream.getAudioTracks(),
+        ]);
+        const bitrate = opts.resolution === '1080p' ? 10_000_000 : 5_000_000;
+        const chunks: BlobPart[] = [];
+        const rec = new MediaRecorder(combinedStream, { mimeType: segMimeType, videoBitsPerSecond: bitrate });
+        rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        const stopped = new Promise<void>((res) => { rec.onstop = () => res(); });
+        rec.start(100);
+
+        await new Promise<void>((res) => {
+          let rafId: number;
+          let startTs: number | null = null;
+          const loop = (ts: number) => {
+            if (startTs === null) startTs = ts;
+            const elapsed = (ts - startTs) / 1000;
+            if (elapsed >= gapDuration) { cancelAnimationFrame(rafId); res(); return; }
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, outW, outH);
+            rafId = requestAnimationFrame(loop);
+          };
+          rafId = requestAnimationFrame(loop);
+          setTimeout(() => { cancelAnimationFrame(rafId); res(); }, (gapDuration + 5) * 1000);
+        });
+
+        rec.stop();
+        await stopped;
+        audioCtx.close();
+        segmentBlobs.push(new Blob(chunks, { type: segMimeType }));
+      };
+
+      // Build ordered render list: insert black gaps where timeline has empty space
+      let timelineCursor = 0; // tracks where we are in project time
+      const totalSegments = videoItems.length;
+
       for (let segIdx = 0; segIdx < totalSegments; segIdx++) {
         const item = videoItems[segIdx];
         const mf = media.find((m) => m.id === item.mediaId);
-        if (!mf) continue;
+        if (!mf) { timelineCursor = item.endTime; continue; }
+
+        // If there's a gap before this clip, insert a black segment
+        if (item.startTime > timelineCursor + 0.05) {
+          const gapDuration = item.startTime - timelineCursor;
+          setExportState({
+            status: 'encoding',
+            progress: 5 + Math.round((segIdx / totalSegments) * 60),
+            label: `Renderizando intervalo vazio (${gapDuration.toFixed(1)}s)…`,
+          });
+          await recordBlackSegment(gapDuration);
+        }
 
         const vd = item.videoDetails;
         const playRate = Math.min(Math.max(vd?.playbackRate ?? 1, 0.1), 16);
@@ -717,6 +756,9 @@ const ViralCut = () => {
 
         const segBlob = new Blob(segChunks, { type: segMimeType });
         segmentBlobs.push(segBlob);
+
+        // Advance cursor so next iteration can detect gaps correctly
+        timelineCursor = item.endTime;
       }
 
       // ── Step 2: FFmpeg – concatenate segments → MP4 ─────────

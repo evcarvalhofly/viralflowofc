@@ -415,11 +415,16 @@ export function PreviewPanel({
     const mf = activeVideoItem?.mediaFile;
 
     if (!mf) {
+      // Gap in timeline: pause video and show black frame
+      v.pause();
       lastSegmentIdRef.current = null;
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        if (ctx) {
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
       }
       return;
     }
