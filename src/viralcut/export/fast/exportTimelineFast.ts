@@ -7,11 +7,13 @@
 //   3. Use showSaveFilePicker for direct-to-disk writing (no RAM blob)
 //   4. Fall back to a Blob download if the File System API is unavailable
 //
-// Why this is faster than ffmpeg.wasm:
-//   ✅ Decoding + encoding via hardware-accelerated WebCodecs
-//   ✅ No virtual FS — works directly on source object URLs
-//   ✅ No single-threaded WASM bottleneck
-//   ✅ Texts, images, and overlays are rendered natively on Canvas2D
+// KEY FIX: encoder.render() returns ExportResult:
+//   { type: 'success', data: Blob | undefined }
+//   { type: 'canceled' }
+//   { type: 'error', error: Error }
+//
+// The previous implementation NEVER checked this result — marking
+// success even when encoding silently failed or was canceled.
 // ============================================================
 import * as core from '@diffusionstudio/core';
 import { Project, MediaFile } from '@/viralcut/types';
@@ -40,6 +42,14 @@ export async function exportTimelineFast(
 
   if (signal?.aborted) throw new Error('Exportação cancelada.');
 
+  // Verify composition has content
+  const totalDuration = composition.duration;
+  log(`Composition duration: ${totalDuration}s, layers: ${composition.layers.length}`);
+
+  if (totalDuration <= 0) {
+    throw new Error('A composição está vazia (duração = 0). Verifique se há clipes na timeline.');
+  }
+
   onProgress?.(10, 'Inicializando encoder…');
 
   const encoder = new core.Encoder(composition, {
@@ -49,17 +59,20 @@ export async function exportTimelineFast(
   });
 
   // Wire progress callback
-  encoder.onProgress = (event: { progress: number; total: number }) => {
+  encoder.onProgress = (event: { progress: number; total: number; remaining: Date }) => {
     if (!onProgress) return;
     const total = event.total || 1;
     const pct = Math.min(95, Math.round(10 + (event.progress / total) * 85));
-    onProgress(pct, `Exportando… ${Math.round((event.progress / total) * 100)}%`);
+    const pctLabel = Math.round((event.progress / total) * 100);
+    onProgress(pct, `Exportando… ${pctLabel}%`);
+    log(`Progress: ${event.progress}/${total} (${pctLabel}%)`);
   };
 
   // Wire abort via encoder.cancel()
   let abortListener: (() => void) | null = null;
   if (signal) {
     abortListener = () => {
+      log('Abort signal received — canceling encoder');
       try { encoder.cancel(); } catch { /* ignore */ }
     };
     signal.addEventListener('abort', abortListener);
@@ -75,8 +88,9 @@ export async function exportTimelineFast(
       typeof window !== 'undefined' && 'showSaveFilePicker' in window;
 
     if (supportsFilePicker) {
+      let handle: FileSystemFileHandle;
       try {
-        const handle = await (window as any).showSaveFilePicker({
+        handle = await (window as any).showSaveFilePicker({
           suggestedName,
           types: [
             {
@@ -85,22 +99,41 @@ export async function exportTimelineFast(
             },
           ],
         });
-
-        log('Using showSaveFilePicker for direct-to-disk export');
-        onProgress?.(12, 'Exportando…');
-        await encoder.render(handle);
-      } catch (err: any) {
-        if (err?.name === 'AbortError' || signal?.aborted) {
+      } catch (pickerErr: any) {
+        if (pickerErr?.name === 'AbortError' || signal?.aborted) {
           throw new Error('Exportação cancelada.');
         }
-        // Picker not available in this context — fall back to blob
-        log('showSaveFilePicker failed, falling back to blob:', err?.message);
-        await exportWithBlobFallback(encoder, suggestedName);
+        // User dismissed or picker not available — fall back to blob
+        log('showSaveFilePicker dismissed or unavailable, falling back to blob:', pickerErr?.message);
+        await exportWithBlobFallback(encoder, suggestedName, signal, onProgress);
+        return;
       }
+
+      if (signal?.aborted) throw new Error('Exportação cancelada.');
+
+      log('Using showSaveFilePicker for direct-to-disk export');
+      onProgress?.(12, 'Exportando…');
+
+      const result = await encoder.render(handle);
+      log(`render() result type: ${result.type}`);
+
+      // ── CRITICAL: validate the ExportResult ────────────────
+      if (result.type === 'canceled') {
+        throw new Error('Exportação cancelada.');
+      }
+      if (result.type === 'error') {
+        throw new Error(`Falha no encoder: ${(result as any).error?.message ?? 'erro desconhecido'}`);
+      }
+      // type === 'success' with FileSystemFileHandle: data is undefined (written to disk)
+      // We trust the file was written — no further blob validation needed
+      log('Export to disk complete via showSaveFilePicker');
+
     } else {
+      // No File System Access API — use blob fallback
       log('showSaveFilePicker not available, using blob fallback');
-      await exportWithBlobFallback(encoder, suggestedName);
+      await exportWithBlobFallback(encoder, suggestedName, signal, onProgress);
     }
+
   } finally {
     if (abortListener && signal) {
       signal.removeEventListener('abort', abortListener);
@@ -114,30 +147,47 @@ export async function exportTimelineFast(
 
 async function exportWithBlobFallback(
   encoder: core.Encoder,
-  fileName: string
+  fileName: string,
+  signal?: AbortSignal,
+  onProgress?: (progress: number, label: string) => void,
 ): Promise<void> {
-  // render() with a string filename downloads directly in supported browsers
-  // For others, render to WritableStream and collect chunks
-  try {
-    await encoder.render(fileName);
-  } catch {
-    // Last resort: render to a string name which Diffusion handles as a download
-    log('String render failed, trying WritableStream…');
-    const chunks: ArrayBuffer[] = [];
-    const writableStream = new WritableStream<Uint8Array>({
-      write(chunk) {
-        // Copy to a plain ArrayBuffer to avoid SharedArrayBuffer issues
-        const buf = chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer;
-        chunks.push(buf);
-      },
-    });
-    await encoder.render(writableStream);
-    const blob = new Blob(chunks, { type: 'video/mp4' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  log('Rendering to blob…');
+  onProgress?.(12, 'Exportando…');
+
+  // render() with no argument or a string returns a Blob in result.data
+  const result = await encoder.render();
+  log(`render() result type: ${result.type}`);
+
+  if (signal?.aborted || result.type === 'canceled') {
+    throw new Error('Exportação cancelada.');
   }
+  if (result.type === 'error') {
+    throw new Error(`Falha no encoder: ${(result as any).error?.message ?? 'erro desconhecido'}`);
+  }
+
+  // type === 'success'
+  const blob = (result as { type: 'success'; data: Blob | undefined }).data;
+
+  // ── VALIDATE the blob before triggering download ────────
+  log(`Result blob size: ${blob?.size ?? 0} bytes`);
+
+  if (!blob || blob.size <= 0) {
+    throw new Error('O encoder produziu um arquivo vazio (0 bytes). A exportação falhou.');
+  }
+
+  const MIN_VALID_SIZE = 1024; // 1 KB
+  if (blob.size < MIN_VALID_SIZE) {
+    throw new Error(
+      `O arquivo exportado é muito pequeno (${blob.size} bytes) e provavelmente está corrompido.`
+    );
+  }
+
+  log(`Valid blob: ${(blob.size / 1024 / 1024).toFixed(2)} MB — triggering download`);
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
