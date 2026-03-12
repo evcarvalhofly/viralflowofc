@@ -181,7 +181,7 @@ const ViralCut = () => {
   const tracksRef = useRef(project.tracks);
   useEffect(() => { tracksRef.current = project.tracks; }, [project.tracks]);
 
-  // Playback ticker – skips gaps between segments (silence cuts)
+  // Playback ticker – advances in real time; gaps show black frames (no skipping)
   const tickRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
   useEffect(() => {
@@ -190,22 +190,10 @@ const ViralCut = () => {
         if (lastTsRef.current !== null) {
           const dt = (ts - lastTsRef.current) / 1000;
           setCurrentTime((t) => {
-            let next = t + dt;
+            const next = t + dt;
             if (project.duration > 0 && next >= project.duration) {
               setIsPlaying(false);
               return project.duration;
-            }
-            // Skip gaps between cut segments: jump to next segment start
-            const segs = tracksRef.current
-              .filter((tr) => (tr.type === 'video' || tr.type === 'audio') && !tr.muted)
-              .flatMap((tr) => tr.items)
-              .sort((a, b) => a.startTime - b.startTime);
-            if (segs.length > 0) {
-              const covered = segs.some((s) => next >= s.startTime && next < s.endTime);
-              if (!covered) {
-                const nextSeg = segs.find((s) => s.startTime > t);
-                if (nextSeg) next = nextSeg.startTime;
-              }
             }
             return next;
           });
