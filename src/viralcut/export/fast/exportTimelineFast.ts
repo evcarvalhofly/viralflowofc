@@ -38,8 +38,16 @@ export async function exportTimelineFast(
   const t0 = performance.now();
   log('Export started (WebCodecs engine)');
 
+  // ── Resolve output dimensions from user choice ─────────────
+  const { width: outputWidth, height: outputHeight } = resolveExportDimensions(opts.resolution);
+  log(`[EXPORT] selected resolution: ${opts.resolution} → ${outputWidth}×${outputHeight}`);
+  log(`[EXPORT] selected fps: ${opts.fps}`);
+
   onProgress?.(2, 'Construindo composição…');
-  const composition = await buildDiffusionComposition(project, media);
+  const composition = await buildDiffusionComposition(project, media, {
+    outputWidth,
+    outputHeight,
+  });
 
   if (signal?.aborted) throw new Error('Exportação cancelada.');
 
