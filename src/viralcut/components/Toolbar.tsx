@@ -1,7 +1,7 @@
 // ============================================================
-// Toolbar – Top bar with project name, zoom, export
+// Toolbar – Top bar with project name, zoom, export, save
 // ============================================================
-import { Scissors, Download, Undo2, Redo2, Edit2, Check } from 'lucide-react';
+import { Scissors, Download, Undo2, Redo2, Edit2, Check, Save, FileDown, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
@@ -13,6 +13,9 @@ interface ToolbarProps {
   canUndo?: boolean;
   canRedo?: boolean;
   onExport: () => void;
+  onSave?: () => void;
+  onExportJson?: () => void;
+  onImportJson?: () => void;
 }
 
 export function Toolbar({
