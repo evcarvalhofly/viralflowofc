@@ -305,7 +305,11 @@ export function PreviewPanel({
   onUpdateItem,
   onOpenProperties,
 }: PreviewPanelProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // ── Double-buffer video refs ───────────────────────────────
+  // videoRefA = active slot, videoRefB = preload slot (swap on transition)
+  const videoRefA = useRef<HTMLVideoElement>(null);
+  const videoRefB = useRef<HTMLVideoElement>(null);
+  const activeSlotRef = useRef<'A' | 'B'>('A');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayContainerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -314,9 +318,15 @@ export function PreviewPanel({
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
 
-  const lastSegmentIdRef = useRef<string | null>(null);
-  const lastSrcRef = useRef<string>('');
-  const seekingRef = useRef(false);
+  // Preload state: what is loaded in the inactive slot
+  const preloadRef = useRef<{ itemId: string; url: string; mediaTime: number; ready: boolean } | null>(null);
+  const activeItemIdRef = useRef<string | null>(null);
+
+  // Helper: get active / preload video elements
+  const getActiveVideo = useCallback(() =>
+    activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current, []);
+  const getPreloadVideo = useCallback(() =>
+    activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current, []);
 
   // ── Derived active items ───────────────────────────────────
   const activeVideoItem = (() => {
@@ -329,6 +339,17 @@ export function PreviewPanel({
       }
     }
     return null;
+  })();
+
+  // Next video item (for preloading)
+  const nextVideoItem = (() => {
+    if (!activeVideoItem) return null;
+    const videoTracks = tracks.filter((t) => t.type === 'video' && !t.muted);
+    const all = videoTracks.flatMap((t) => t.items).sort((a, b) => a.startTime - b.startTime);
+    const idx = all.findIndex((i) => i.id === activeVideoItem.item.id);
+    if (idx < 0 || idx >= all.length - 1) return null;
+    const next = all[idx + 1];
+    return { item: next, mediaFile: media.find((m) => m.id === next.mediaId) };
   })();
 
   const { w: canvasW, h: canvasH } = previewSize(
@@ -354,7 +375,7 @@ export function PreviewPanel({
 
   // ── Apply video props imperatively ─────────────────────────
   const applyVideoProps = useCallback(() => {
-    const v = videoRef.current;
+    const v = getActiveVideo();
     if (!v) return;
     const rate = activeVideoItem?.item.videoDetails?.playbackRate ?? 1;
     const itemVol = activeVideoItem?.item.videoDetails?.volume ?? 1;
@@ -362,7 +383,7 @@ export function PreviewPanel({
     const targetVol = Math.min(1, itemVol) * (muted ? 0 : volume);
     if (Math.abs(v.volume - targetVol) > 0.01) v.volume = targetVol;
     if (v.muted !== muted) v.muted = muted;
-  }, [activeVideoItem, muted, volume]);
+  }, [activeVideoItem, muted, volume, getActiveVideo]);
 
   // ── Draw a frame ───────────────────────────────────────────
   const drawFrame = useCallback(() => {
