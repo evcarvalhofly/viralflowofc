@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import Auth from "./pages/Auth";
 import Home from "./pages/Home";
 import Chat from "./pages/Chat";
@@ -46,7 +45,6 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <PWAInstallPrompt />
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
@@ -56,7 +54,7 @@ const App = () => (
               <Route path="/gameover" element={<ProtectedRoute><GameOver /></ProtectedRoute>} />
               <Route path="/viral-videos" element={<ProtectedRoute><ViralVideos /></ProtectedRoute>} />
               <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
-              <Route path="/viralcut/*" element={<ViralCut />} />
+              <Route path="/viralcut" element={<ProtectedRoute><ViralCut /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

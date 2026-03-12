@@ -53,7 +53,7 @@ const modules = [
     path: "/assets",
     gradient: "from-[hsl(160,70%,40%)] to-[hsl(180,60%,30%)]",
     glow: "hsl(160,70%,40%)",
-    emoji: "📁",
+    emoji: "✂️",
     available: true,
   },
   {
