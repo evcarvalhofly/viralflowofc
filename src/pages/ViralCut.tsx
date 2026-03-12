@@ -18,9 +18,9 @@ import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { canUseFastExport } from '@/viralcut/export/fast/canUseFastExport';
-import { exportTimelineNativeWebCodecs } from '@/viralcut/export/nativeWebCodecsEncoder';
 import { exportTimelineWithFFmpeg } from '@/viralcut/export/exportTimelineWithFFmpeg';
 import { analyzeProjectComplexity } from '@/viralcut/export/shared/analyzeProjectComplexity';
+import { exportWithWebAVEngine } from '@/viralcut/engine/export/exportEngine';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
@@ -492,7 +492,7 @@ const ViralCut = () => {
   }, [currentTime, updateProject]);
   splitAllRef.current = handleSplitAllAtPlayhead;
 
-  // ── Export – smart routing: complex→native only, simple→native+ffmpeg fallback ──
+  // ── Export – WebAV Engine (primary) + FFmpeg fallback for simple timelines ──
   const exportAbortRef = useRef<AbortController | null>(null);
 
   const handleExport = useCallback(async (opts: ExportOptions) => {
@@ -512,64 +512,47 @@ const ViralCut = () => {
     try {
       let blob: Blob | null = null;
 
-      // Analyse complexity BEFORE choosing engine
-      const complexity  = analyzeProjectComplexity(project);
-      const fastProbe   = await canUseFastExport();
+      // ── Probe WebCodecs availability ─────────────────────────
+      const fastProbe = await canUseFastExport();
 
       console.log(
-        `[ViralCut Export] complexity=${JSON.stringify({ isComplex: complexity.isComplex, hasText: complexity.hasText, hasImage: complexity.hasImage, hasVisualOverlap: complexity.hasVisualOverlap })} ` +
-        `fastExport=${fastProbe.ok} (${fastProbe.reason ?? 'ok'}) mobile=${isMobile}`
+        `[ViralCut Export] fileName=${fileName} webcodecs=${fastProbe.ok} ` +
+        `(${fastProbe.reason ?? 'ok'}) mobile=${isMobile}`
       );
 
-      if (complexity.isComplex) {
-        // Complex project (text, images, overlays) MUST use native compositor.
-        // FFmpeg cannot handle these correctly.
-        if (!fastProbe.ok) {
-          throw new Error(
-            `Este projeto usa texto, imagens ou camadas simultâneas e exige exportação nativa (WebCodecs). ` +
-            `Motivo: ${fastProbe.reason || 'WebCodecs indisponível'}. ` +
-            `Use Chrome ou Edge no computador.`
+      if (fastProbe.ok) {
+        // ── Primary path: new WebAV-architecture engine ────────
+        // Handles ALL project types: simple, complex, vertical, text, images
+        try {
+          console.log('[ViralCut Export] Rota: WebAV engine (compositor nativo)');
+          setExportState({ status: 'preparing', progress: 3, label: 'Iniciando compositor…' });
+
+          blob = await exportWithWebAVEngine(
+            project, media,
+            { fps: opts.fps, resolution: opts.resolution, fileName },
+            handleProgress, abortCtrl.signal
           );
-        }
+        } catch (webavErr: any) {
+          if (abortCtrl.signal.aborted || webavErr?.message === 'Exportação cancelada.') {
+            setExportState({ status: 'idle', progress: 0, label: '' });
+            return;
+          }
 
-        console.log('[ViralCut Export] Rota: native (projeto complexo — texto/imagens/camadas)');
-        setExportState({ status: 'preparing', progress: 3, label: 'Iniciando compositor nativo…' });
+          // Fallback to FFmpeg for simple projects only
+          const { analyzeProjectComplexity } = await import('@/viralcut/export/shared/analyzeProjectComplexity');
+          const complexity = analyzeProjectComplexity(project);
 
-        blob = await exportTimelineNativeWebCodecs(
-          project, media,
-          { fps: opts.fps, resolution: opts.resolution, fileName },
-          handleProgress, abortCtrl.signal
-        );
-
-      } else {
-        // Simple project: try native first for speed, fallback to FFmpeg
-        if (fastProbe.ok) {
-          try {
-            console.log('[ViralCut Export] Rota: native (projeto simples, GPU disponível)');
-            setExportState({ status: 'preparing', progress: 3, label: 'Iniciando aceleração por GPU…' });
-
-            blob = await exportTimelineNativeWebCodecs(
-              project, media,
-              { fps: opts.fps, resolution: opts.resolution, fileName },
-              handleProgress, abortCtrl.signal
-            );
-          } catch (nativeErr: any) {
-            if (abortCtrl.signal.aborted || nativeErr?.message === 'Exportação cancelada.') {
-              setExportState({ status: 'idle', progress: 0, label: '' });
-              return;
-            }
-            console.warn('[ViralCut Export] Native falhou, usando FFmpeg:', nativeErr?.message);
-            setExportState({ status: 'preparing', progress: 6, label: 'GPU falhou, usando modo compatível (FFmpeg)…' });
-
-            blob = await exportTimelineWithFFmpeg(
-              project, media,
-              { fps: opts.fps, resolution: opts.resolution, projectName: fileName },
-              handleProgress, abortCtrl.signal
+          if (complexity.isComplex) {
+            // Complex project (text/images/layers) cannot use FFmpeg fallback
+            throw new Error(
+              `Falha ao exportar projeto com texto/imagens/camadas. ` +
+              `Causa: ${webavErr?.message ?? 'erro desconhecido'}. ` +
+              `Tente fechar outras abas e exportar em 720p.`
             );
           }
-        } else {
-          console.log(`[ViralCut Export] Rota: FFmpeg (WebCodecs indisponível: ${fastProbe.reason})`);
-          setExportState({ status: 'preparing', progress: 4, label: 'Preparando exportação via FFmpeg…' });
+
+          console.warn('[ViralCut Export] WebAV falhou, tentando FFmpeg (projeto simples):', webavErr?.message);
+          setExportState({ status: 'preparing', progress: 6, label: 'Motor principal falhou, tentando modo compatível…' });
 
           blob = await exportTimelineWithFFmpeg(
             project, media,
@@ -577,6 +560,28 @@ const ViralCut = () => {
             handleProgress, abortCtrl.signal
           );
         }
+      } else {
+        // ── Fallback path: FFmpeg (no WebCodecs support) ───────
+        // Only viable for simple timelines (video only, no overlays)
+        const { analyzeProjectComplexity } = await import('@/viralcut/export/shared/analyzeProjectComplexity');
+        const complexity = analyzeProjectComplexity(project);
+
+        if (complexity.isComplex) {
+          throw new Error(
+            `Este projeto usa texto, imagens ou camadas e exige suporte a WebCodecs. ` +
+            `Motivo: ${fastProbe.reason || 'WebCodecs indisponível'}. ` +
+            `Use Chrome ou Edge no computador.`
+          );
+        }
+
+        console.log(`[ViralCut Export] Rota: FFmpeg (WebCodecs indisponível: ${fastProbe.reason})`);
+        setExportState({ status: 'preparing', progress: 4, label: 'Exportando via FFmpeg…' });
+
+        blob = await exportTimelineWithFFmpeg(
+          project, media,
+          { fps: opts.fps, resolution: opts.resolution, projectName: fileName },
+          handleProgress, abortCtrl.signal
+        );
       }
 
       if (!blob || blob.size < 1024) {
