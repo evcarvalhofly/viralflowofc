@@ -1,8 +1,7 @@
-import { useRef, useCallback, useEffect, useState } from "react";
+import { useRef, useCallback, useEffect, useMemo } from "react";
 import { usePlaybackStore } from "../stores/playback-store";
 import { useProjectStore } from "../stores/project-store";
 import { useMediaStore } from "../stores/media-store";
-import { useTimelineStore } from "../stores/timeline-store";
 import type { VideoElement, ImageElement, TextElement } from "../types/timeline";
 
 interface RenderProps {
@@ -24,16 +23,22 @@ export function useCanvasRenderer({ width, height }: RenderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const rafRef = useRef<number>(0);
+
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const setCurrentTime = usePlaybackStore((s) => s.setCurrentTime);
   const setIsPlaying = usePlaybackStore((s) => s.setIsPlaying);
   const setDuration = usePlaybackStore((s) => s.setDuration);
-  const tracks = useProjectStore((s) => {
-    const p = s.projects.find((proj) => proj.id === s.activeProjectId);
-    return p?.tracks ?? [];
-  });
-  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
+
+  // Select primitives only — derive with useMemo to avoid new refs each render
+  const projects = useProjectStore((s) => s.projects);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  );
+  const tracks = useMemo(() => activeProject?.tracks ?? [], [activeProject]);
+
   const getAsset = useMediaStore((s) => s.getAsset);
 
   // Compute project duration from tracks
@@ -75,7 +80,6 @@ export function useCanvasRenderer({ width, height }: RenderProps) {
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, width, height);
 
-    // Render tracks bottom to top (main video first, then overlays)
     for (const track of [...tracks].reverse()) {
       if ((track as any).hidden) continue;
 
@@ -90,11 +94,9 @@ export function useCanvasRenderer({ width, height }: RenderProps) {
           const asset = getAsset(el.mediaId);
           if (!asset) continue;
           const video = getOrCreateVideo(el.mediaId, asset.url);
-
           if (Math.abs(video.currentTime - elLocalTime) > 0.1) {
             video.currentTime = elLocalTime;
           }
-
           ctx.save();
           ctx.globalAlpha = el.opacity ?? 1;
           const { x, y, w, h } = getContainSize(
@@ -108,7 +110,6 @@ export function useCanvasRenderer({ width, height }: RenderProps) {
         } else if (el.type === "image") {
           const asset = getAsset(el.mediaId);
           if (!asset) continue;
-          // use cached image
           const img = new Image();
           img.src = asset.url;
           ctx.save();
@@ -125,10 +126,8 @@ export function useCanvasRenderer({ width, height }: RenderProps) {
           ctx.fillStyle = textEl.color ?? "#ffffff";
           ctx.textAlign = textEl.textAlign ?? "center";
           ctx.textBaseline = "middle";
-
           const tx = (textEl.transform?.x ?? 0.5) * width;
           const ty = (textEl.transform?.y ?? 0.8) * height;
-
           if (textEl.background?.enabled) {
             const metrics = ctx.measureText(textEl.content);
             const padX = (textEl.background.paddingX ?? 16) * scaleX;
@@ -144,7 +143,6 @@ export function useCanvasRenderer({ width, height }: RenderProps) {
             ctx.fill();
             ctx.fillStyle = textEl.color ?? "#ffffff";
           }
-
           ctx.fillText(textEl.content, tx, ty);
           ctx.restore();
         }
@@ -152,42 +150,35 @@ export function useCanvasRenderer({ width, height }: RenderProps) {
     }
   }, [tracks, activeProject, width, height, getAsset, getOrCreateVideo]);
 
-  // Seek all videos when currentTime changes and not playing
   useEffect(() => {
     if (!isPlaying) {
       renderFrame(currentTime);
     }
   }, [currentTime, isPlaying, renderFrame]);
 
-  // RAF loop when playing
   useEffect(() => {
     if (!isPlaying) {
       cancelAnimationFrame(rafRef.current);
       return;
     }
-
     let lastTs = 0;
     const loop = (ts: number) => {
       if (lastTs === 0) lastTs = ts;
       const delta = (ts - lastTs) / 1000;
       lastTs = ts;
-
       const newTime = Math.min(
         usePlaybackStore.getState().currentTime + delta,
         usePlaybackStore.getState().duration
       );
-
       if (newTime >= usePlaybackStore.getState().duration) {
         setIsPlaying(false);
         setCurrentTime(0);
         return;
       }
-
       setCurrentTime(newTime);
       renderFrame(newTime);
       rafRef.current = requestAnimationFrame(loop);
     };
-
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [isPlaying, renderFrame, setCurrentTime, setIsPlaying]);

@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { usePlaybackStore } from "../stores/playback-store";
 import { useProjectStore } from "../stores/project-store";
 import { useMediaStore } from "../stores/media-store";
-import type { TextElement, VideoElement, ImageElement } from "../types/timeline";
+import type { TextElement } from "../types/timeline";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -29,11 +29,15 @@ export function PreviewPanel() {
   const videoCache = useRef<Map<string, HTMLVideoElement>>(new Map());
   const [canvasSize, setCanvasSize] = useState({ w: 320, h: 180 });
 
-  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
-  const tracks = useProjectStore((s) => {
-    const p = s.projects.find((proj) => proj.id === s.activeProjectId);
-    return p?.tracks ?? [];
-  });
+  // Select primitives only — no derived objects
+  const projects = useProjectStore((s) => s.projects);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  );
+  const tracks = useMemo(() => activeProject?.tracks ?? [], [activeProject]);
+
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const duration = usePlaybackStore((s) => s.duration);
