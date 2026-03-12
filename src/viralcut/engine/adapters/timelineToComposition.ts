@@ -77,6 +77,9 @@ export function timelineToComposition(
           posY: id.posY ?? 50,
           width: id.width ?? 50,
           height: id.height ?? 50,
+          brightness: id.brightness ?? 1,
+          contrast: id.contrast ?? 1,
+          saturation: id.saturation ?? 1,
         };
       }
 
