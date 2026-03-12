@@ -19,12 +19,23 @@ import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { canUseFastExport } from '@/viralcut/export/fast/canUseFastExport';
 import { exportTimelineNativeWebCodecs } from '@/viralcut/export/nativeWebCodecsEncoder';
+import { exportTimelineWithFFmpeg } from '@/viralcut/export/exportTimelineWithFFmpeg';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
   Upload, Plus, Wand2, X, ZoomIn, ZoomOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// ── Detect aspect ratio from video dimensions ────────────────
+function detectAspectRatio(width?: number, height?: number): Project['aspectRatio'] {
+  if (!width || !height) return '16:9';
+  const ratio = width / height;
+  if (Math.abs(ratio - 9 / 16) < 0.08) return '9:16';
+  if (Math.abs(ratio - 1) < 0.08) return '1:1';
+  if (Math.abs(ratio - 4 / 5) < 0.08) return '4:5';
+  return '16:9';
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 async function generateThumbnail(file: File): Promise<string | undefined> {
