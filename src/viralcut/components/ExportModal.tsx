@@ -20,7 +20,7 @@ export function ExportModal({ onClose }: { onClose: () => void }) {
   const [errorMsg, setErrorMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
-  const activeProject = useProjectStore((s) => s.getActiveOrNull());
+  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
   const getAsset = useMediaStore((s) => s.getAsset);
 
   const handleExport = async () => {
