@@ -855,9 +855,14 @@ const ViralCut = () => {
 
     } catch (err: any) {
       console.error('Export error:', err);
+      // Provide a helpful message — FFmpeg CDN load failures are the most common cause
+      let errMsg = err?.message ?? 'Tente novamente';
+      if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('load')) {
+        errMsg = 'Falha ao carregar FFmpeg (verifique a conexão com a internet)';
+      }
       setExportState({
         status: 'error', progress: 0, label: '',
-        error: `Erro ao exportar: ${err?.message ?? 'Tente novamente'}`,
+        error: `Erro ao exportar: ${errMsg}`,
       });
     }
   }, [project, media, isMobile]);
