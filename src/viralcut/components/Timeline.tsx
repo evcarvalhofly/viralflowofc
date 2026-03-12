@@ -600,9 +600,6 @@ export function Timeline({
                         </div>
                       </>
                     )}
-                        </div>
-                      </>
-                    )}
                   </div>
                 );
               })}
