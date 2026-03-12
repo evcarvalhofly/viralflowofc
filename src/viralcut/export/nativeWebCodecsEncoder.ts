@@ -31,21 +31,23 @@ function resolveOutputDimensions(
   projectHeight: number,
   resolution: '720p' | '1080p'
 ): { width: number; height: number } {
-  const ar = projectWidth / projectHeight;
-  const baseSize = resolution === '1080p' ? 1920 : 1280;
+  const isVertical = projectHeight > projectWidth;
 
   let w: number, h: number;
-  if (ar >= 1) {
-    w = baseSize;
-    h = Math.round(baseSize / ar);
+  if (isVertical) {
+    // Vertical: scale by height to fit target long side
+    h = resolution === '1080p' ? 1920 : 1280;
+    w = Math.round((projectWidth / projectHeight) * h);
   } else {
-    h = baseSize;
-    w = Math.round(baseSize * ar);
+    // Horizontal / square: scale by width
+    w = resolution === '1080p' ? 1920 : 1280;
+    h = Math.round((projectHeight / projectWidth) * w);
   }
-  // Ensure even dimensions (codec requirement)
+
+  // CRITICAL: H.264 requires even dimensions
   return {
-    width: Math.round(w / 2) * 2,
-    height: Math.round(h / 2) * 2,
+    width: Math.floor(w / 2) * 2,
+    height: Math.floor(h / 2) * 2,
   };
 }
 
@@ -494,7 +496,12 @@ export async function exportTimelineNativeWebCodecs(
 
     const isKeyFrame = frameIdx % (fps * 2) === 0; // keyframe every 2s
     videoEncoder.encode(videoFrame, { keyFrame: isKeyFrame });
-    videoFrame.close();
+    videoFrame.close(); // Release GPU memory immediately
+
+    // Every 30 frames yield to the GC to prevent OOM on mobile
+    if (frameIdx % 30 === 0) {
+      await new Promise(r => setTimeout(r, 1));
+    }
 
     // Report progress (frames are 5%→70%)
     if (frameIdx % 5 === 0) {
@@ -523,6 +530,7 @@ export async function exportTimelineNativeWebCodecs(
   if (hasAudio) {
     try {
       const [leftCh, rightCh] = await mixAudio(project, media, totalDuration, SAMPLE_RATE);
+      log(`Audio mixing done: ${leftCh.length} samples`);
       const CHUNK_SIZE = SAMPLE_RATE; // 1s chunks
 
       const audioEncoder = new AudioEncoder({
