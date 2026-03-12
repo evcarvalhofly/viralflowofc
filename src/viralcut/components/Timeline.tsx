@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Scissors, Trash2, ZoomIn, ZoomOut, SnapToGrid } from "lucide-react";
+import { Scissors, Trash2, ZoomIn, ZoomOut, AlignCenter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "../stores/project-store";
