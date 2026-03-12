@@ -470,7 +470,7 @@ const ViralCut = () => {
   }, [currentTime, updateProject]);
   splitAllRef.current = handleSplitAllAtPlayhead;
 
-  // ── Export – continuous single-pass engine ────────────────
+  // ── Export – fast WebCodecs engine with FFmpeg fallback ──
   const exportAbortRef = useRef<AbortController | null>(null);
 
   const handleExport = useCallback(async (opts: ExportOptions) => {
@@ -481,34 +481,82 @@ const ViralCut = () => {
     setExportState({ status: 'preparing', progress: 2, label: 'Preparando…' });
     if (isMobile) setShowMobilePanel(false);
 
+    const handleProgress = (progress: number, label: string) => {
+      setExportState({ status: 'encoding', progress, label });
+    };
+
+    const fileName = `${project.name || 'viralcut-export'}_${opts.resolution}_${opts.fps}fps`;
+
     try {
-      const mp4Blob = await exportTimelineWithFFmpeg(
-        project,
-        media,
-        { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
-        (progress, label) => setExportState({ status: 'encoding', progress, label }),
-        abortCtrl.signal
-      );
+      if (canUseFastExport()) {
+        // ── Fast path: WebCodecs via @diffusionstudio/core ──────
+        console.log('[ViralCut] Using fast WebCodecs export engine');
+        await exportTimelineFast(
+          project,
+          media,
+          { fps: opts.fps, resolution: opts.resolution, fileName },
+          handleProgress,
+          abortCtrl.signal
+        );
+        setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+      } else {
+        // ── Fallback: FFmpeg WASM ────────────────────────────────
+        console.log('[ViralCut] WebCodecs not available, using FFmpeg fallback');
+        handleProgress(2, 'Carregando FFmpeg (modo compatibilidade)…');
+        const mp4Blob = await exportTimelineWithFFmpeg(
+          project,
+          media,
+          { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
+          handleProgress,
+          abortCtrl.signal
+        );
 
-      setExportState({ status: 'encoding', progress: 98, label: 'Iniciando download…' });
+        setExportState({ status: 'encoding', progress: 98, label: 'Iniciando download…' });
 
-      const dlUrl = URL.createObjectURL(mp4Blob);
-      const a = document.createElement('a');
-      a.href = dlUrl;
-      a.download = `${project.name}_${opts.resolution}_${opts.fps}fps.mp4`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
+        const dlUrl = URL.createObjectURL(mp4Blob);
+        const a = document.createElement('a');
+        a.href = dlUrl;
+        a.download = `${fileName}.mp4`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
 
-      setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+        setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+      }
     } catch (err: any) {
-      if (err?.message === 'Exportação cancelada.') {
+      if (err?.message === 'Exportação cancelada.' || abortCtrl.signal.aborted) {
         setExportState({ status: 'idle', progress: 0, label: '' });
         return;
       }
+
+      // If fast export failed, try FFmpeg as last resort
+      if (canUseFastExport()) {
+        console.warn('[ViralCut] Fast export failed, trying FFmpeg fallback:', err);
+        try {
+          handleProgress(5, 'Modo rápido falhou, usando FFmpeg…');
+          const mp4Blob = await exportTimelineWithFFmpeg(
+            project,
+            media,
+            { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
+            handleProgress,
+            abortCtrl.signal
+          );
+          const dlUrl = URL.createObjectURL(mp4Blob);
+          const a = document.createElement('a');
+          a.href = dlUrl;
+          a.download = `${fileName}.mp4`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
+          setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+          return;
+        } catch (fallbackErr: any) {
+          console.error('[ViralCut] FFmpeg fallback also failed:', fallbackErr);
+        }
+      }
+
       console.error('[ViralCut] Export error:', err);
       let errMsg = err?.message ?? 'Tente novamente';
       if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('load')) {
-        errMsg = 'Falha ao carregar FFmpeg (verifique a conexão com a internet)';
+        errMsg = 'Falha ao carregar recursos (verifique a conexão com a internet)';
       }
       setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${errMsg}` });
     }
