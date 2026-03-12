@@ -519,11 +519,8 @@ const ViralCut = () => {
       setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${errMsg}` });
     }
   }, [project, media, isMobile]);
-    setExportState({ status: 'preparing', progress: 2, label: 'Preparando…' });
-    if (isMobile) setShowMobilePanel(false);
 
-    // ── Sanitize & validate before export ──────────────────
-    let safeProject: Project;
+  // ── Derived selection ─────────────────────────────────────
     try {
       safeProject = sanitizeProject(project);
       validateProjectForExport(safeProject);
