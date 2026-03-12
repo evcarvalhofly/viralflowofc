@@ -31,21 +31,23 @@ function resolveOutputDimensions(
   projectHeight: number,
   resolution: '720p' | '1080p'
 ): { width: number; height: number } {
-  const ar = projectWidth / projectHeight;
-  const baseSize = resolution === '1080p' ? 1920 : 1280;
+  const isVertical = projectHeight > projectWidth;
 
   let w: number, h: number;
-  if (ar >= 1) {
-    w = baseSize;
-    h = Math.round(baseSize / ar);
+  if (isVertical) {
+    // Vertical: scale by height to fit target long side
+    h = resolution === '1080p' ? 1920 : 1280;
+    w = Math.round((projectWidth / projectHeight) * h);
   } else {
-    h = baseSize;
-    w = Math.round(baseSize * ar);
+    // Horizontal / square: scale by width
+    w = resolution === '1080p' ? 1920 : 1280;
+    h = Math.round((projectHeight / projectWidth) * w);
   }
-  // Ensure even dimensions (codec requirement)
+
+  // CRITICAL: H.264 requires even dimensions
   return {
-    width: Math.round(w / 2) * 2,
-    height: Math.round(h / 2) * 2,
+    width: Math.floor(w / 2) * 2,
+    height: Math.floor(h / 2) * 2,
   };
 }
 
