@@ -22,7 +22,7 @@ export interface FFmpegInputEntry {
 export async function buildFFmpegInputs(
   items: TrackItem[],
   mediaMap: Map<string, MediaFile>,
-  ffmpeg: { writeFile: (name: string, data: Uint8Array) => Promise<void> },
+  ffmpeg: { writeFile: (name: string, data: Uint8Array) => Promise<void | boolean> },
   onProgress?: (msg: string) => void
 ): Promise<Map<string, FFmpegInputEntry>> {
   const result = new Map<string, FFmpegInputEntry>();
