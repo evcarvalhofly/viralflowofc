@@ -64,10 +64,8 @@ export async function exportTimelineFast(
   const encoder = new core.Encoder(composition, {
     video: {
       fps: opts.fps,
-      // Bitrate otimizado para mobile: menor consumo de memória e processamento
+      // Bitrate otimizado para mobile: menor consumo de memória
       bitrate: opts.resolution === '1080p' ? 6_000_000 : 3_500_000,
-      // Preferir aceleração por hardware quando disponível
-      hardwareAcceleration: 'prefer-hardware' as any,
     },
     audio: {
       codec: 'aac' as any,
