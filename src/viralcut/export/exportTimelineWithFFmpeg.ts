@@ -209,28 +209,9 @@ export async function exportTimelineWithFFmpeg(
 
   exportLog('FFmpeg command:', 'ffmpeg', ffmpegArgs.join(' '));
 
-  try {
-    await ffmpeg.exec(ffmpegArgs);
-  } catch (err: any) {
-    exportLog('FFmpeg exec failed:', err);
-    // Try fallback without audio if the audio stream causes issues
-    exportLog('Tentando exportação somente com vídeo como fallback…');
-    const fallbackArgs = [
-      ...inputArgs,
-      '-filter_complex', filterResult.filterComplex,
-      '-map', filterResult.videoOutLabel,
-      '-c:v', 'libx264',
-      '-preset', preset,
-      '-crf', String(crf),
-      '-movflags', '+faststart',
-      '-r', String(FPS),
-      '-t', totalDuration.toFixed(6),
-      '-an',
-      'output.mp4',
-    ];
-    exportLog('Fallback command (no audio):', fallbackArgs.join(' '));
-    await ffmpeg.exec(fallbackArgs);
-  }
+  // Run FFmpeg — no silent audio-less fallback; if it fails, let the error propagate
+  // so the caller can show a real message instead of a silent muted export.
+  await ffmpeg.exec(ffmpegArgs);
 
   if (signal?.aborted) throw new Error('Exportação cancelada.');
 
