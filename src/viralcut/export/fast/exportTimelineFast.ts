@@ -64,11 +64,12 @@ export async function exportTimelineFast(
   const encoder = new core.Encoder(composition, {
     video: {
       fps: opts.fps,
-      // Explicit bitrate targets for each resolution to avoid bloated files
-      bitrate: opts.resolution === '1080p' ? 8_000_000 : 5_000_000,
+      // Bitrate otimizado para mobile: menor consumo de memória
+      bitrate: opts.resolution === '1080p' ? 6_000_000 : 3_500_000,
     },
     audio: {
-      // AAC 128 kbps — transparent quality, small file size
+      codec: 'aac' as any,
+      // AAC 128 kbps — qualidade transparente, arquivo pequeno
       bitrate: 128_000,
     },
   });
@@ -145,7 +146,6 @@ export async function exportTimelineFast(
         throw new Error(`Falha no encoder: ${(result as any).error?.message ?? 'erro desconhecido'}`);
       }
       // type === 'success' with FileSystemFileHandle: data is undefined (written to disk)
-      // We trust the file was written — no further blob validation needed
       log('Export to disk complete via showSaveFilePicker');
 
     } else {
@@ -157,6 +157,18 @@ export async function exportTimelineFast(
   } finally {
     if (abortListener && signal) {
       signal.removeEventListener('abort', abortListener);
+    }
+    // ── PASSO 3: Liberar recursos da GPU após exportação ───
+    try {
+      if (typeof (composition as any).destroy === 'function') {
+        (composition as any).destroy();
+        log('Composition destroyed — GPU memory released');
+      } else if (typeof (composition as any).dispose === 'function') {
+        (composition as any).dispose();
+        log('Composition disposed — GPU memory released');
+      }
+    } catch (disposeErr) {
+      log('Warning: could not dispose composition:', disposeErr);
     }
   }
 
