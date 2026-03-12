@@ -38,17 +38,21 @@ interface Segment {
   duration: number; // seconds
 }
 
-/** Escape text for FFmpeg drawtext filter */
+/** Escape text for FFmpeg drawtext filter — covers all problematic chars */
 function escapeDrawtext(text: string): string {
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/:/g, '\\:')
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .replace(/,/g, '\\,')
-    .replace(/;/g, '\\;')
-    .replace(/\n/g, ' ');
+  return (text || '')
+    .replace(/\\/g,  '\\\\')
+    .replace(/'/g,   "\\'")
+    .replace(/:/g,   '\\:')
+    .replace(/\[/g,  '\\[')
+    .replace(/\]/g,  '\\]')
+    .replace(/,/g,   '\\,')
+    .replace(/;/g,   '\\;')
+    .replace(/%/g,   '\\%')
+    .replace(/\{/g,  '\\{')
+    .replace(/\}/g,  '\\}')
+    .replace(/\n/g,  ' ')
+    .trim();
 }
 
 /** Convert #rrggbb / #rrggbbaa to FFmpeg 0xRRGGBB or 0xRRGGBBAA */

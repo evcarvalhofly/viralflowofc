@@ -20,6 +20,8 @@ import { sanitizeProject } from '../utils/sanitize';
 import { validateProjectForFFmpegExport, EXPORT_MIN_CLIP_DURATION } from './validateProjectForFFmpegExport';
 import { buildFFmpegInputs } from './buildFFmpegInputs';
 import { buildFFmpegFilterComplex } from './buildFFmpegFilterComplex';
+import { resolveProjectOutputSize } from './shared/resolveProjectOutputSize';
+import { analyzeProjectComplexity } from './shared/analyzeProjectComplexity';
 
 const DEBUG_EXPORT = true;
 function exportLog(...args: unknown[]) {
