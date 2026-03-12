@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Film, Trash2, Copy, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,14 +10,8 @@ function formatDate(iso: string) {
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const projects = useProjectStore((s) => s.projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    duration: p.duration,
-    aspectRatio: p.settings.aspectRatio,
-    createdAt: p.createdAt,
-    updatedAt: p.updatedAt,
-  })));
+  // Select the raw projects array — Zustand only re-renders when this reference changes
+  const projects = useProjectStore((s) => s.projects);
   const createProject = useProjectStore((s) => s.createProject);
   const deleteProject = useProjectStore((s) => s.deleteProject);
   const duplicateProject = useProjectStore((s) => s.duplicateProject);
