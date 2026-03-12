@@ -287,6 +287,9 @@ export function PreviewPanel({
   const overlayContainerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
+  // Last valid frame fallback: if video is not ready, hold last drawn frame
+  const lastValidFrameRef = useRef<boolean>(false);
+
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
