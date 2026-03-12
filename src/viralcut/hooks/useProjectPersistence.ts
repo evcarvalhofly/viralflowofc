@@ -9,9 +9,8 @@ import { Project } from '../types';
 const STORAGE_KEY = 'viralcut_project_v2';
 const DEBOUNCE_MS = 1200;
 
-type SerializableProject = Omit<Project, 'tracks'> & {
-  tracks: typeof Project.prototype.tracks;
-};
+
+
 
 export function useProjectPersistence(
   project: Project,
