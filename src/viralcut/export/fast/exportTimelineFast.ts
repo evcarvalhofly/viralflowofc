@@ -59,7 +59,7 @@ export async function exportTimelineFast(
   });
 
   // Wire progress callback
-  encoder.onProgress = (event: core.EncoderProgress) => {
+  encoder.onProgress = (event: { progress: number; total: number; remaining: Date }) => {
     if (!onProgress) return;
     const total = event.total || 1;
     const pct = Math.min(95, Math.round(10 + (event.progress / total) * 85));
