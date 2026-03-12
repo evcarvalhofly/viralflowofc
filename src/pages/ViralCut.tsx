@@ -756,6 +756,9 @@ const ViralCut = () => {
 
         const segBlob = new Blob(segChunks, { type: segMimeType });
         segmentBlobs.push(segBlob);
+
+        // Advance cursor so next iteration can detect gaps correctly
+        timelineCursor = item.endTime;
       }
 
       // ── Step 2: FFmpeg – concatenate segments → MP4 ─────────
