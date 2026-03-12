@@ -2,6 +2,10 @@
 // ViralCut – Diffusion Composition Builder
 // Converts the ViralCut Project + MediaFile[] into a
 // @diffusionstudio/core Composition ready for encoding.
+//
+// IMPORTANT: outputWidth/outputHeight come from the user's chosen
+// export resolution — NOT from project.width/project.height.
+// This ensures 720p → 1280×720 and 1080p → 1920×1080 always.
 // ============================================================
 import * as core from '@diffusionstudio/core';
 import { Project, MediaFile } from '@/viralcut/types';
@@ -13,15 +17,25 @@ import { mapTextClip } from './mapTextClip';
 
 const log = (...args: unknown[]) => console.log('[ViralCut FastExport]', ...args);
 
+export interface CompositionOptions {
+  /** Final output width in pixels (from user's resolution choice) */
+  outputWidth: number;
+  /** Final output height in pixels (from user's resolution choice) */
+  outputHeight: number;
+}
+
 export async function buildDiffusionComposition(
   project: Project,
-  media: MediaFile[]
+  media: MediaFile[],
+  compositionOpts: CompositionOptions
 ): Promise<core.Composition> {
-  log('Building Diffusion composition…');
+  const { outputWidth, outputHeight } = compositionOpts;
+
+  log(`Building Diffusion composition — output: ${outputWidth}×${outputHeight}`);
 
   const composition = new core.Composition({
-    width: project.width,
-    height: project.height,
+    width: outputWidth,
+    height: outputHeight,
     background: '#000000',
   });
 
@@ -29,6 +43,14 @@ export async function buildDiffusionComposition(
   log('Loading source files…');
   const sourceMap = await loadSourceMap(media);
   log(`Sources loaded: ${sourceMap.size}`);
+
+  // Build a scaled project so image/text mappers scale coordinates
+  // from the original project dimensions to the output dimensions.
+  const scaledProject: Project = {
+    ...project,
+    width: outputWidth,
+    height: outputHeight,
+  };
 
   // Process tracks in order (bottom → top for layering)
   for (const track of project.tracks) {
@@ -40,9 +62,8 @@ export async function buildDiffusionComposition(
     const sortedItems = [...track.items].sort((a, b) => a.startTime - b.startTime);
     if (sortedItems.length === 0) continue;
 
-    // Create a layer for each track
-    // VIDEO tracks: use SEQUENTIAL mode so cuts play in order without overlap
-    // AUDIO/IMAGE/TEXT tracks: use default mode (clips placed by delay/offset)
+    // VIDEO tracks: SEQUENTIAL mode so cuts play in order without overlap
+    // AUDIO/IMAGE/TEXT tracks: DEFAULT mode (clips placed by delay/offset)
     const layerMode = track.type === 'video' ? 'SEQUENTIAL' : 'DEFAULT';
     const layer = await composition.add(new core.Layer({ mode: layerMode as any }));
 
@@ -57,9 +78,9 @@ export async function buildDiffusionComposition(
         } else if (track.type === 'audio') {
           clip = await mapAudioClip(item, sourceMap);
         } else if (track.type === 'image') {
-          clip = await mapImageClip(item, sourceMap, project);
+          clip = await mapImageClip(item, sourceMap, scaledProject);
         } else if (track.type === 'text') {
-          clip = await mapTextClip(item, project);
+          clip = await mapTextClip(item, scaledProject);
         }
 
         if (clip) {
