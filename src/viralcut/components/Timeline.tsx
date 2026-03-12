@@ -598,6 +598,8 @@ export function Timeline({
                         >
                           <div className="w-1.5 h-6 rounded-full bg-white/70 group-hover/trim:bg-white transition-colors" />
                         </div>
+                      </>
+                    )}
                         </div>
                       </>
                     )}
