@@ -11,7 +11,14 @@ function formatDate(iso: string) {
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const projects = useProjectStore((s) => s.getMetadata());
+  const projects = useProjectStore((s) => s.projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    duration: p.duration,
+    aspectRatio: p.settings.aspectRatio,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  })));
   const createProject = useProjectStore((s) => s.createProject);
   const deleteProject = useProjectStore((s) => s.deleteProject);
   const duplicateProject = useProjectStore((s) => s.duplicateProject);
