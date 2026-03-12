@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useProjectStore } from "../stores/project-store";
 import { Upload, Film, Music, Type, Image, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
