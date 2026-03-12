@@ -336,4 +336,3 @@ function SettingsView() {
   );
 }
 
-import { useProjectStore } from "../stores/project-store";
