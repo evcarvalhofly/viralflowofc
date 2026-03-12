@@ -70,7 +70,20 @@ export async function exportTimelineWithFFmpeg(
 
   const mediaMap = new Map(media.map((m) => [m.id, m]));
 
-  // ── 2. Validate ────────────────────────────────────────────
+  // ── 2. Guard: FFmpeg only handles simple timelines ─────────
+  const complexity = analyzeProjectComplexity(cleanedProject);
+  if (complexity.isComplex) {
+    throw new Error(
+      'O fallback FFmpeg não pode processar este projeto: ele contém ' +
+      (complexity.hasText  ? 'texto, ' : '') +
+      (complexity.hasImage ? 'imagens/overlay, ' : '') +
+      (complexity.hasVisualOverlap ? 'camadas simultâneas, ' : '') +
+      'que requerem o compositor nativo WebCodecs.'
+    );
+  }
+  exportLog(`Complexidade: simples (${complexity.visualItemsCount} itens visuais)`);
+
+  // ── 3. Validate ────────────────────────────────────────────
   onProgress(4, 'Validando timeline…');
   validateProjectForFFmpegExport(cleanedProject, mediaMap);
 
@@ -79,20 +92,18 @@ export async function exportTimelineWithFFmpeg(
 
   if (signal?.aborted) throw new Error('Exportação cancelada.');
 
-  // ── 3. Compute output dimensions ───────────────────────────
-  const videoTracks = cleanedProject.tracks.filter((t) => t.type === 'video' && !t.muted);
+  // ── 4. Compute output dimensions (respects project aspect ratio) ──
+  const videoTracks   = cleanedProject.tracks.filter((t) => t.type === 'video' && !t.muted);
   const allVideoItems = videoTracks.flatMap((t) => t.items).sort((a, b) => a.startTime - b.startTime);
   const allMediaItems = cleanedProject.tracks
     .filter((t) => !t.muted && (t.type === 'video' || t.type === 'audio'))
     .flatMap((t) => t.items);
 
-  // Always use the exact user-chosen resolution — never inherit from the source video.
-  const outW = opts.resolution === '1080p' ? 1920 : 1280;
-  const outH = opts.resolution === '1080p' ? 1080 : 720;
+  const { width: outW, height: outH } = resolveProjectOutputSize(cleanedProject, opts.resolution);
   const FPS = opts.fps;
 
-  exportLog(`[EXPORT] selected resolution: ${opts.resolution} → ${outW}×${outH}`);
-  exportLog(`[EXPORT] selected fps: ${FPS}`);
+  exportLog(`Resolução final: ${outW}×${outH} @ ${FPS}fps (${opts.resolution}, projeto ${cleanedProject.width}×${cleanedProject.height})`);
+  exportLog(`Clips de vídeo: ${allVideoItems.length}, inputs únicos: ${allMediaItems.length}`);
   exportLog(`Resolução: ${outW}×${outH} @ ${FPS}fps | ${allVideoItems.length} clips de vídeo`);
 
   // ── 4. Load FFmpeg ─────────────────────────────────────────
