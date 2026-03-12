@@ -226,7 +226,6 @@ const ViralCut = () => {
   }, [isPlaying, project.duration]);
 
   // ── Memoised derived data for Timeline / PreviewPanel ─────
-  // Avoids rebuilding on unrelated state changes
   const stableTracks = useMemo(() => project.tracks, [project.tracks]);
 
   // ── Import media ──────────────────────────────────────────
@@ -360,7 +359,7 @@ const ViralCut = () => {
     handleAddText({ text: shapeText, fontSize: 5, color: '#f472b6', posX: 50, posY: 50 });
   }, [handleAddText]);
 
-  // ── Timeline ops (move/trim do NOT push history — history pushed on mouseup by caller) ──
+  // ── Timeline ops ──────────────────────────────────────────
   const handleItemMove = useCallback((trackId: string, itemId: string, newStart: number) => {
     setProjectRaw((p) => {
       const tracks = p.tracks.map((t) => {
@@ -394,7 +393,6 @@ const ViralCut = () => {
       if (!track) return p;
       const item = track.items.find((i) => i.id === itemId);
       if (!item) return p;
-      // Enforce minimum segment size
       if (atTime <= item.startTime + MIN_CLIP_DURATION || atTime >= item.endTime - MIN_CLIP_DURATION) return p;
       const mediaAtSplit = item.mediaStart + (atTime - item.startTime);
       const left: TrackItem = { ...item, id: createId(), endTime: atTime, mediaEnd: mediaAtSplit };
@@ -470,12 +468,10 @@ const ViralCut = () => {
   }, [currentTime, updateProject]);
   splitAllRef.current = handleSplitAllAtPlayhead;
 
-  // ── Export ────────────────────────────────────────────────
-  // ── Export (continuous single-pass engine) ────────────────
+  // ── Export – continuous single-pass engine ────────────────
   const exportAbortRef = useRef<AbortController | null>(null);
 
   const handleExport = useCallback(async (opts: ExportOptions) => {
-    // Cancel any in-progress export
     exportAbortRef.current?.abort();
     const abortCtrl = new AbortController();
     exportAbortRef.current = abortCtrl;
@@ -487,11 +483,7 @@ const ViralCut = () => {
       const mp4Blob = await exportTimelineContinuous(
         project,
         media,
-        {
-          resolution: opts.resolution,
-          fps: opts.fps,
-          projectName: project.name,
-        },
+        { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
         (progress, label) => setExportState({ status: 'encoding', progress, label }),
         abortCtrl.signal
       );
@@ -511,382 +503,6 @@ const ViralCut = () => {
         setExportState({ status: 'idle', progress: 0, label: '' });
         return;
       }
-      console.error('[ViralCut] Export error:', err);
-      let errMsg = err?.message ?? 'Tente novamente';
-      if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('load')) {
-        errMsg = 'Falha ao carregar FFmpeg (verifique a conexão com a internet)';
-      }
-      setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${errMsg}` });
-    }
-  }, [project, media, isMobile]);
-
-  // ── Derived selection ─────────────────────────────────────
-    try {
-      safeProject = sanitizeProject(project);
-      validateProjectForExport(safeProject);
-    } catch (err: any) {
-      setExportState({ status: 'error', progress: 0, label: '', error: err.message });
-      return;
-    }
-
-    const videoItems = safeProject.tracks
-      .filter((t) => t.type === 'video' && !t.muted)
-      .flatMap((t) => t.items)
-      .sort((a, b) => a.startTime - b.startTime);
-
-    const firstMf = media.find((m) => m.id === videoItems[0].mediaId);
-    const srcW = firstMf?.width ?? 1920;
-    const srcH = firstMf?.height ?? 1080;
-    const targetLongSide = opts.resolution === '1080p' ? 1920 : 1280;
-    const exportScale = Math.min(targetLongSide / Math.max(srcW, srcH), 1);
-    const outW = Math.max(2, Math.round(srcW * exportScale / 2) * 2);
-    const outH = Math.max(2, Math.round(srcH * exportScale / 2) * 2);
-    const FPS = opts.fps ?? 30;
-
-    try {
-      setExportState({ status: 'encoding', progress: 5, label: 'Iniciando renderização…' });
-
-      const canvas = document.createElement('canvas');
-      canvas.width = outW;
-      canvas.height = outH;
-      const ctx = canvas.getContext('2d', { alpha: false })!;
-
-      const segmentBlobs: Blob[] = [];
-      const webmMimePrefs = [
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8',
-        'video/webm',
-      ];
-      const segMimeType = webmMimePrefs.find((c) => MediaRecorder.isTypeSupported(c)) ?? 'video/webm';
-
-      // ── Helper: black segment for gaps ──────────────────
-      const recordBlackSegment = async (gapDuration: number) => {
-        const audioCtx = new AudioContext();
-        const audioDestination = audioCtx.createMediaStreamDestination();
-        const videoStream = canvas.captureStream(FPS);
-        const combinedStream = new MediaStream([
-          ...videoStream.getVideoTracks(),
-          ...audioDestination.stream.getAudioTracks(),
-        ]);
-        const bitrate = opts.resolution === '1080p' ? 8_000_000 : 4_000_000;
-        const chunks: BlobPart[] = [];
-        const rec = new MediaRecorder(combinedStream, { mimeType: segMimeType, videoBitsPerSecond: bitrate });
-        rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-        const stopped = new Promise<void>((res) => { rec.onstop = () => res(); });
-        rec.start(100);
-
-        await new Promise<void>((res) => {
-          let rafId: number;
-          let startTs: number | null = null;
-          const loop = (ts: number) => {
-            if (startTs === null) startTs = ts;
-            const elapsed = (ts - startTs) / 1000;
-            if (elapsed >= gapDuration) { cancelAnimationFrame(rafId); res(); return; }
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, outW, outH);
-            rafId = requestAnimationFrame(loop);
-          };
-          rafId = requestAnimationFrame(loop);
-          setTimeout(() => { cancelAnimationFrame(rafId); res(); }, (gapDuration + 5) * 1000);
-        });
-
-        rec.stop();
-        await stopped;
-        audioCtx.close();
-        segmentBlobs.push(new Blob(chunks, { type: segMimeType }));
-      };
-
-      // ── Render each video segment ────────────────────────
-      let timelineCursor = 0;
-      const totalSegments = videoItems.length;
-
-      for (let segIdx = 0; segIdx < totalSegments; segIdx++) {
-        const item = videoItems[segIdx];
-        const mf = media.find((m) => m.id === item.mediaId);
-        if (!mf) { timelineCursor = item.endTime; continue; }
-
-        // Gap before this clip → black frames
-        if (item.startTime > timelineCursor + 0.05) {
-          const gapDuration = item.startTime - timelineCursor;
-          setExportState({
-            status: 'encoding',
-            progress: 5 + Math.round((segIdx / totalSegments) * 60),
-            label: `Renderizando intervalo vazio (${gapDuration.toFixed(1)}s)…`,
-          });
-          await recordBlackSegment(gapDuration);
-        }
-
-        const vd = item.videoDetails;
-        const playRate = Math.min(Math.max(vd?.playbackRate ?? 1, 0.1), 16);
-        const wallClockDuration = (item.endTime - item.startTime) / playRate;
-
-        setExportState({
-          status: 'encoding',
-          progress: 5 + Math.round((segIdx / totalSegments) * 60),
-          label: `Renderizando segmento ${segIdx + 1} de ${totalSegments}…`,
-        });
-
-        const audioCtx = new AudioContext();
-        const audioDestination = audioCtx.createMediaStreamDestination();
-        const masterGain = audioCtx.createGain();
-        masterGain.gain.value = 1;
-        masterGain.connect(audioDestination);
-
-        const videoStream = canvas.captureStream(FPS);
-        const combinedStream = new MediaStream([
-          ...videoStream.getVideoTracks(),
-          ...audioDestination.stream.getAudioTracks(),
-        ]);
-        const bitrate = opts.resolution === '1080p' ? 8_000_000 : 4_000_000;
-        const segChunks: BlobPart[] = [];
-        const segRecorder = new MediaRecorder(combinedStream, { mimeType: segMimeType, videoBitsPerSecond: bitrate });
-        segRecorder.ondataavailable = (e) => { if (e.data.size > 0) segChunks.push(e.data); };
-        const segStopped = new Promise<void>((res) => { segRecorder.onstop = () => res(); });
-        segRecorder.start(100);
-
-        const vid = document.createElement('video');
-        vid.src = mf.url;
-        vid.muted = false;
-        vid.playsInline = true;
-        vid.crossOrigin = 'anonymous';
-        vid.volume = Math.min(1, vd?.volume ?? 1);
-
-        let sourceNode: MediaElementAudioSourceNode | null = null;
-        let segGain: GainNode | null = null;
-        try {
-          sourceNode = audioCtx.createMediaElementSource(vid);
-          segGain = audioCtx.createGain();
-          segGain.gain.value = Math.min(1, vd?.volume ?? 1);
-          sourceNode.connect(segGain);
-          segGain.connect(masterGain);
-        } catch { /* CORS – continue without audio */ }
-
-        // ── Load + seek with single promise ────────────────
-        await new Promise<void>((res, rej) => {
-          let resolved = false;
-          const done = () => { if (!resolved) { resolved = true; res(); } };
-          const failTimer = setTimeout(() => done(), 10000);
-
-          const onMeta = () => {
-            vid.removeEventListener('loadedmetadata', onMeta);
-            // Clamp mediaStart within actual file duration
-            const safeStart = Math.min(item.mediaStart, (vid.duration || 9999) - 0.01);
-            vid.currentTime = Math.max(0, safeStart);
-            const onSeeked = () => {
-              vid.removeEventListener('seeked', onSeeked);
-              clearTimeout(failTimer);
-              done();
-            };
-            vid.addEventListener('seeked', onSeeked);
-            // Mobile fallback if seeked never fires
-            setTimeout(done, 5000);
-          };
-          vid.addEventListener('loadedmetadata', onMeta);
-          vid.addEventListener('error', () => {
-            clearTimeout(failTimer);
-            rej(new Error(`Falha ao carregar: ${mf.name}`));
-          });
-          vid.load();
-        });
-
-        vid.playbackRate = playRate;
-
-        await new Promise<void>((res) => {
-          let rafId: number;
-          let startTs: number | null = null;
-          // Precise mediaEnd clamped to actual file duration
-          const safeMediaEnd = Math.min(item.mediaEnd, vid.duration || item.mediaEnd);
-
-          const renderFrame = (ts: number) => {
-            if (startTs === null) startTs = ts;
-            const elapsed = (ts - startTs) / 1000;
-
-            const overtime = elapsed >= wallClockDuration + 0.15;
-            const mediaOver = vid.currentTime >= safeMediaEnd - 0.02;
-            const ended = vid.ended;
-
-            if (overtime || mediaOver || ended) {
-              cancelAnimationFrame(rafId);
-              vid.pause();
-              sourceNode?.disconnect();
-              segGain?.disconnect();
-              vid.src = '';
-              res();
-              return;
-            }
-
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, outW, outH);
-            ctx.save();
-            const filters: string[] = [];
-            if (vd?.brightness && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
-            if (vd?.contrast && vd.contrast !== 1) filters.push(`contrast(${vd.contrast})`);
-            if (vd?.saturation && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
-            if (filters.length) (ctx as any).filter = filters.join(' ');
-            ctx.globalAlpha = vd?.opacity ?? 1;
-            if (vd?.flipH || vd?.flipV) {
-              ctx.translate(vd.flipH ? outW : 0, vd.flipV ? outH : 0);
-              ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
-            }
-            ctx.drawImage(vid, 0, 0, outW, outH);
-            ctx.restore();
-            (ctx as any).filter = 'none';
-            ctx.globalAlpha = 1;
-
-            // Draw text overlays
-            const currentProjectTime = item.startTime + elapsed * playRate;
-            const textTracks = safeProject.tracks.filter((t) => t.type === 'text' && !t.muted);
-            for (const tt of textTracks) {
-              for (const ti of tt.items) {
-                if (currentProjectTime < ti.startTime || currentProjectTime > ti.endTime) continue;
-                const td = ti.textDetails;
-                if (!td) continue;
-                const x = (td.posX / 100) * outW;
-                const y = (td.posY / 100) * outH;
-                const maxW = (td.width / 100) * outW;
-                const fontSize = Math.round((td.fontSize / 100) * outH);
-                ctx.save();
-                ctx.globalAlpha = td.opacity ?? 1;
-                (ctx as any).filter = 'none';
-                if (td.backgroundColor && td.backgroundColor !== 'transparent') {
-                  ctx.fillStyle = td.backgroundColor;
-                  ctx.fillRect(x - maxW / 2, y - fontSize * 1.2, maxW, fontSize * 1.5);
-                }
-                if (td.boxShadow?.blur > 0) {
-                  ctx.shadowColor = td.boxShadow.color;
-                  ctx.shadowOffsetX = td.boxShadow.x;
-                  ctx.shadowOffsetY = td.boxShadow.y;
-                  ctx.shadowBlur = td.boxShadow.blur;
-                }
-                ctx.font = `bold ${fontSize}px ${td.fontFamily || 'Inter, sans-serif'}`;
-                ctx.fillStyle = td.color || '#ffffff';
-                ctx.textAlign = (td.textAlign as CanvasTextAlign) || 'center';
-                ctx.textBaseline = 'middle';
-                const words = (td.text || '').split(' ');
-                let line = '';
-                const lineHeight = fontSize * 1.35;
-                const lines: string[] = [];
-                for (const word of words) {
-                  const test = line ? `${line} ${word}` : word;
-                  if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = word; }
-                  else { line = test; }
-                }
-                if (line) lines.push(line);
-                const totalH = lines.length * lineHeight;
-                lines.forEach((l, li) => { ctx.fillText(l, x, y - totalH / 2 + li * lineHeight + lineHeight / 2, maxW); });
-                ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
-                ctx.restore();
-              }
-            }
-
-            rafId = requestAnimationFrame(renderFrame);
-          };
-
-          vid.play()
-            .then(() => { rafId = requestAnimationFrame(renderFrame); })
-            .catch(() => res());
-
-          // Hard timeout: wallClockDuration + 20s safety margin
-          setTimeout(() => {
-            cancelAnimationFrame(rafId);
-            vid.pause();
-            sourceNode?.disconnect();
-            segGain?.disconnect();
-            vid.src = '';
-            res();
-          }, (wallClockDuration + 20) * 1000);
-        });
-
-        segRecorder.stop();
-        await segStopped;
-        audioCtx.close();
-        segmentBlobs.push(new Blob(segChunks, { type: segMimeType }));
-        timelineCursor = item.endTime;
-      }
-
-      // ── FFmpeg concat → MP4 ──────────────────────────────
-      setExportState({ status: 'encoding', progress: 68, label: 'Carregando FFmpeg…' });
-
-      const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
-        import('@ffmpeg/ffmpeg'),
-        import('@ffmpeg/util'),
-      ]);
-      const ffmpeg = new FFmpeg();
-
-      const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
-      try {
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        });
-      } catch {
-        const fallbackURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        });
-      }
-
-      setExportState({ status: 'encoding', progress: 72, label: 'Processando com FFmpeg…' });
-
-      const concatLines: string[] = [];
-      for (let i = 0; i < segmentBlobs.length; i++) {
-        const fname = `seg${i}.webm`;
-        const data = await fetchFile(segmentBlobs[i]);
-        await ffmpeg.writeFile(fname, data);
-        concatLines.push(`file '${fname}'`);
-      }
-      const encoder = new TextEncoder();
-      await ffmpeg.writeFile('concat.txt', encoder.encode(concatLines.join('\n')));
-
-      setExportState({ status: 'encoding', progress: 78, label: 'Convertendo para MP4…' });
-
-      ffmpeg.on('progress', ({ progress }) => {
-        const safeP = Math.max(0, Math.min(1, isFinite(progress) ? progress : 0));
-        setExportState((s) => ({ ...s, progress: Math.min(78 + Math.round(safeP * 18), 96), label: 'Convertendo para MP4…' }));
-      });
-
-      await ffmpeg.exec([
-        '-f', 'concat', '-safe', '0', '-i', 'concat.txt',
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
-        '-c:a', 'aac', '-b:a', '128k',
-        '-movflags', '+faststart',
-        '-vf', `scale=${outW}:${outH}`,
-        '-r', String(FPS),
-        'output.mp4',
-      ]);
-
-      setExportState({ status: 'encoding', progress: 97, label: 'Preparando download…' });
-
-      const outputData = await ffmpeg.readFile('output.mp4');
-      let mp4Blob: Blob;
-      if (typeof outputData === 'string') {
-        mp4Blob = new Blob([outputData], { type: 'video/mp4' });
-      } else {
-        const buf = new ArrayBuffer(outputData.byteLength);
-        new Uint8Array(buf).set(outputData);
-        mp4Blob = new Blob([buf], { type: 'video/mp4' });
-      }
-
-      // Clean up FFmpeg virtual FS
-      try {
-        for (let i = 0; i < segmentBlobs.length; i++) await ffmpeg.deleteFile(`seg${i}.webm`).catch(() => {});
-        await ffmpeg.deleteFile('concat.txt').catch(() => {});
-        await ffmpeg.deleteFile('output.mp4').catch(() => {});
-      } catch { /* ignore */ }
-
-      const dlUrl = URL.createObjectURL(mp4Blob);
-      const a = document.createElement('a');
-      a.href = dlUrl;
-      a.download = `${safeProject.name}_${opts.resolution}_${opts.fps}fps.mp4`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
-
-      setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
-
-    } catch (err: any) {
       console.error('[ViralCut] Export error:', err);
       let errMsg = err?.message ?? 'Tente novamente';
       if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('load')) {
@@ -989,7 +605,7 @@ const ViralCut = () => {
           </div>
           <span className="text-sm font-semibold text-foreground">ViralCut</span>
           <button
-            className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-semibold"
+            className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold"
             onClick={() => { setExportState({ status: 'idle', progress: 0, label: '' }); setExportOpen(true); }}>
             Exportar
           </button>
