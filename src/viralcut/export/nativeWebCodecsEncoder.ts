@@ -530,6 +530,7 @@ export async function exportTimelineNativeWebCodecs(
   if (hasAudio) {
     try {
       const [leftCh, rightCh] = await mixAudio(project, media, totalDuration, SAMPLE_RATE);
+      log(`Audio mixing done: ${leftCh.length} samples`);
       const CHUNK_SIZE = SAMPLE_RATE; // 1s chunks
 
       const audioEncoder = new AudioEncoder({
