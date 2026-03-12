@@ -20,6 +20,8 @@ import { sanitizeProject } from '../utils/sanitize';
 import { validateProjectForFFmpegExport, EXPORT_MIN_CLIP_DURATION } from './validateProjectForFFmpegExport';
 import { buildFFmpegInputs } from './buildFFmpegInputs';
 import { buildFFmpegFilterComplex } from './buildFFmpegFilterComplex';
+import { resolveProjectOutputSize } from './shared/resolveProjectOutputSize';
+import { analyzeProjectComplexity } from './shared/analyzeProjectComplexity';
 
 const DEBUG_EXPORT = true;
 function exportLog(...args: unknown[]) {
@@ -68,7 +70,20 @@ export async function exportTimelineWithFFmpeg(
 
   const mediaMap = new Map(media.map((m) => [m.id, m]));
 
-  // ── 2. Validate ────────────────────────────────────────────
+  // ── 2. Guard: FFmpeg only handles simple timelines ─────────
+  const complexity = analyzeProjectComplexity(cleanedProject);
+  if (complexity.isComplex) {
+    throw new Error(
+      'O fallback FFmpeg não pode processar este projeto: ele contém ' +
+      (complexity.hasText  ? 'texto, ' : '') +
+      (complexity.hasImage ? 'imagens/overlay, ' : '') +
+      (complexity.hasVisualOverlap ? 'camadas simultâneas, ' : '') +
+      'que requerem o compositor nativo WebCodecs.'
+    );
+  }
+  exportLog(`Complexidade: simples (${complexity.visualItemsCount} itens visuais)`);
+
+  // ── 3. Validate ────────────────────────────────────────────
   onProgress(4, 'Validando timeline…');
   validateProjectForFFmpegExport(cleanedProject, mediaMap);
 
@@ -77,20 +92,18 @@ export async function exportTimelineWithFFmpeg(
 
   if (signal?.aborted) throw new Error('Exportação cancelada.');
 
-  // ── 3. Compute output dimensions ───────────────────────────
-  const videoTracks = cleanedProject.tracks.filter((t) => t.type === 'video' && !t.muted);
+  // ── 4. Compute output dimensions (respects project aspect ratio) ──
+  const videoTracks   = cleanedProject.tracks.filter((t) => t.type === 'video' && !t.muted);
   const allVideoItems = videoTracks.flatMap((t) => t.items).sort((a, b) => a.startTime - b.startTime);
   const allMediaItems = cleanedProject.tracks
     .filter((t) => !t.muted && (t.type === 'video' || t.type === 'audio'))
     .flatMap((t) => t.items);
 
-  // Always use the exact user-chosen resolution — never inherit from the source video.
-  const outW = opts.resolution === '1080p' ? 1920 : 1280;
-  const outH = opts.resolution === '1080p' ? 1080 : 720;
+  const { width: outW, height: outH } = resolveProjectOutputSize(cleanedProject, opts.resolution);
   const FPS = opts.fps;
 
-  exportLog(`[EXPORT] selected resolution: ${opts.resolution} → ${outW}×${outH}`);
-  exportLog(`[EXPORT] selected fps: ${FPS}`);
+  exportLog(`Resolução final: ${outW}×${outH} @ ${FPS}fps (${opts.resolution}, projeto ${cleanedProject.width}×${cleanedProject.height})`);
+  exportLog(`Clips de vídeo: ${allVideoItems.length}, inputs únicos: ${allMediaItems.length}`);
   exportLog(`Resolução: ${outW}×${outH} @ ${FPS}fps | ${allVideoItems.length} clips de vídeo`);
 
   // ── 4. Load FFmpeg ─────────────────────────────────────────
@@ -196,28 +209,9 @@ export async function exportTimelineWithFFmpeg(
 
   exportLog('FFmpeg command:', 'ffmpeg', ffmpegArgs.join(' '));
 
-  try {
-    await ffmpeg.exec(ffmpegArgs);
-  } catch (err: any) {
-    exportLog('FFmpeg exec failed:', err);
-    // Try fallback without audio if the audio stream causes issues
-    exportLog('Tentando exportação somente com vídeo como fallback…');
-    const fallbackArgs = [
-      ...inputArgs,
-      '-filter_complex', filterResult.filterComplex,
-      '-map', filterResult.videoOutLabel,
-      '-c:v', 'libx264',
-      '-preset', preset,
-      '-crf', String(crf),
-      '-movflags', '+faststart',
-      '-r', String(FPS),
-      '-t', totalDuration.toFixed(6),
-      '-an',
-      'output.mp4',
-    ];
-    exportLog('Fallback command (no audio):', fallbackArgs.join(' '));
-    await ffmpeg.exec(fallbackArgs);
-  }
+  // Run FFmpeg — no silent audio-less fallback; if it fails, let the error propagate
+  // so the caller can show a real message instead of a silent muted export.
+  await ffmpeg.exec(ffmpegArgs);
 
   if (signal?.aborted) throw new Error('Exportação cancelada.');
 
