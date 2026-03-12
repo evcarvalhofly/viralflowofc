@@ -56,7 +56,7 @@ const App = () => (
               <Route path="/gameover" element={<ProtectedRoute><GameOver /></ProtectedRoute>} />
               <Route path="/viral-videos" element={<ProtectedRoute><ViralVideos /></ProtectedRoute>} />
               <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
-              <Route path="/viralcut" element={<ProtectedRoute><ViralCut /></ProtectedRoute>} />
+              <Route path="/viralcut/*" element={<ViralCut />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

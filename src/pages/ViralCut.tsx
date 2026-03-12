@@ -1,7 +1,12 @@
+import { Routes, Route } from "react-router-dom";
+import { ProjectsPage } from "@/viralcut/components/ProjectsPage";
+import { EditorLayout } from "@/viralcut/components/EditorLayout";
+
 export default function ViralCut() {
   return (
-    <div className="flex items-center justify-center h-screen bg-background">
-      <span className="text-2xl font-semibold text-muted-foreground">em breve</span>
-    </div>
+    <Routes>
+      <Route index element={<ProjectsPage />} />
+      <Route path="editor/:projectId" element={<EditorLayout />} />
+    </Routes>
   );
 }
