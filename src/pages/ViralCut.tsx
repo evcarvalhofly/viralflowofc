@@ -784,8 +784,8 @@ const ViralCut = () => {
 
       const ffmpeg = new FFmpeg();
 
-      // Load FFmpeg WASM core from CDN
-      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+      // Load FFmpeg WASM core from CDN (jsDelivr is more reliable than unpkg)
+      const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
       await ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
         wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
