@@ -799,7 +799,6 @@ const ViralCut = () => {
           wasmURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.wasm`, 'application/wasm'),
         });
       }
-      });
 
       setExportState({ status: 'encoding', progress: 72, label: 'Processando com FFmpeg…' });
 
