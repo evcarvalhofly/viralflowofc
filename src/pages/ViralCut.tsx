@@ -498,7 +498,8 @@ const ViralCut = () => {
           handleProgress,
           abortCtrl.signal
         );
-        setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+        // exportTimelineFast throws on any failure — reaching here means success
+        setExportState({ status: 'done', progress: 100, label: 'Vídeo exportado com sucesso!' });
       } else {
         // ── Fallback: FFmpeg WASM ────────────────────────────────
         console.log('[ViralCut] WebCodecs not available, using FFmpeg fallback');
@@ -511,6 +512,14 @@ const ViralCut = () => {
           abortCtrl.signal
         );
 
+        // ── Validate before triggering download ──────────────────
+        console.log('[ViralCut] FFmpeg output blob size:', mp4Blob.size);
+        if (!mp4Blob || mp4Blob.size <= 1024) {
+          throw new Error(
+            `O arquivo exportado pelo FFmpeg é inválido (${mp4Blob?.size ?? 0} bytes). Verifique os clipes na timeline.`
+          );
+        }
+
         setExportState({ status: 'encoding', progress: 98, label: 'Iniciando download…' });
 
         const dlUrl = URL.createObjectURL(mp4Blob);
@@ -520,7 +529,7 @@ const ViralCut = () => {
         a.click();
         setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
 
-        setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
+        setExportState({ status: 'done', progress: 100, label: 'Vídeo exportado com sucesso!' });
       }
     } catch (err: any) {
       if (err?.message === 'Exportação cancelada.' || abortCtrl.signal.aborted) {
