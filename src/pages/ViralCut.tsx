@@ -19,7 +19,7 @@ import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Image, Zap,
-  Upload, Plus, Wand2, X, ChevronUp
+  Upload, Plus, Wand2, X, ChevronUp, ZoomIn, ZoomOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -1019,7 +1019,18 @@ const ViralCut = () => {
         {/* Timeline */}
         <div className="flex-1 min-h-0 border-t border-border flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 px-2 py-1 bg-card/60 border-b border-border shrink-0">
-            <span className="text-[10px] font-semibold text-foreground flex-1">Timeline</span>
+            <span className="text-[10px] font-semibold text-foreground">Timeline</span>
+            {/* Zoom controls */}
+            <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg px-1 py-0.5">
+              <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.max(20, z - 20))} title="Zoom out">
+                <ZoomOut className="h-3 w-3" />
+              </button>
+              <span className="text-[10px] font-mono text-muted-foreground w-9 text-center tabular-nums">{zoom}px/s</span>
+              <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.min(300, z + 20))} title="Zoom in">
+                <ZoomIn className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="flex-1" />
             <button
               className="p-1 rounded bg-muted/60 text-muted-foreground hover:text-foreground"
               onClick={() => importRef.current?.click()}
@@ -1183,9 +1194,6 @@ const ViralCut = () => {
       <Toolbar
         projectName={project.name}
         onProjectNameChange={(name) => setProject((p) => ({ ...p, name }))}
-        zoom={zoom}
-        onZoomIn={() => setZoom((z) => Math.min(300, z + 20))}
-        onZoomOut={() => setZoom((z) => Math.max(20, z - 20))}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
@@ -1257,10 +1265,21 @@ const ViralCut = () => {
       {/* Timeline — flex layout: fills remaining height */}
       <div className="flex-none border-t border-border flex flex-col" style={{ height: 'clamp(160px, 28vh, 260px)' }}>
         <div className="flex items-center gap-2 px-3 py-1.5 bg-card/60 border-b border-border shrink-0">
-          <span className="text-[11px] font-semibold text-foreground uppercase tracking-wide flex-1">Timeline</span>
-          <span className="text-[10px] text-muted-foreground hidden sm:block">
+          <span className="text-[11px] font-semibold text-foreground uppercase tracking-wide">Timeline</span>
+          {/* Zoom controls — next to Timeline label */}
+          <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg px-1 py-0.5">
+            <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.max(20, z - 20))} title="Zoom out">
+              <ZoomOut className="h-3 w-3" />
+            </button>
+            <span className="text-[10px] font-mono text-muted-foreground w-9 text-center tabular-nums">{zoom}px/s</span>
+            <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.min(300, z + 20))} title="Zoom in">
+              <ZoomIn className="h-3 w-3" />
+            </button>
+          </div>
+          <span className="text-[10px] text-muted-foreground hidden lg:block flex-1">
             Espaço = play/pause · Del = deletar · Arrastar borda = cortar
           </span>
+          <div className="flex-1 hidden sm:block lg:hidden" />
           {/* Auto-cut toggle */}
           <button
             className={cn('flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors',

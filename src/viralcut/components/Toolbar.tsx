@@ -1,16 +1,13 @@
 // ============================================================
 // Toolbar – Top bar with project name, zoom, export
 // ============================================================
-import { Scissors, Download, ZoomIn, ZoomOut, Undo2, Redo2, Edit2, Check } from 'lucide-react';
+import { Scissors, Download, Undo2, Redo2, Edit2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
 interface ToolbarProps {
   projectName: string;
   onProjectNameChange: (name: string) => void;
-  zoom: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -21,9 +18,6 @@ interface ToolbarProps {
 export function Toolbar({
   projectName,
   onProjectNameChange,
-  zoom,
-  onZoomIn,
-  onZoomOut,
   onUndo,
   onRedo,
   canUndo,
@@ -94,19 +88,6 @@ export function Toolbar({
           title="Refazer"
         >
           <Redo2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {/* Zoom */}
-      <div className="flex items-center gap-1 bg-muted/60 rounded-lg px-1.5 py-1">
-        <button className="hover:text-foreground text-muted-foreground transition-colors" onClick={onZoomOut}>
-          <ZoomOut className="h-3.5 w-3.5" />
-        </button>
-        <span className="text-[10px] font-mono text-muted-foreground w-10 text-center tabular-nums">
-          {zoom}px/s
-        </span>
-        <button className="hover:text-foreground text-muted-foreground transition-colors" onClick={onZoomIn}>
-          <ZoomIn className="h-3.5 w-3.5" />
         </button>
       </div>
 
