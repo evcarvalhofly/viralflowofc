@@ -5,7 +5,7 @@
 // Quick-split button: cuts ALL items across tracks at playhead
 // ============================================================
 import { useRef, useState, useCallback } from 'react';
-import { Lock, Volume2, VolumeX, Trash2, Film, Music, Type, Image, Scissors } from 'lucide-react';
+import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
 
@@ -457,9 +457,16 @@ export function Timeline({
                   track.muted ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
                 )}
                 onClick={() => onTrackToggleMute(track.id)}
-                title={track.muted ? 'Ativar som' : 'Silenciar'}
+                title={
+                  track.type === 'audio'
+                    ? (track.muted ? 'Ativar som' : 'Silenciar')
+                    : (track.muted ? 'Mostrar' : 'Ocultar')
+                }
               >
-                {track.muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                {track.type === 'audio'
+                  ? (track.muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />)
+                  : (track.muted ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />)
+                }
               </button>
               <button
                 className={cn(
