@@ -287,6 +287,9 @@ export function PreviewPanel({
   const overlayContainerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
+  // Last valid frame fallback: if video is not ready, hold last drawn frame
+  const lastValidFrameRef = useRef<boolean>(false);
+
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -358,6 +361,8 @@ export function PreviewPanel({
   }, [activeVideoItem, muted, volume, getActiveVideo]);
 
   // ── Draw a frame from the ACTIVE video slot ────────────────
+  // Uses "last valid frame" strategy: if video isn't ready yet,
+  // keep the canvas as-is (hold last frame) instead of going black.
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
     const v = getActiveVideo();
@@ -365,11 +370,11 @@ export function PreviewPanel({
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     if (v && v.readyState >= 2 && activeVideoItem?.mediaFile && v.videoWidth > 0) {
+      // Valid frame available — draw it
       const vd = activeVideoItem.item.videoDetails;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.save();
       ctx.globalAlpha = vd?.opacity ?? 1;
       if (vd?.flipH || vd?.flipV) {
@@ -378,7 +383,14 @@ export function PreviewPanel({
       }
       ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
       ctx.restore();
+      lastValidFrameRef.current = true;
+    } else if (!activeVideoItem) {
+      // Genuine gap in timeline — show black
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      lastValidFrameRef.current = false;
     }
+    // else: video not ready yet → do NOT clear canvas (hold last valid frame)
   }, [activeVideoItem, getActiveVideo]);
 
   // ── RAF render loop ────────────────────────────────────────
