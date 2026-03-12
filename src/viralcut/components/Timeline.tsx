@@ -268,19 +268,21 @@ export function Timeline({
     window.addEventListener('touchend', onUp);
   };
 
-  // ── Trim left handle ────────────────────────────────────────
-  const handleTrimLeft = (e: React.MouseEvent, track: Track, item: TrackItem) => {
+  // ── Trim left handle (mouse + touch) ────────────────────────
+  const handleTrimLeft = (e: React.MouseEvent | React.TouchEvent, track: Track, item: TrackItem) => {
     if (track.locked) return;
     e.stopPropagation();
-    e.preventDefault();
+    if ('preventDefault' in e) e.preventDefault();
 
-    const startX = e.clientX;
+    const isTouch = 'touches' in e;
+    const startX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
     const origStart = item.startTime;
     const origMediaStart = item.mediaStart;
     const maxTrim = item.endTime - origStart - 0.1;
 
-    const onMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - startX;
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      const cx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
+      const dx = cx - startX;
       const delta = dx / zoom;
       const clampedDelta = Math.max(-origMediaStart, Math.min(maxTrim, delta));
       onItemTrim(track.id, item.id, origStart + clampedDelta, item.endTime, origMediaStart + clampedDelta, item.mediaEnd);
@@ -288,9 +290,13 @@ export function Timeline({
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
   };
 
   // ── Trim right handle ────────────────────────────────────────
