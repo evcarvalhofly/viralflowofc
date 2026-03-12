@@ -18,9 +18,9 @@ import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { canUseFastExport } from '@/viralcut/export/fast/canUseFastExport';
-import { exportTimelineNativeWebCodecs } from '@/viralcut/export/nativeWebCodecsEncoder';
 import { exportTimelineWithFFmpeg } from '@/viralcut/export/exportTimelineWithFFmpeg';
 import { analyzeProjectComplexity } from '@/viralcut/export/shared/analyzeProjectComplexity';
+import { exportWithWebAVEngine } from '@/viralcut/engine/export/exportEngine';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
