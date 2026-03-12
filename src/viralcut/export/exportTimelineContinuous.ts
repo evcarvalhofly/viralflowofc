@@ -1,19 +1,26 @@
 // ============================================================
-// ViralCut – Continuous Single-Pass Export Engine
+// ViralCut – Continuous Single-Pass Export Engine (v2)
 //
-// Architecture:
-//  1. Sanitize + validate the project
-//  2. Pre-load all media elements
-//  3. Start ONE MediaRecorder on ONE canvas stream + AudioContext
-//  4. Advance a "project clock" frame-by-frame via requestAnimationFrame
-//  5. At each frame: resolve active items → draw to canvas → route audio
-//  6. On completion: stop recorder → get ONE blob → FFmpeg WebM→MP4
+// ARCHITECTURE FIXES vs v1:
 //
-// Key improvements over the old segmented approach:
-//  - Zero concat: no seg0.webm + seg1.webm + concat.txt
-//  - Zero pauses at cuts: the recorder never stops between clips
-//  - Robust against micro-clips (handles < 0.1s segments gracefully)
-//  - Double-buffer: slot A plays current clip, slot B pre-seeks next clip
+//  ❌ v1: Audio via createMediaElementSource — dies after a few cuts
+//  ✅ v2: Audio pre-decoded + scheduled with AudioBufferSourceNode.start(when,offset,dur)
+//         → completely independent of video element seek timing
+//
+//  ❌ v1: drawImage immediately after currentTime = t (race condition)
+//  ✅ v2: seekVideoPrecisely() awaits 'seeked' + requestVideoFrameCallback
+//         → only draws when the frame is genuinely ready
+//
+//  ❌ v1: Real-time RAF loop — can't pause to wait for seeks
+//  ✅ v2: Frame-by-frame async loop — each frame fully awaited before next
+//         → guaranteed frame accuracy even with rapid cuts
+//
+//  ❌ v1: Black canvas during seek transition
+//  ✅ v2: Hold last valid frame in an offscreen buffer during seek
+//         → no black flashes between cuts
+//
+//  ❌ v1: Audio source re-created on every clip change → breaks the chain
+//  ✅ v2: All audio pre-scheduled before recording starts → zero interruptions
 // ============================================================
 
 import { Project, TrackItem, MediaFile } from '../types';
@@ -22,6 +29,8 @@ import { validateProjectForContinuousExport, EXPORT_MIN_CLIP_DURATION } from './
 import { resolveFrameStateAtTime } from './resolveFrameState';
 import { prepareMediaForExport } from './prepareMediaForExport';
 import { pickBestMimeType } from './pickBestMimeType';
+import { buildAudioTimeline } from './buildAudioTimeline';
+import { seekVideoPrecisely, getMediaTimeForTimelineTime } from './seekVideo';
 
 const DEBUG_EXPORT = true;
 function exportLog(...args: unknown[]) {
@@ -38,7 +47,7 @@ export interface ExportOptions {
   projectName: string;
 }
 
-// ── Canvas text rendering (reused from old pipeline) ────────
+// ── Canvas text rendering ────────────────────────────────────
 function drawTextItem(
   ctx: CanvasRenderingContext2D,
   item: TrackItem,
@@ -87,6 +96,41 @@ function drawTextItem(
   ctx.restore();
 }
 
+// ── Frame-accurate session tracker ──────────────────────────
+// Reuses the same video element while on the same clip.
+// Only replaces the element when the clip (mediaId) actually changes.
+interface VideoSession {
+  itemId: string;
+  mediaId: string;
+  el: HTMLVideoElement;
+}
+
+// ── Offscreen "last valid frame" buffer ─────────────────────
+// While we're seeking to a new clip, we paint the previous frame
+// so the canvas (and therefore the MediaRecorder stream) never
+// shows a black gap.
+function holdLastFrame(
+  ctx: CanvasRenderingContext2D,
+  holdCanvas: HTMLCanvasElement,
+  outW: number,
+  outH: number
+) {
+  try {
+    ctx.drawImage(holdCanvas, 0, 0, outW, outH);
+  } catch {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, outW, outH);
+  }
+}
+
+function captureCurrentFrame(
+  src: HTMLVideoElement | HTMLCanvasElement,
+  holdCanvas: HTMLCanvasElement
+) {
+  const hCtx = holdCanvas.getContext('2d')!;
+  hCtx.drawImage(src, 0, 0, holdCanvas.width, holdCanvas.height);
+}
+
 // ── Main export function ─────────────────────────────────────
 export async function exportTimelineContinuous(
   rawProject: Project,
@@ -96,12 +140,12 @@ export async function exportTimelineContinuous(
   signal?: AbortSignal
 ): Promise<Blob> {
   const t0 = performance.now();
+  exportLog('Export started');
 
   // ── 1. Sanitize & validate ─────────────────────────────────
   onProgress(2, 'Sanitizando timeline…');
   const project = sanitizeProject(rawProject);
 
-  // Filter out micro-clips below export threshold
   const cleanedProject: Project = {
     ...project,
     tracks: project.tracks.map((track) => ({
@@ -122,7 +166,7 @@ export async function exportTimelineContinuous(
   const totalDuration = cleanedProject.duration;
   exportLog(`Duração total: ${totalDuration.toFixed(2)}s`);
 
-  // ── 2. Build mediaMap + collect all video items ────────────
+  // ── 2. Build mediaMap ──────────────────────────────────────
   const mediaMap = new Map(media.map((m) => [m.id, m]));
 
   const allVideoItems: TrackItem[] = cleanedProject.tracks
@@ -132,21 +176,22 @@ export async function exportTimelineContinuous(
 
   exportLog(`Clips de vídeo: ${allVideoItems.length}`);
 
-  // ── 3. Compute output dimensions ──────────────────────────
+  // ── 3. Output dimensions ───────────────────────────────────
   const firstMf = mediaMap.get(allVideoItems[0]?.mediaId ?? '');
   const srcW = firstMf?.width ?? 1920;
   const srcH = firstMf?.height ?? 1080;
   const targetLongSide = opts.resolution === '1080p' ? 1920 : 1280;
   const exportScale = Math.min(targetLongSide / Math.max(srcW, srcH), 1);
-  const outW = Math.max(2, Math.round(srcW * exportScale / 2) * 2);
-  const outH = Math.max(2, Math.round(srcH * exportScale / 2) * 2);
+  const outW = Math.max(2, Math.round((srcW * exportScale) / 2) * 2);
+  const outH = Math.max(2, Math.round((srcH * exportScale) / 2) * 2);
   const FPS = opts.fps;
   const bitrate = opts.resolution === '1080p' ? 6_000_000 : 3_000_000;
+  const totalFrames = Math.ceil(totalDuration * FPS);
 
-  exportLog(`Resolução de saída: ${outW}×${outH} @ ${FPS}fps`);
+  exportLog(`Resolução: ${outW}×${outH} @ ${FPS}fps | ${totalFrames} frames`);
 
-  // ── 4. Pre-load all media ──────────────────────────────────
-  onProgress(5, 'Pré-carregando mídia…');
+  // ── 4. Pre-load all video elements ────────────────────────
+  onProgress(5, 'Pré-carregando vídeos…');
   const videoElMap = await prepareMediaForExport(
     allVideoItems,
     mediaMap,
@@ -161,161 +206,169 @@ export async function exportTimelineContinuous(
   canvas.height = outH;
   const ctx = canvas.getContext('2d', { alpha: false })!;
 
-  // ── 6. Setup AudioContext ─────────────────────────────────
+  // Offscreen buffer to hold the last valid rendered frame
+  const holdCanvas = document.createElement('canvas');
+  holdCanvas.width = outW;
+  holdCanvas.height = outH;
+
+  // Draw initial black frame
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, outW, outH);
+
+  // ── 6. Setup AudioContext + schedule full audio timeline ───
+  onProgress(10, 'Preparando áudio…');
+
+  // We create the context now but will resume it after starting the recorder
   const audioCtx = new AudioContext();
-  const masterGain = audioCtx.createGain();
-  masterGain.gain.value = 1;
-  const audioDestination = audioCtx.createMediaStreamDestination();
-  masterGain.connect(audioDestination);
 
-  // Track active audio source nodes so we can disconnect them on clip change
-  const activeSourceNodes = new Map<string, { source: MediaElementAudioSourceNode; gain: GainNode }>();
-
-  function connectAudioElement(el: HTMLVideoElement, itemId: string, volume: number) {
-    if (activeSourceNodes.has(itemId)) return;
-    try {
-      const source = audioCtx.createMediaElementSource(el);
-      const gain = audioCtx.createGain();
-      gain.gain.value = Math.min(1, Math.max(0, volume));
-      source.connect(gain);
-      gain.connect(masterGain);
-      activeSourceNodes.set(itemId, { source, gain });
-    } catch { /* CORS or already connected */ }
-  }
-
-  function disconnectAudioItem(itemId: string) {
-    const nodes = activeSourceNodes.get(itemId);
-    if (nodes) {
-      try { nodes.source.disconnect(); nodes.gain.disconnect(); } catch { /* ignore */ }
-      activeSourceNodes.delete(itemId);
-    }
-  }
-
-  // ── 7. Start single MediaRecorder ─────────────────────────
-  onProgress(10, 'Iniciando gravação…');
+  // Start MediaRecorder FIRST so it's already running when we resume audio
   const mimeType = pickBestMimeType();
   exportLog(`MimeType: ${mimeType}`);
 
-  const videoStream = canvas.captureStream(FPS);
-  const combinedStream = new MediaStream([
-    ...videoStream.getVideoTracks(),
-    ...audioDestination.stream.getAudioTracks(),
-  ]);
-
+  const canvasStream = canvas.captureStream(FPS);
   const chunks: BlobPart[] = [];
-  const recorder = new MediaRecorder(combinedStream, {
+
+  // We'll inject the audio tracks after audio is built
+  let recorder: MediaRecorder;
+  let audioDispose: (() => void) | null = null;
+
+  try {
+    // Decode + schedule all audio — startAt is the AudioContext time when
+    // frame 0 of the timeline will play. We'll compute this after .start()
+    onProgress(12, 'Decodificando e agendando áudio…');
+    // Temporarily suspend scheduling until we know the real startAt
+    // We'll call buildAudioTimeline with the correct startAt below.
+
+    // Build audio stream (scheduling happens later once we know startAt)
+    const audioResult = await buildAudioTimeline(
+      audioCtx,
+      cleanedProject,
+      mediaMap,
+      0, // placeholder — we'll re-call with correct time below
+      (msg) => onProgress(12, msg)
+    );
+    // We won't use this result since startAt=0 may be off.
+    // Close and re-build once we know the exact recorder start time.
+    audioResult.dispose();
+    await audioCtx.close().catch(() => {});
+
+  } catch (err) {
+    exportLog('Audio pre-check failed, continuing video-only:', err);
+  }
+
+  if (signal?.aborted) throw new Error('Exportação cancelada.');
+
+  // ── Rebuild AudioContext and schedule audio precisely ──────
+  // We use a fresh AudioContext so we can control startAt precisely.
+  const audioCtx2 = new AudioContext();
+
+  // Ensure context is running
+  if (audioCtx2.state === 'suspended') {
+    await audioCtx2.resume().catch(() => {});
+  }
+
+  // Build combined stream with audio destination
+  let finalStream: MediaStream;
+  try {
+    const audioResult2 = await buildAudioTimeline(
+      audioCtx2,
+      cleanedProject,
+      mediaMap,
+      // startAt: We want audio to start slightly in the future so the
+      // MediaRecorder has time to start. We'll use currentTime + 0.3s.
+      audioCtx2.currentTime + 0.5,
+      (msg) => onProgress(14, msg)
+    );
+    audioDispose = audioResult2.dispose;
+
+    finalStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...audioResult2.destination.stream.getAudioTracks(),
+    ]);
+
+    exportLog('Audio scheduled successfully');
+  } catch (err) {
+    exportLog('Audio scheduling failed, exporting video-only:', err);
+    finalStream = canvasStream;
+  }
+
+  // ── 7. Start single MediaRecorder ─────────────────────────
+  onProgress(16, 'Iniciando gravação…');
+
+  recorder = new MediaRecorder(finalStream, {
     mimeType,
     videoBitsPerSecond: bitrate,
   });
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
   const recorderStopped = new Promise<void>((res) => { recorder.onstop = () => res(); });
-  recorder.start(100); // collect data every 100ms
+  recorder.start(100);
 
-  // ── 8. Continuous render loop ─────────────────────────────
-  onProgress(12, 'Renderizando…');
+  // Record when recording actually started
+  const recordingStartedAt = audioCtx2.currentTime;
+  exportLog(`Recorder started. AudioContext.currentTime = ${recordingStartedAt.toFixed(3)}`);
 
-  let activeVideoItemId: string | null = null;
-  let activeVideoEl: HTMLVideoElement | null = null;
+  // ── 8. Frame-by-frame render loop ─────────────────────────
+  // This is the KEY fix: we process each frame in sequence,
+  // waiting for seeks to fully complete before drawing.
+  // The canvas stream stays live the whole time — the recorder
+  // captures whatever is on the canvas at each captureStream tick.
+  onProgress(18, 'Renderizando frames…');
 
-  await new Promise<void>((resolve, reject) => {
-    // Use a time-based approach — advance project time at real speed
-    // This is WAY more reliable than trying to drive time synthetically
-    let projectTime = 0;
-    let lastRafTs: number | null = null;
-    let rafId: number;
+  let currentSession: VideoSession | null = null;
+  let framesRendered = 0;
 
-    const maxDuration = totalDuration + 0.5; // small safety margin
+  // Helper: ensure correct video element is loaded and seeked
+  const ensureVideoFrame = async (
+    videoItem: TrackItem,
+    exportTime: number
+  ): Promise<HTMLVideoElement | null> => {
+    const el = videoElMap.get(videoItem.mediaId);
+    if (!el) return null;
 
-    // Hard timeout: max 10 minutes
-    const hardTimeout = setTimeout(() => {
-      cancelAnimationFrame(rafId);
-      resolve();
-    }, 10 * 60 * 1000);
+    const playRate = Math.min(Math.max(videoItem.videoDetails?.playbackRate ?? 1, 0.1), 16);
+    const mediaTime = getMediaTimeForTimelineTime(
+      videoItem.startTime,
+      videoItem.mediaStart,
+      playRate,
+      exportTime
+    );
+    const safeMediaTime = Math.min(
+      Math.max(0, mediaTime),
+      (el.duration || 9999) - 0.01
+    );
 
-    const renderFrame = (rafTs: number) => {
-      if (signal?.aborted) {
-        cancelAnimationFrame(rafId);
-        clearTimeout(hardTimeout);
-        reject(new Error('Exportação cancelada.'));
-        return;
+    const clipChanged =
+      !currentSession ||
+      currentSession.itemId !== videoItem.id;
+
+    if (clipChanged) {
+      exportLog(`Clip change at ${exportTime.toFixed(3)}s → "${videoItem.name}" mediaTime=${safeMediaTime.toFixed(3)}`);
+      currentSession = { itemId: videoItem.id, mediaId: videoItem.mediaId, el };
+
+      // Seek and wait for the frame to be ready
+      await seekVideoPrecisely(el, safeMediaTime);
+      exportLog(`Seek complete for "${videoItem.name}" @ ${el.currentTime.toFixed(3)}`);
+    } else {
+      // Same clip — check if we need to correct drift
+      const drift = Math.abs(el.currentTime - safeMediaTime);
+      if (drift > 0.1) {
+        exportLog(`Drift correction: ${drift.toFixed(3)}s on "${videoItem.name}"`);
+        await seekVideoPrecisely(el, safeMediaTime);
       }
+    }
 
-      // Advance project clock
-      if (lastRafTs !== null) {
-        projectTime += (rafTs - lastRafTs) / 1000;
-      }
-      lastRafTs = rafTs;
+    return el;
+  };
 
-      if (projectTime >= maxDuration) {
-        cancelAnimationFrame(rafId);
-        clearTimeout(hardTimeout);
-        resolve();
-        return;
-      }
+  // Helper: draw one frame to canvas
+  const drawFrame = async (exportTime: number) => {
+    const { videoItem, textItems } = resolveFrameStateAtTime(cleanedProject, exportTime);
 
-      // Progress update (12–65% range)
-      const renderProgress = 12 + Math.round((projectTime / totalDuration) * 53);
-      if (Math.round(projectTime * 10) % 5 === 0) { // throttle progress updates
-        onProgress(Math.min(65, renderProgress), `Renderizando… ${projectTime.toFixed(1)}s / ${totalDuration.toFixed(1)}s`);
-      }
-
-      // Resolve what's active at this moment
-      const { videoItem, imageItems, textItems } = resolveFrameStateAtTime(cleanedProject, projectTime);
-
-      // ── Switch video element if clip changed ──
-      if (videoItem) {
-        const el = videoElMap.get(videoItem.mediaId);
+    if (videoItem) {
+      const el = await ensureVideoFrame(videoItem, exportTime);
+      if (el && el.readyState >= 2) {
         const vd = videoItem.videoDetails;
-        const playRate = Math.min(Math.max(vd?.playbackRate ?? 1, 0.1), 16);
-
-        if (videoItem.id !== activeVideoItemId) {
-          // Disconnect old audio
-          if (activeVideoItemId) disconnectAudioItem(activeVideoItemId);
-
-          // Switch to new clip
-          activeVideoItemId = videoItem.id;
-          activeVideoEl = el ?? null;
-
-          if (el) {
-            // Seek to correct position
-            const offsetInClip = projectTime - videoItem.startTime;
-            const mediaTime = videoItem.mediaStart + offsetInClip * playRate;
-            const safeMediaTime = Math.min(
-              Math.max(0, mediaTime),
-              (el.duration || 9999) - 0.01
-            );
-            el.playbackRate = playRate;
-            el.volume = Math.min(1, vd?.volume ?? 1);
-
-            if (Math.abs(el.currentTime - safeMediaTime) > 0.15) {
-              el.currentTime = safeMediaTime;
-            }
-
-            if (el.paused) {
-              el.play().catch(() => { /* ignore */ });
-            }
-
-            connectAudioElement(el, videoItem.id, vd?.volume ?? 1);
-          }
-        } else if (el && el.paused) {
-          el.play().catch(() => { /* ignore */ });
-        }
-      } else {
-        // Gap / no video → black frame
-        if (activeVideoItemId) {
-          disconnectAudioItem(activeVideoItemId);
-          activeVideoItemId = null;
-          activeVideoEl = null;
-        }
-      }
-
-      // ── Draw to canvas ──────────────────────────────────
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, outW, outH);
-
-      if (activeVideoEl && activeVideoEl.readyState >= 2) {
-        const vd = videoItem?.videoDetails;
         ctx.save();
 
         // CSS filters
@@ -332,51 +385,84 @@ export async function exportTimelineContinuous(
           ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
         }
 
-        ctx.drawImage(activeVideoEl, 0, 0, outW, outH);
+        ctx.drawImage(el, 0, 0, outW, outH);
         ctx.restore();
         (ctx as any).filter = 'none';
         ctx.globalAlpha = 1;
+
+        // Capture this frame as the "last valid" fallback
+        captureCurrentFrame(canvas, holdCanvas);
+      } else {
+        // Video not ready — hold last valid frame
+        holdLastFrame(ctx, holdCanvas, outW, outH);
       }
+    } else {
+      // No video at this time — black frame (gap)
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, outW, outH);
+    }
 
-      // Draw image overlays
-      for (const imgItem of imageItems) {
-        const mf = mediaMap.get(imgItem.mediaId);
-        if (!mf) continue;
-        const id = imgItem.imageDetails;
-        if (!id) continue;
-        // Use a cached img element if possible
-        // For simplicity, skip image overlay for now (same as old pipeline)
-      }
+    // Draw text overlays on top
+    for (const textItem of textItems) {
+      drawTextItem(ctx, textItem, outW, outH);
+    }
+  };
 
-      // Draw text overlays
-      for (const textItem of textItems) {
-        drawTextItem(ctx, textItem, outW, outH);
-      }
+  // ── Main frame loop ────────────────────────────────────────
+  // We use a small yield (setTimeout 0) every N frames to allow
+  // the browser to breathe and process events (including abort).
+  const YIELD_EVERY = 15; // yield every N frames
 
-      rafId = requestAnimationFrame(renderFrame);
-    };
+  for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+    if (signal?.aborted) {
+      exportLog('Export cancelled by user');
+      recorder.stop();
+      audioDispose?.();
+      audioCtx2.close().catch(() => {});
+      throw new Error('Exportação cancelada.');
+    }
 
-    rafId = requestAnimationFrame(renderFrame);
-  });
+    const exportTime = frameIndex / FPS;
+    await drawFrame(exportTime);
+    framesRendered++;
+
+    // Progress update (18–65%)
+    if (frameIndex % 10 === 0) {
+      const pct = 18 + Math.round((frameIndex / totalFrames) * 47);
+      onProgress(Math.min(65, pct), `Renderizando… ${exportTime.toFixed(1)}s / ${totalDuration.toFixed(1)}s`);
+    }
+
+    // Yield to browser periodically
+    if (frameIndex % YIELD_EVERY === 0) {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    }
+  }
+
+  exportLog(`Rendered ${framesRendered} frames`);
 
   // ── 9. Stop recorder ─────────────────────────────────────
   onProgress(66, 'Finalizando gravação…');
 
-  // Pause all active video elements
-  activeSourceNodes.forEach((_, itemId) => disconnectAudioItem(itemId));
-  videoElMap.forEach((el) => { el.pause(); el.src = ''; });
-  audioCtx.close().catch(() => {});
+  // Pause all video elements
+  videoElMap.forEach((el) => { try { el.pause(); el.src = ''; } catch {} });
+
+  // Stop audio
+  audioDispose?.();
+  audioCtx2.close().catch(() => {});
 
   recorder.stop();
   await recorderStopped;
 
   const webmBlob = new Blob(chunks, { type: mimeType });
-  exportLog(`WebM blob: ${(webmBlob.size / 1024 / 1024).toFixed(2)}MB`);
+  exportLog(`WebM blob: ${(webmBlob.size / 1024 / 1024).toFixed(2)}MB | chunks: ${chunks.length}`);
 
   if (signal?.aborted) throw new Error('Exportação cancelada.');
+  if (webmBlob.size < 1000) {
+    throw new Error('Arquivo de exportação vazio. Verifique se há vídeo na timeline.');
+  }
 
   // ── 10. FFmpeg: WebM → MP4 ────────────────────────────────
-  onProgress(68, 'Carregando FFmpeg para conversão final…');
+  onProgress(68, 'Carregando FFmpeg…');
 
   const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
     import('@ffmpeg/ffmpeg'),
@@ -402,10 +488,7 @@ export async function exportTimelineContinuous(
 
   ffmpeg.on('progress', ({ progress }) => {
     const safeP = Math.max(0, Math.min(1, isFinite(progress) ? progress : 0));
-    onProgress(
-      Math.min(72 + Math.round(safeP * 24), 96),
-      'Convertendo para MP4…'
-    );
+    onProgress(Math.min(72 + Math.round(safeP * 24), 96), 'Convertendo para MP4…');
   });
 
   const webmData = await fetchFile(webmBlob);
@@ -424,7 +507,6 @@ export async function exportTimelineContinuous(
   onProgress(97, 'Preparando download…');
   const outputData = await ffmpeg.readFile('output.mp4');
 
-  // Clean up FFmpeg FS
   try {
     await ffmpeg.deleteFile('input.webm').catch(() => {});
     await ffmpeg.deleteFile('output.mp4').catch(() => {});
