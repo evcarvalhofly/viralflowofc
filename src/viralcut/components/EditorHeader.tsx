@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronLeft, MoreVertical, Download, Settings, Scissors } from "lucide-react";
+import { useState, useMemo } from "react";
+import { ChevronLeft, MoreVertical, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,8 +13,15 @@ import { useProjectStore } from "../stores/project-store";
 import { ExportModal } from "./ExportModal";
 
 export function EditorHeader() {
-  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
+  const projects = useProjectStore((s) => s.projects);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const renameProject = useProjectStore((s) => s.renameProject);
+
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  );
+
   const [isEditing, setIsEditing] = useState(false);
   const [titleValue, setTitleValue] = useState("");
   const [showExport, setShowExport] = useState(false);
@@ -35,7 +42,6 @@ export function EditorHeader() {
   return (
     <>
       <header className="flex items-center h-11 px-3 border-b border-border bg-card shrink-0 gap-2">
-        {/* Left */}
         <Link to="/viralcut" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
           <ChevronLeft className="h-4 w-4" />
           <span className="text-xs hidden sm:block">Projetos</span>
@@ -43,7 +49,6 @@ export function EditorHeader() {
 
         <div className="w-px h-5 bg-border" />
 
-        {/* Project name */}
         <div className="flex-1 flex justify-center">
           {isEditing ? (
             <input
@@ -65,7 +70,6 @@ export function EditorHeader() {
           )}
         </div>
 
-        {/* Right actions */}
         <div className="flex items-center gap-1">
           <Button
             size="sm"
