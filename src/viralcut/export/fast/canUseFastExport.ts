@@ -1,7 +1,5 @@
 // ============================================================
-// ViralCut – Fast Export Detector
-// Checks whether the browser supports WebCodecs-based export
-// via @diffusionstudio/core.
+// ViralCut – Native WebCodecs support detector
 // ============================================================
 
 export function canUseFastExport(): boolean {
@@ -10,6 +8,7 @@ export function canUseFastExport(): boolean {
     'VideoEncoder' in window &&
     'VideoDecoder' in window &&
     'AudioEncoder' in window &&
-    'AudioDecoder' in window
+    'OffscreenCanvas' in window &&
+    'AudioData' in window
   );
 }
