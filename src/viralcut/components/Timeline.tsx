@@ -88,7 +88,7 @@ export function Timeline() {
           onClick={toggleSnapping}
           title="Snap"
         >
-          <SnapToGrid className="h-3.5 w-3.5" />
+          <AlignCenter className="h-3.5 w-3.5" />
         </Button>
 
         {selectedElementId && selectedTrackId && (
