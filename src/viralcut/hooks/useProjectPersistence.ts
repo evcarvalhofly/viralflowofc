@@ -1,79 +1,44 @@
 // ============================================================
-// useProjectPersistence – Autosave + restore + JSON export/import
-// Uses localStorage with debounce.  MediaFile.file/url are NOT
-// persisted (File objects can't be serialised); only metadata.
+// useProjectPersistence – Manual save + JSON export/import
+//
+// AUTOSAVE REMOVED: automatic restore and debounced save have
+// been deliberately removed to keep the editor clean on open
+// and avoid restoring broken/stale projects during testing.
+//
+// Persistence strategy:
+//   • saveNow()   – explicit manual save (Ctrl+S / toolbar button)
+//   • exportJson  – download full project as .json
+//   • importJson  – load project from a .json file
 // ============================================================
-import { useEffect, useRef, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Project } from '../types';
 
-const STORAGE_KEY = 'viralcut_project_v2';
-const DEBOUNCE_MS = 1200;
+// Clear any legacy autosave keys left over from previous versions
+const LEGACY_KEYS = [
+  'viralcut_project_v1',
+  'viralcut_project_v2',
+  'viralcut_autosave',
+  'viralcut_last_project',
+];
 
+function clearLegacyStorage() {
+  for (const key of LEGACY_KEYS) {
+    try { localStorage.removeItem(key); } catch { /* ignore */ }
+  }
+}
 
-
+// Run once on module load so stale data is gone immediately
+clearLegacyStorage();
 
 export function useProjectPersistence(
   project: Project,
+  // onRestore kept in signature for API compatibility (JSON import still uses it)
   onRestore: (p: Project) => void
 ) {
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasRestoredRef = useRef(false);
-
-  // ── Restore once on mount ────────────────────────────────
-  useEffect(() => {
-    if (hasRestoredRef.current) return;
-    hasRestoredRef.current = true;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Project;
-      // Basic shape validation
-      if (saved?.tracks && Array.isArray(saved.tracks) && saved.id) {
-        // Clean up any stale object URLs that were persisted by accident
-        const cleaned: Project = {
-          ...saved,
-          tracks: saved.tracks.map((t) => ({
-            ...t,
-            items: t.items.map((i) => ({ ...i })),
-          })),
-        };
-        onRestore(cleaned);
-      }
-    } catch {
-      // Corrupted data – silently skip
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── Debounced autosave whenever project changes ───────────
-  useEffect(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      try {
-        // Persist only serialisable data (no File objects)
-        const serialisable: Project = {
-          ...project,
-          tracks: project.tracks.map((t) => ({
-            ...t,
-            items: t.items.map((i) => {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { ...rest } = i;
-              return rest;
-            }),
-          })),
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(serialisable));
-      } catch {
-        // Storage full or private mode – ignore
-      }
-    }, DEBOUNCE_MS);
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [project]);
-
   // ── Manual save ──────────────────────────────────────────
   const saveNow = useCallback(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+      localStorage.setItem('viralcut_manual_save', JSON.stringify(project));
     } catch { /* ignore */ }
   }, [project]);
 
