@@ -37,7 +37,10 @@ function getTrackLabel(type: string): string {
 }
 
 export function Timeline() {
-  const tracks = useProjectStore((s) => s.getTracks());
+  const tracks = useProjectStore((s) => {
+    const p = s.projects.find((p) => p.id === s.activeProjectId);
+    return p?.tracks ?? [];
+  });
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const duration = usePlaybackStore((s) => s.duration);
   const seek = usePlaybackStore((s) => s.seek);
