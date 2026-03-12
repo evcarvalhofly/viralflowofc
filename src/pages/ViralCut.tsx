@@ -487,15 +487,13 @@ const ViralCut = () => {
     const fileName = `${project.name || 'viralcut-export'}_${opts.resolution}_${opts.fps}fps`;
 
     try {
-      // 1. Verificar suporte a WebCodecs (GPU)
       if (!canUseFastExport()) {
-        throw new Error("Seu navegador não suporta exportação por GPU. Por favor, use o Chrome ou Edge atualizado.");
+        throw new Error('Seu navegador não suporta exportação por GPU. Use o Chrome ou Edge atualizado.');
       }
 
-      console.log('[ViralCut] Forçando motor de exportação ultra-rápida (WebCodecs/GPU)');
+      console.log('[ViralCut] Iniciando exportação nativa WebCodecs (sem marca d\'água)');
 
-      // 2. Tentar exportação rápida (GPU)
-      await exportTimelineFast(
+      const mp4Blob = await exportTimelineNativeWebCodecs(
         project,
         media,
         { fps: opts.fps, resolution: opts.resolution, fileName },
@@ -503,17 +501,27 @@ const ViralCut = () => {
         abortCtrl.signal
       );
 
-      setExportState({ status: 'done', progress: 100, label: 'Vídeo exportado via GPU!' });
+      if (!mp4Blob || mp4Blob.size < 1024) {
+        throw new Error(`Arquivo exportado inválido (${mp4Blob?.size ?? 0} bytes). Verifique os clipes.`);
+      }
+
+      const dlUrl = URL.createObjectURL(mp4Blob);
+      const a = document.createElement('a');
+      a.href = dlUrl;
+      a.download = `${fileName}.mp4`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
+
+      setExportState({ status: 'done', progress: 100, label: 'Vídeo exportado via GPU Nativa!' });
 
     } catch (err: any) {
-      console.error('[ViralCut] Erro na exportação GPU:', err);
+      console.error('[ViralCut] Erro na exportação nativa WebCodecs:', err);
 
       if (err?.message === 'Exportação cancelada.' || abortCtrl.signal.aborted) {
         setExportState({ status: 'idle', progress: 0, label: '' });
         return;
       }
 
-      // No mobile não fazemos fallback para FFmpeg (trava o aparelho)
       setExportState({
         status: 'error',
         progress: 0,
