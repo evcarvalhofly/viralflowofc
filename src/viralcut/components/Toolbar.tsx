@@ -77,13 +77,46 @@ export function Toolbar({
 
       <div className="flex-1" />
 
+      {/* Save / JSON project buttons */}
+      {(onSave || onExportJson || onImportJson) && (
+        <div className="flex items-center gap-0.5">
+          {onSave && (
+            <button
+              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              onClick={onSave}
+              title="Salvar projeto (Ctrl+S)"
+            >
+              <Save className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onExportJson && (
+            <button
+              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              onClick={onExportJson}
+              title="Exportar projeto JSON"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onImportJson && (
+            <button
+              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              onClick={onImportJson}
+              title="Importar projeto JSON"
+            >
+              <FileUp className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Undo/Redo */}
       <div className="flex items-center gap-0.5">
         <button
           className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={onUndo}
           disabled={!canUndo}
-          title="Desfazer"
+          title="Desfazer (Ctrl+Z)"
         >
           <Undo2 className="h-3.5 w-3.5" />
         </button>
@@ -91,7 +124,7 @@ export function Toolbar({
           className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={onRedo}
           disabled={!canRedo}
-          title="Refazer"
+          title="Refazer (Ctrl+Shift+Z)"
         >
           <Redo2 className="h-3.5 w-3.5" />
         </button>
