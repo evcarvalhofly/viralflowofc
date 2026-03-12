@@ -64,6 +64,12 @@ export async function exportTimelineFast(
   const encoder = new core.Encoder(composition, {
     video: {
       fps: opts.fps,
+      // Explicit bitrate targets for each resolution to avoid bloated files
+      bitrate: opts.resolution === '1080p' ? 8_000_000 : 5_000_000,
+    },
+    audio: {
+      // AAC 128 kbps — transparent quality, small file size
+      bitrate: 128_000,
     },
   });
 
