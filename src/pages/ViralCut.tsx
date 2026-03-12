@@ -19,7 +19,7 @@ import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers, Image, Zap,
-  Upload, Plus, Wand2, X, ChevronUp
+  Upload, Plus, Wand2, X, ChevronUp, ZoomIn, ZoomOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
