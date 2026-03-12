@@ -5,11 +5,12 @@
 //  1. Trims each clip to its exact [mediaStart, mediaEnd] range
 //  2. Resets PTS so clips concatenate seamlessly
 //  3. Applies speed (setpts/atempo) when playbackRate ≠ 1
-//  4. Applies brightness/contrast/saturation filters
+//  4. Applies brightness/contrast/saturation filters (threshold 0.05)
 //  5. Handles volume per clip
 //  6. Handles audio-only clips (music tracks)
 //  7. Fills timeline gaps with black+silence
 //  8. Concatenates everything in timeline order
+//  9. Overlays text items via FFmpeg drawtext filter
 // ============================================================
 import { Project, TrackItem, MediaFile } from '../types';
 import { FFmpegInputEntry } from './buildFFmpegInputs';
@@ -35,6 +36,127 @@ interface Segment {
   videoLabel: string;
   audioLabel: string;
   duration: number; // seconds
+}
+
+/** Escape text for FFmpeg drawtext filter */
+function escapeDrawtext(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/:/g, '\\:')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;')
+    .replace(/\n/g, ' ');
+}
+
+/** Convert #rrggbb / #rrggbbaa to FFmpeg 0xRRGGBB or 0xRRGGBBAA */
+function hexToFFmpegColor(hex: string, alpha = 1): string {
+  const h = hex.replace('#', '');
+  if (h.length === 6) {
+    const a = Math.round(alpha * 255)
+      .toString(16)
+      .padStart(2, '0');
+    return `0x${h}${a}`;
+  }
+  if (h.length === 8) return `0x${h}`;
+  return `0xffffff`;
+}
+
+/**
+ * Build drawtext filter segments for all text track items.
+ * Each text item is applied as a drawtext filter on top of the video.
+ * Returns the chain of overlay filters to apply, or empty string if no text.
+ */
+function buildTextDrawtextChain(
+  project: Project,
+  outW: number,
+  outH: number,
+  inputVideoLabel: string,
+  nextLabel: (prefix: string) => string
+): { parts: string[]; finalLabel: string } {
+  const textItems: TrackItem[] = project.tracks
+    .filter((t) => t.type === 'text' && !t.muted)
+    .flatMap((t) => t.items)
+    .filter((i) => (i.endTime - i.startTime) >= EXPORT_MIN_CLIP_DURATION)
+    .sort((a, b) => a.startTime - b.startTime);
+
+  if (textItems.length === 0) {
+    log('No text items found, skipping drawtext');
+    return { parts: [], finalLabel: inputVideoLabel };
+  }
+
+  log(`Building drawtext for ${textItems.length} text item(s)`);
+
+  const parts: string[] = [];
+  let currentLabel = inputVideoLabel;
+
+  for (const item of textItems) {
+    const td = item.textDetails;
+    if (!td) continue;
+
+    const start = item.startTime.toFixed(6);
+    const end = item.endTime.toFixed(6);
+
+    // Font size: stored as % of canvas height
+    const fontSizePx = Math.max(8, Math.round((td.fontSize / 100) * outH));
+
+    // Position: % of canvas → pixels
+    // posX/posY are the center point of the text block
+    const pxX = Math.round((td.posX / 100) * outW);
+    const pxY = Math.round((td.posY / 100) * outH);
+
+    // For centered text, FFmpeg drawtext x/y point to the top-left corner.
+    // We approximate center alignment with x=X-w/2 expression.
+    let xExpr: string;
+    let yExpr: string;
+
+    switch (td.textAlign) {
+      case 'center':
+        xExpr = `${pxX}-text_w/2`;
+        yExpr = `${pxY}-text_h/2`;
+        break;
+      case 'right':
+        xExpr = `${pxX}-text_w`;
+        yExpr = `${pxY}-text_h/2`;
+        break;
+      default: // left
+        xExpr = `${pxX}`;
+        yExpr = `${pxY}-text_h/2`;
+    }
+
+    const escapedText = escapeDrawtext(td.text);
+    const fontColor = hexToFFmpegColor(td.color || '#ffffff', td.opacity ?? 1);
+
+    // Build drawtext filter string
+    let dtFilter = `drawtext=text='${escapedText}'`;
+    dtFilter += `:fontsize=${fontSizePx}`;
+    dtFilter += `:fontcolor=${fontColor}`;
+    dtFilter += `:x=${xExpr}`;
+    dtFilter += `:y=${yExpr}`;
+    dtFilter += `:enable='between(t,${start},${end})'`;
+
+    // Background box
+    if (td.backgroundColor && td.backgroundColor !== 'transparent') {
+      const bgColor = hexToFFmpegColor(td.backgroundColor);
+      dtFilter += `:box=1:boxcolor=${bgColor}:boxborderw=6`;
+    }
+
+    // Shadow (basic: drawtext supports shadowx/shadowy/shadowcolor)
+    if (td.boxShadow && td.boxShadow.blur > 0) {
+      const shadowColor = hexToFFmpegColor(td.boxShadow.color || '#000000', 0.7);
+      dtFilter += `:shadowx=${td.boxShadow.x}:shadowy=${td.boxShadow.y}:shadowcolor=${shadowColor}`;
+    }
+
+    const outLabel = nextLabel('dt');
+    parts.push(`${currentLabel}${dtFilter}${outLabel}`);
+    currentLabel = outLabel;
+
+    log(`Text "${item.name}": [${start}s → ${end}s] size=${fontSizePx}px pos=(${pxX},${pxY})`);
+  }
+
+  return { parts, finalLabel: currentLabel };
 }
 
 export function buildFFmpegFilterComplex(
@@ -107,7 +229,7 @@ export function buildFFmpegFilterComplex(
     // trim to [mediaStart, mediaEnd]
     vChain += `trim=start=${mediaStart.toFixed(6)}:end=${mediaEnd.toFixed(6)},setpts=PTS-STARTPTS`;
 
-    // scale to output resolution
+    // scale to output resolution (exact, letterboxed)
     vChain += `,scale=${outW}:${outH}:force_original_aspect_ratio=decrease,pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2`;
 
     // speed change
@@ -170,7 +292,6 @@ export function buildFFmpegFilterComplex(
   }
 
   // ── Build audio-only overlay mix (music tracks) ────────────
-  // We'll amix them after concat using adelay + amix
   const audioMixParts: string[] = [];
   const audioMixLabels: string[] = [];
 
@@ -199,10 +320,10 @@ export function buildFFmpegFilterComplex(
   if (n === 0) throw new Error('Nenhum segmento válido para exportar.');
 
   const concatInputs = segments.map((s) => `${s.videoLabel}${s.audioLabel}`).join('');
-  const outv = '[outv_base]';
+  const outv_base = '[outv_concat]';
   const outa_base = audioMixLabels.length > 0 ? '[outa_base]' : '[outa]';
 
-  parts.push(`${concatInputs}concat=n=${n}:v=1:a=1${outv}${outa_base}`);
+  parts.push(`${concatInputs}concat=n=${n}:v=1:a=1${outv_base}${outa_base}`);
   log(`Concat: ${n} segments`);
 
   // ── Mix audio tracks if present ────────────────────────────
@@ -213,11 +334,24 @@ export function buildFFmpegFilterComplex(
     log(`amix: ${audioMixLabels.length + 1} audio inputs`);
   }
 
+  // ── Apply text overlays via drawtext ──────────────────────
+  const { parts: textParts, finalLabel: finalVideoLabel } = buildTextDrawtextChain(
+    project,
+    outW,
+    outH,
+    outv_base,
+    nextLabel
+  );
+  parts.push(...textParts);
+
+  // The final video label is either [outv_concat] (no text) or the last drawtext label
+  const videoOutLabel = finalVideoLabel;
+
   const filterComplex = parts.join(';');
 
   return {
     filterComplex,
-    videoOutLabel: outv,
+    videoOutLabel,
     audioOutLabel: finalAudioLabel,
     segmentCount: n,
   };
@@ -227,8 +361,6 @@ export function buildFFmpegFilterComplex(
 function buildAtempoChain(rate: number): string {
   const chain: string[] = [];
   let r = rate;
-  // FFmpeg atempo: valid range 0.5–100 (extended range in newer builds)
-  // To be safe, chain 0.5s for slow-mo and 2.0s for fast
   while (r > 2.0) {
     chain.push('atempo=2.0');
     r /= 2.0;
