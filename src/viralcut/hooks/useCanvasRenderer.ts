@@ -29,8 +29,11 @@ export function useCanvasRenderer({ width, height }: RenderProps) {
   const setCurrentTime = usePlaybackStore((s) => s.setCurrentTime);
   const setIsPlaying = usePlaybackStore((s) => s.setIsPlaying);
   const setDuration = usePlaybackStore((s) => s.setDuration);
-  const tracks = useProjectStore((s) => s.getTracks());
-  const activeProject = useProjectStore((s) => s.getActiveOrNull());
+  const tracks = useProjectStore((s) => {
+    const p = s.projects.find((proj) => proj.id === s.activeProjectId);
+    return p?.tracks ?? [];
+  });
+  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
   const getAsset = useMediaStore((s) => s.getAsset);
 
   // Compute project duration from tracks

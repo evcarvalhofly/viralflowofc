@@ -13,7 +13,7 @@ import { useProjectStore } from "../stores/project-store";
 import { ExportModal } from "./ExportModal";
 
 export function EditorHeader() {
-  const activeProject = useProjectStore((s) => s.getActiveOrNull());
+  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
   const renameProject = useProjectStore((s) => s.renameProject);
   const [isEditing, setIsEditing] = useState(false);
   const [titleValue, setTitleValue] = useState("");

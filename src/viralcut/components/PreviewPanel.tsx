@@ -29,8 +29,11 @@ export function PreviewPanel() {
   const videoCache = useRef<Map<string, HTMLVideoElement>>(new Map());
   const [canvasSize, setCanvasSize] = useState({ w: 320, h: 180 });
 
-  const activeProject = useProjectStore((s) => s.getActiveOrNull());
-  const tracks = useProjectStore((s) => s.getTracks());
+  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId) ?? null);
+  const tracks = useProjectStore((s) => {
+    const p = s.projects.find((proj) => proj.id === s.activeProjectId);
+    return p?.tracks ?? [];
+  });
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const duration = usePlaybackStore((s) => s.duration);
