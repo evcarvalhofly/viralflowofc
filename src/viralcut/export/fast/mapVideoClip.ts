@@ -23,17 +23,17 @@ export async function mapVideoClip(
   const vd = item.videoDetails;
   const duration = item.endTime - item.startTime;
 
-  // Build effects array using plain Effect objects (not class instances)
+  // Build effects array — only include when there's a real change (threshold 0.05)
+  // Sending empty/identity effects to @diffusionstudio/core wastes GPU cycles.
   const effects: core.Effect[] = [];
 
-  if (vd?.brightness !== undefined && Math.abs(vd.brightness - 1) > 0.01) {
-    // Core uses CSS % values: 1.0 = 100%, 1.5 = 150%
+  if (vd?.brightness !== undefined && Math.abs(vd.brightness - 1) > 0.05) {
     effects.push({ type: 'brightness', value: vd.brightness * 100 });
   }
-  if (vd?.contrast !== undefined && Math.abs(vd.contrast - 1) > 0.01) {
+  if (vd?.contrast !== undefined && Math.abs(vd.contrast - 1) > 0.05) {
     effects.push({ type: 'contrast', value: vd.contrast * 100 });
   }
-  if (vd?.saturation !== undefined && Math.abs(vd.saturation - 1) > 0.01) {
+  if (vd?.saturation !== undefined && Math.abs(vd.saturation - 1) > 0.05) {
     effects.push({ type: 'saturate', value: vd.saturation * 100 });
   }
 

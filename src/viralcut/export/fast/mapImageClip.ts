@@ -27,14 +27,15 @@ export async function mapImageClip(
   const pxW = Math.round(((id?.width ?? 50) / 100) * project.width);
   const pxH = Math.round(((id?.height ?? 50) / 100) * project.height);
 
+  // Only send effects when there's a real change (threshold 0.05)
   const effects: core.Effect[] = [];
-  if (id?.brightness !== undefined && Math.abs(id.brightness - 1) > 0.01) {
+  if (id?.brightness !== undefined && Math.abs(id.brightness - 1) > 0.05) {
     effects.push({ type: 'brightness', value: id.brightness * 100 });
   }
-  if (id?.contrast !== undefined && Math.abs(id.contrast - 1) > 0.01) {
+  if (id?.contrast !== undefined && Math.abs(id.contrast - 1) > 0.05) {
     effects.push({ type: 'contrast', value: id.contrast * 100 });
   }
-  if (id?.saturation !== undefined && Math.abs(id.saturation - 1) > 0.01) {
+  if (id?.saturation !== undefined && Math.abs(id.saturation - 1) > 0.05) {
     effects.push({ type: 'saturate', value: id.saturation * 100 });
   }
 

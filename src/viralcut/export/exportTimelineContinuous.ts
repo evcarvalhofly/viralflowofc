@@ -461,70 +461,14 @@ export async function exportTimelineContinuous(
     throw new Error('Arquivo de exportação vazio. Verifique se há vídeo na timeline.');
   }
 
-  // ── 10. FFmpeg: WebM → MP4 ────────────────────────────────
-  onProgress(68, 'Carregando FFmpeg…');
-
-  const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
-    import('@ffmpeg/ffmpeg'),
-    import('@ffmpeg/util'),
-  ]);
-  const ffmpeg = new FFmpeg();
-
-  const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
-  try {
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-  } catch {
-    const fallbackURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-  }
-
-  onProgress(72, 'Convertendo para MP4…');
-
-  ffmpeg.on('progress', ({ progress }) => {
-    const safeP = Math.max(0, Math.min(1, isFinite(progress) ? progress : 0));
-    onProgress(Math.min(72 + Math.round(safeP * 24), 96), 'Convertendo para MP4…');
-  });
-
-  const webmData = await fetchFile(webmBlob);
-  await ffmpeg.writeFile('input.webm', webmData);
-
-  await ffmpeg.exec([
-    '-i', 'input.webm',
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
-    '-c:a', 'aac', '-b:a', '128k',
-    '-movflags', '+faststart',
-    '-vf', `scale=${outW}:${outH}`,
-    '-r', String(FPS),
-    'output.mp4',
-  ]);
-
-  onProgress(97, 'Preparando download…');
-  const outputData = await ffmpeg.readFile('output.mp4');
-
-  try {
-    await ffmpeg.deleteFile('input.webm').catch(() => {});
-    await ffmpeg.deleteFile('output.mp4').catch(() => {});
-  } catch { /* ignore */ }
-
-  let mp4Blob: Blob;
-  if (typeof outputData === 'string') {
-    mp4Blob = new Blob([outputData], { type: 'video/mp4' });
-  } else {
-    const buf = new ArrayBuffer(outputData.byteLength);
-    new Uint8Array(buf).set(outputData);
-    mp4Blob = new Blob([buf], { type: 'video/mp4' });
-  }
-
+  // ── 10. OTIMIZAÇÃO: Retornar WebM diretamente, sem recodificação FFmpeg ──
+  // A conversão WebM→MP4 dobrava o tempo de exportação sem ganho perceptível.
+  // WebM (VP8/VP9 + Opus) é suportado por todos os navegadores modernos,
+  // Android, e a maioria dos players de desktop. Se o usuário precisar
+  // especificamente de MP4/H.264, use o motor WebCodecs (exportTimelineFast).
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-  exportLog(
-    `Export concluído em ${elapsed}s | Tamanho: ${(mp4Blob.size / 1024 / 1024).toFixed(2)}MB`
-  );
+  exportLog(`Export concluído em ${elapsed}s (WebM direto, sem FFmpeg) | ${(webmBlob.size / 1024 / 1024).toFixed(2)}MB`);
 
-  return mp4Blob;
+  onProgress(99, 'Preparando download…');
+  return webmBlob;
 }

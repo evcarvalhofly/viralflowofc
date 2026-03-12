@@ -40,8 +40,15 @@ export async function buildFFmpegInputs(
     const fsName = `media_${inputIndex}.${getExtension(mf.name)}`;
     onProgress?.(`Carregando "${mf.name}"…`);
 
-    // Fetch the Blob from the object URL (could be File or Blob URL)
-    const arrayBuf = await fileToArrayBuffer(mf.file ?? mf.url);
+    // Optimized read: use File.arrayBuffer() directly to avoid extra fetch round-trip
+    let arrayBuf: ArrayBuffer;
+    if (mf.file instanceof File) {
+      arrayBuf = await mf.file.arrayBuffer();
+    } else {
+      const resp = await fetch(mf.url);
+      if (!resp.ok) throw new Error(`Falha ao carregar arquivo: ${resp.status}`);
+      arrayBuf = await resp.arrayBuffer();
+    }
     await ffmpeg.writeFile(fsName, new Uint8Array(arrayBuf));
 
     result.set(item.mediaId, { fsName, mediaFile: mf, inputIndex });
