@@ -168,8 +168,13 @@ async function exportWithBlobFallback(
   log('Rendering to blob…');
   onProgress?.(12, 'Exportando…');
 
-  // render() with no argument or a string returns a Blob in result.data
-  const result = await encoder.render();
+  // render() with no argument returns a Blob in result.data
+  // Safety timeout: 10 min max
+  const RENDER_TIMEOUT_MS = 10 * 60 * 1000;
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Timeout na exportação WebCodecs (travou após 10 min)')), RENDER_TIMEOUT_MS)
+  );
+  const result = await Promise.race([encoder.render(), timeoutPromise]) as Awaited<ReturnType<typeof encoder.render>>;
   log(`render() result type: ${result.type}`);
 
   if (signal?.aborted || result.type === 'canceled') {

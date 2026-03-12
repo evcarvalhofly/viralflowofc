@@ -115,17 +115,14 @@ export function buildFFmpegFilterComplex(
       vChain += `,setpts=${(1 / playRate).toFixed(6)}*PTS`;
     }
 
-    // color filters
+    // color filters — only add eq filter when there's a real change (threshold 0.05)
+    const hasBrightness = vd?.brightness !== undefined && Math.abs(vd.brightness - 1) > 0.05;
+    const hasContrast   = vd?.contrast   !== undefined && Math.abs(vd.contrast   - 1) > 0.05;
+    const hasSaturation = vd?.saturation !== undefined && Math.abs(vd.saturation - 1) > 0.05;
     const eq: string[] = [];
-    if (vd?.brightness !== undefined && Math.abs(vd.brightness - 1) > 0.01) {
-      eq.push(`brightness=${(vd.brightness - 1).toFixed(3)}`);
-    }
-    if (vd?.contrast !== undefined && Math.abs(vd.contrast - 1) > 0.01) {
-      eq.push(`contrast=${vd.contrast.toFixed(3)}`);
-    }
-    if (vd?.saturation !== undefined && Math.abs(vd.saturation - 1) > 0.01) {
-      eq.push(`saturation=${vd.saturation.toFixed(3)}`);
-    }
+    if (hasBrightness) eq.push(`brightness=${(vd!.brightness! - 1).toFixed(3)}`);
+    if (hasContrast)   eq.push(`contrast=${vd!.contrast!.toFixed(3)}`);
+    if (hasSaturation) eq.push(`saturation=${vd!.saturation!.toFixed(3)}`);
     if (eq.length > 0) {
       vChain += `,eq=${eq.join(':')}`;
     }
