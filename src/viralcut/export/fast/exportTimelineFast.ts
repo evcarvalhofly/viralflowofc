@@ -18,6 +18,7 @@
 import * as core from '@diffusionstudio/core';
 import { Project, MediaFile } from '@/viralcut/types';
 import { buildDiffusionComposition } from './buildDiffusionComposition';
+import { resolveExportDimensions } from './resolveExportDimensions';
 
 export interface FastExportOptions {
   fps: 30 | 60;
