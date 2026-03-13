@@ -288,9 +288,12 @@ export async function exportProjectWithCanvas(
               gain.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
             }
 
-            // NEVER block the loop waiting for play() to resolve
-            safePlay(el).catch(() => {});
+            // Await safePlay with short timeout so first frame is ready
+            await safePlay(el, 300).catch(() => {});
             log(`Play dispatched ${item.mediaId}`);
+
+            // Small window for decoder to release first frame
+            await new Promise<void>((resolve) => setTimeout(resolve, 34));
 
           } else {
             // ── Same clip — keep gain in sync, NO seek ────────
