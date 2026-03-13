@@ -473,7 +473,7 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
-      const blob = await exportProjectWithCanvas(
+      const blob = await exportProjectWithMediaBunny(
         project,
         media,
         { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
