@@ -19,6 +19,19 @@ export interface ExportConfig {
   audioBitrate: number;
 }
 
+export type ProjectOrientation = 'portrait' | 'landscape' | 'square';
+
+export function resolveProjectOrientation(project: { aspectRatio?: string; width?: number; height?: number }): ProjectOrientation {
+  if (project.aspectRatio === '9:16' || project.aspectRatio === '4:5') return 'portrait';
+  if (project.aspectRatio === '16:9') return 'landscape';
+  if (project.aspectRatio === '1:1') return 'square';
+  if (project.height != null && project.width != null) {
+    if (project.height > project.width) return 'portrait';
+    if (project.width > project.height) return 'landscape';
+  }
+  return 'square';
+}
+
 export function getExportDimensions(
   isPortrait: boolean,
   resolution: '720p' | '1080p'

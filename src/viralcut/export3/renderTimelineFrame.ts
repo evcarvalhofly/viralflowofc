@@ -94,9 +94,9 @@ export function renderTimelineFrame({
       const vd = videoItem.videoDetails;
       const meta = assets.videoMeta.get(videoItem.mediaId);
 
-      // Use display dimensions (corrected for rotation)
-      const displayW = meta?.displayWidth  || frame.width  || width;
-      const displayH = meta?.displayHeight || frame.height || height;
+      // Use display dimensions – meta always wins when available
+      const displayW = (meta?.displayWidth  ?? 0) > 0 ? meta!.displayWidth  : (frame.width  || width);
+      const displayH = (meta?.displayHeight ?? 0) > 0 ? meta!.displayHeight : (frame.height || height);
       const rotationDeg = meta?.rotationDeg ?? 0;
 
       ctx.save();
