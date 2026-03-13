@@ -51,22 +51,21 @@ export async function exportScene(
   const mediaMap = new Map(media.map((m) => [m.id, m]));
   const FPS = opts.fps;
 
-  // ── 2. Detect orientation ───────────────────────────────────
-  let isPortrait = false;
-  outer:
-  for (const track of project.tracks) {
-    if (track.type !== 'video') continue;
-    for (const item of track.items) {
-      const mf = mediaMap.get(item.mediaId);
-      if (mf?.width && mf?.height) {
-        isPortrait = mf.height > mf.width;
-        break outer;
-      }
-    }
-  }
+  // ── 2. Detect orientation from project (not from raw media dims) ──
+  const orientation = resolveProjectOrientation(project);
+  const isPortrait = orientation === 'portrait';
+
+  console.log('[Export3] Project orientation', {
+    aspectRatio: project.aspectRatio,
+    projectWidth: project.width,
+    projectHeight: project.height,
+    resolvedOrientation: orientation,
+  });
 
   const { width, height } = getExportDimensions(isPortrait, opts.resolution);
-  log(`Output: ${width}×${height} @ ${FPS}fps, portrait=${isPortrait}`);
+
+  console.log('[Export3] Output dimensions', { width, height, fps: FPS });
+  log(`Output: ${width}×${height} @ ${FPS}fps, orientation=${orientation}`);
 
   // ── 3. Detect best codec/container ─────────────────────────
   onProgress(4, 'Detectando suporte de codec…');
