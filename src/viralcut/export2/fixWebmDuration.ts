@@ -199,46 +199,10 @@ function patchOrInsertDuration(data: Uint8Array, durationMs: number): Uint8Array
     scanPos++;
   }
 
-  // ── Duration element not found → try to INSERT it ────────
-  // We'll insert a float64 Duration element right at infoStart.
-  // Duration ID = 0x44, 0x89 (2 bytes)
-  // Size vint for 8-byte float = 0x88 (1 byte, value=8)
-  // Float64 value = 8 bytes
-  // Total insertion = 11 bytes
-  log('Duration element not found — inserting it');
-
-  const INSERT_SIZE = 11; // 2 (ID) + 1 (size vint) + 8 (float64)
-  const newData = new Uint8Array(data.length + INSERT_SIZE);
-
-  // Copy everything up to infoStart
-  newData.set(data.subarray(0, infoStart));
-
-  // Write Duration element
-  newData[infoStart + 0] = DURATION_ID[0]; // 0x44
-  newData[infoStart + 1] = DURATION_ID[1]; // 0x89
-  newData[infoStart + 2] = 0x88;           // vint for size=8 (0x80 | 8)
-  writeFloat64BE(newData, infoStart + 3, durationTicks);
-
-  // Copy the rest
-  newData.set(data.subarray(infoStart), infoStart + INSERT_SIZE);
-
-  // Patch Info element size if it's not unknown-size
-  // (adjust the vint that encodes infoSz.value)
-  // We stored it right before infoStart; its vint starts at infoStart - infoSz.length
-  // For simplicity, only patch if Info size was encoded with exactly 4 bytes (common in Chrome)
-  const infoSzPos = infoStart - infoSz.length;
-  if (!isUnknownSize(infoSz) && infoSz.length === 4) {
-    const newInfoSize = infoSz.value + INSERT_SIZE;
-    // 4-byte vint: 0x2X XX XX XX where 0x20000000 is the width bit
-    newData[infoSzPos + 0] = 0x20 | ((newInfoSize >> 21) & 0x1F);
-    newData[infoSzPos + 1] = (newInfoSize >> 14) & 0xFF;
-    newData[infoSzPos + 2] = (newInfoSize >> 7) & 0xFF;
-    newData[infoSzPos + 3] = newInfoSize & 0x7F;
-  }
-  // If Info used unknown-size, no adjustment needed.
-
-  log(`Inserted Duration at byte ${infoStart}, new blob size: ${newData.length}`);
-  return newData;
+  // Se o Duration não existir, NÃO inserir bytes no WebM.
+  // Inserção dentro do Info pode invalidar offsets internos do container.
+  log('Duration element not found — returning original data unchanged');
+  return out;
 }
 
 // ── EBML ID width detector ────────────────────────────────────

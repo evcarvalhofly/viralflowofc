@@ -213,12 +213,15 @@ export async function exportProjectWithCanvas(
         return;
       }
 
-      // ── Advance timeSec by real wall-clock delta (paused during seeks) ──
+      // ── Advance timeSec by wall-clock delta (paused during seeks) ──
+      let wallDelta = 0;
       if (lastRafTs !== null) {
-        const delta = (rafTs - lastRafTs) / 1000;
-        timeSec = Math.min(timeSec + delta, totalDuration);
+        wallDelta = (rafTs - lastRafTs) / 1000;
       }
       lastRafTs = rafTs;
+
+      // Fallback: se não houver vídeo ativo, anda por relógio normal
+      timeSec = Math.min(timeSec + wallDelta, totalDuration);
 
       // ── (a) Resolve active clip ───────────────────────────
       const activeResult = resolveActiveVideoItem(project, timeSec);
@@ -227,6 +230,32 @@ export async function exportProjectWithCanvas(
         const { item, track } = activeResult;
         const clipKey = `${item.id}:${item.mediaId}`;
         const el = assets.videos.get(item.mediaId);
+        const playbackRate = item.videoDetails?.playbackRate ?? 1;
+
+        // Se já estamos no clip ativo e o vídeo realmente está tocando,
+        // o tempo da exportação deve seguir o currentTime real do vídeo.
+        if (
+          el &&
+          clipKey === activeClipKey &&
+          !el.paused &&
+          Number.isFinite(el.currentTime)
+        ) {
+          const mediaElapsed = Math.max(0, el.currentTime - (item.mediaStart ?? 0));
+          const clipElapsed = mediaElapsed / Math.max(0.0001, playbackRate);
+          const syncedTime = item.startTime + clipElapsed;
+
+          if (Number.isFinite(syncedTime)) {
+            timeSec = Math.min(
+              Math.max(item.startTime, syncedTime),
+              item.endTime
+            );
+          }
+        }
+
+        // Se o vídeo não estiver pronto, não deixar o clock disparar
+        if (el && el.readyState < 2) {
+          timeSec = Math.max(0, timeSec - Math.min(wallDelta, 0.05));
+        }
 
         if (el) {
           if (clipKey !== activeClipKey) {
