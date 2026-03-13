@@ -94,27 +94,40 @@ export function renderTimelineFrame({
       const vd = videoItem.videoDetails;
       const meta = assets.videoMeta.get(videoItem.mediaId);
 
-      // Use display dimensions – meta always wins when available
+      // PRIORITY: use meta.displayWidth/displayHeight as the visual size of the source
       const displayW = (meta?.displayWidth  ?? 0) > 0 ? meta!.displayWidth  : (frame.width  || width);
       const displayH = (meta?.displayHeight ?? 0) > 0 ? meta!.displayHeight : (frame.height || height);
       const rotationDeg = meta?.rotationDeg ?? 0;
 
+      // Encoded dimensions (raw frame size from the video element)
+      const encW = (meta?.encodedWidth  ?? 0) > 0 ? meta!.encodedWidth  : frame.width;
+      const encH = (meta?.encodedHeight ?? 0) > 0 ? meta!.encodedHeight : frame.height;
+
+      // TEMP DEBUG
+      console.log('[ViralCut][render] draw video', {
+        mediaId: videoItem.mediaId,
+        displayW,
+        displayH,
+        rotationDeg,
+        frameWidth: frame.width,
+        frameHeight: frame.height,
+      });
+
       ctx.save();
       ctx.globalAlpha = vd?.opacity ?? 1;
 
-      // Filters
+      // CSS-style filter string
       const filters: string[] = [];
       if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
       if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
       if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
       if (filters.length) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters.join(' ');
 
-      // Flip transforms (applied on top of rotation)
-      const flipScaleX = (vd?.flipH) ? -1 : 1;
-      const flipScaleY = (vd?.flipV) ? -1 : 1;
+      const flipScaleX = vd?.flipH ? -1 : 1;
+      const flipScaleY = vd?.flipV ? -1 : 1;
 
       if (rotationDeg === 0) {
-        // ── No rotation – standard cover-fit ──────────────────
+        // ── No rotation – standard cover-fit using display dimensions ──
         if (vd?.flipH || vd?.flipV) {
           ctx.translate(vd.flipH ? width : 0, vd.flipV ? height : 0);
           ctx.scale(flipScaleX, flipScaleY);
@@ -122,25 +135,18 @@ export function renderTimelineFrame({
         drawCoverFit(ctx, frame, width, height, displayW, displayH);
 
       } else if (rotationDeg === 90 || rotationDeg === 270) {
-        // ── 90° / 270° rotation ───────────────────────────────
-        // The encoded frame is landscape; we must rotate it so it
-        // appears portrait on the canvas.
-        console.log('[renderTimelineFrame] Rotation applied', rotationDeg, 'for media', videoItem.mediaId);
-
+        // ── 90° / 270° rotation ──────────────────────────────
+        // The encoded frame is landscape but represents portrait content.
+        // We rotate the canvas so the frame fills it without distortion.
         ctx.translate(width / 2, height / 2);
         const rad = rotationDeg === 90 ? Math.PI / 2 : -Math.PI / 2;
         ctx.rotate(rad);
         ctx.scale(flipScaleX, flipScaleY);
 
-        // After rotating, the encoded frame dimensions are swapped:
-        // encoded landscape (encodedW × encodedH) → displayed as portrait
-        // We draw using the encoded (pre-rotation) dimensions for the
-        // source, but fit it into the rotated canvas space.
-        const rotatedCanvasW = height; // canvas height becomes the "width" after 90° rot
+        // After rotating 90°: what was canvas-width is now canvas-height and vice-versa.
+        // We cover-fit using the encoded (pre-rotation) dims against the rotated canvas.
+        const rotatedCanvasW = height;
         const rotatedCanvasH = width;
-        const encW = meta?.encodedWidth  || frame.width;
-        const encH = meta?.encodedHeight || frame.height;
-
         const scale = Math.max(rotatedCanvasW / encW, rotatedCanvasH / encH);
         const dw = encW * scale;
         const dh = encH * scale;
@@ -151,10 +157,9 @@ export function renderTimelineFrame({
         ctx.translate(width / 2, height / 2);
         ctx.rotate(Math.PI);
         ctx.scale(flipScaleX, flipScaleY);
+        // drawCoverFit offsets from (0,0) so translate back before drawing
+        ctx.translate(-width / 2, -height / 2);
         drawCoverFit(ctx, frame, width, height, displayW, displayH);
-        // Note: drawCoverFit draws from (0,0) but we've translated to center,
-        // so offset accordingly:
-        // (Already handled by the cover-fit logic above; dx/dy center it)
       }
 
       (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';

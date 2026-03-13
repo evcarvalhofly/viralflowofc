@@ -57,7 +57,19 @@ function sanitizeDuration(d: number): number {
   return Math.min(d, 3600 * 4);
 }
 
-async function getMediaDuration(file: File): Promise<{ duration: number; width?: number; height?: number }> {
+interface MediaMetadata {
+  duration: number;
+  width?: number;
+  height?: number;
+  encodedWidth?: number;
+  encodedHeight?: number;
+  displayWidth?: number;
+  displayHeight?: number;
+  rotationDeg?: 0 | 90 | 180 | 270;
+  orientation?: 'portrait' | 'landscape' | 'square';
+}
+
+async function getMediaMetadata(file: File): Promise<MediaMetadata> {
   return new Promise((resolve) => {
     if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
       resolve({ duration: 0 });
@@ -69,11 +81,52 @@ async function getMediaDuration(file: File): Promise<{ duration: number; width?:
     el.preload = 'metadata';
     el.muted = true;
 
-    const extract = () => ({
-      duration: sanitizeDuration(el.duration),
-      width: el.videoWidth > 0 ? el.videoWidth : undefined,
-      height: el.videoHeight > 0 ? el.videoHeight : undefined,
-    });
+    const extract = (): MediaMetadata => {
+      const duration = sanitizeDuration(el.duration);
+      if (!isVideo) return { duration };
+
+      const encodedWidth  = el.videoWidth  > 0 ? el.videoWidth  : undefined;
+      const encodedHeight = el.videoHeight > 0 ? el.videoHeight : undefined;
+
+      // Browser-decoded dimensions are always the raw encoded dimensions.
+      // The browser does NOT apply the container rotation matrix to videoWidth/videoHeight,
+      // so we cannot infer rotation from them reliably on all devices/browsers.
+      // We default rotationDeg=0 and use encoded dims as display dims.
+      // The heuristic in VideoFrameCache is now only a last-resort fallback.
+      const rotationDeg: 0 | 90 | 180 | 270 = 0;
+      const displayWidth  = encodedWidth;
+      const displayHeight = encodedHeight;
+
+      const orientation: MediaMetadata['orientation'] =
+        displayWidth && displayHeight
+          ? displayHeight > displayWidth ? 'portrait'
+            : displayWidth > displayHeight ? 'landscape'
+            : 'square'
+          : undefined;
+
+      // TEMP DEBUG
+      console.log('[ViralCut][import] media metadata', {
+        name: file.name,
+        encodedWidth,
+        encodedHeight,
+        displayWidth,
+        displayHeight,
+        rotationDeg,
+        orientation,
+      });
+
+      return {
+        duration,
+        width: displayWidth,
+        height: displayHeight,
+        encodedWidth,
+        encodedHeight,
+        displayWidth,
+        displayHeight,
+        rotationDeg,
+        orientation,
+      };
+    };
 
     const timeout = setTimeout(() => {
       URL.revokeObjectURL(objUrl);
