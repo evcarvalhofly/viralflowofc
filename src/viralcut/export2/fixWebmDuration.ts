@@ -23,7 +23,7 @@ export async function fixWebmDuration(
     const buffer = await blob.arrayBuffer();
     const data = new Uint8Array(buffer);
     const fixed = patchWebmDuration(data, durationSec * 1000); // ms
-    return new Blob([fixed], { type: blob.type });
+    return new Blob([fixed.buffer as ArrayBuffer], { type: blob.type });
   } catch (e) {
     console.warn('[ViralCut] fixWebmDuration failed, using original blob', e);
     return blob;
