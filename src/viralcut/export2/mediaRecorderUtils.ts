@@ -2,10 +2,11 @@
 // ViralCut Export2 – MediaRecorder utilities
 // ============================================================
 
-/** Best supported WebM mime-type for MediaRecorder */
+/** Best supported mime-type for MediaRecorder — prefers MP4 when available */
 export function pickBestMimeType(): string {
-  // vp8 first — better mobile compatibility than vp9
   const candidates = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4',
     'video/webm;codecs=vp8,opus',
     'video/webm',
     'video/webm;codecs=vp9,opus',

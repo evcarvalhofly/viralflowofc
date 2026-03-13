@@ -259,41 +259,68 @@ export async function exportProjectWithCanvas(
 
         if (el) {
           if (clipKey !== activeClipKey) {
-            // ── Clip transition: pause previous → seek new entry → play ──
-            if (activeMediaId) {
-              const prevEl = assets.videos.get(activeMediaId);
-              if (prevEl) { try { prevEl.pause(); } catch { /* ignore */ } }
-              const prevGain = gainNodes.get(activeMediaId);
-              if (prevGain) prevGain.gain.value = 0;
-            }
-
-            log(`Cut at ${timeSec.toFixed(2)}s → "${item.name}" (${item.mediaId})`);
-            activeClipKey = clipKey;
-            activeMediaId = item.mediaId;
-
+            const nextPlaybackRate = item.videoDetails?.playbackRate ?? 1;
             const clipOffset = Math.max(0, timeSec - item.startTime);
-            const targetTime = (item.mediaStart ?? 0) + clipOffset * (item.videoDetails?.playbackRate ?? 1);
+            const targetTime = (item.mediaStart ?? 0) + clipOffset * nextPlaybackRate;
 
-            el.playbackRate = item.videoDetails?.playbackRate ?? 1;
+            const sameMedia = activeMediaId === item.mediaId;
+            const currentRate = el.playbackRate || 1;
+            const similarRate = Math.abs(currentRate - nextPlaybackRate) < 0.001;
+            const closeEnough =
+              Number.isFinite(el.currentTime) &&
+              Math.abs(el.currentTime - targetTime) < 0.08;
 
-            log(`Seeking ${item.mediaId} → ${targetTime.toFixed(3)}s`);
-            await seekVideoPrecisely(el, targetTime);
-            log(`Seek OK ${item.mediaId}`);
+            if (sameMedia && similarRate && closeEnough) {
+              // ── Continuous cut: same media, close enough — no pause/seek/play ──
+              log(`Continuous cut reuse → ${item.mediaId} @ ${targetTime.toFixed(3)}s`);
+              activeClipKey = clipKey;
+              activeMediaId = item.mediaId;
 
-            // Reset delta timer so seek duration doesn't inflate timeSec
-            lastRafTs = null;
+              const gain = gainNodes.get(item.mediaId);
+              if (gain) {
+                gain.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
+              }
 
-            const gain = gainNodes.get(item.mediaId);
-            if (gain) {
-              gain.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
+            } else {
+              // ── Hard cut: only pause previous if switching to a different element ──
+              if (activeMediaId && activeMediaId !== item.mediaId) {
+                const prevEl = assets.videos.get(activeMediaId);
+                if (prevEl) { try { prevEl.pause(); } catch { /* ignore */ } }
+                const prevGain = gainNodes.get(activeMediaId);
+                if (prevGain) prevGain.gain.value = 0;
+              }
+
+              log(`Cut at ${timeSec.toFixed(2)}s → "${item.name}" (${item.mediaId})`);
+              activeClipKey = clipKey;
+              activeMediaId = item.mediaId;
+
+              el.playbackRate = nextPlaybackRate;
+
+              const shouldSeek =
+                !Number.isFinite(el.currentTime) ||
+                Math.abs(el.currentTime - targetTime) > 0.08 ||
+                el.readyState < 2;
+
+              if (shouldSeek) {
+                log(`Seeking ${item.mediaId} → ${targetTime.toFixed(3)}s`);
+                await seekVideoPrecisely(el, targetTime);
+                log(`Seek OK ${item.mediaId}`);
+              }
+
+              // Reset delta timer so seek duration doesn't inflate timeSec
+              lastRafTs = null;
+
+              const gain = gainNodes.get(item.mediaId);
+              if (gain) {
+                gain.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
+              }
+
+              await safePlay(el, 300).catch(() => {});
+              log(`Play dispatched ${item.mediaId}`);
+
+              // Small window for decoder to release first frame
+              await new Promise<void>((resolve) => setTimeout(resolve, 16));
             }
-
-            // Await safePlay with short timeout so first frame is ready
-            await safePlay(el, 300).catch(() => {});
-            log(`Play dispatched ${item.mediaId}`);
-
-            // Small window for decoder to release first frame
-            await new Promise<void>((resolve) => setTimeout(resolve, 34));
 
           } else {
             // ── Same clip — keep gain in sync, NO seek ────────
