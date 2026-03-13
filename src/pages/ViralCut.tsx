@@ -17,7 +17,7 @@ import { Toolbar } from '@/viralcut/components/Toolbar';
 import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
-import { exportProjectWithCanvas } from '@/viralcut/export2/exportProjectWithCanvas';
+import { exportProjectWithMediaBunny } from '@/viralcut/export3/exportProjectWithMediaBunny';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers,
@@ -473,7 +473,7 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
-      const blob = await exportProjectWithCanvas(
+      const blob = await exportProjectWithMediaBunny(
         project,
         media,
         { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
