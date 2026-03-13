@@ -126,7 +126,6 @@ const ViralCut = () => {
   const [mobileTab, setMobileTab] = useState<MobileTab>('editar');
   const [showMobilePanel, setShowMobilePanel] = useState(false);
   const [showAutoCut, setShowAutoCut] = useState(false);
-  const [pendingAutoCutFile, setPendingAutoCutFile] = useState<FileList | null>(null);
 
   const hasMedia = media.length > 0;
 
