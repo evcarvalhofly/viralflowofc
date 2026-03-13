@@ -4,11 +4,11 @@
 
 /** Best supported WebM mime-type for MediaRecorder */
 export function pickBestMimeType(): string {
+  // vp8 first — better mobile compatibility than vp9
   const candidates = [
-    'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm',
-    'video/mp4',
+    'video/webm;codecs=vp9,opus',
   ];
   for (const type of candidates) {
     try {
