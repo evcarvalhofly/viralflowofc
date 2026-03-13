@@ -192,27 +192,32 @@ export async function exportProjectWithCanvas(
   log('Recorder started');
 
   // ── 9. rAF loop — seek ONLY on clip entry ─────────────────
-  // When a new clip becomes active:
-  //   - pause previous
-  //   - seekVideoPrecisely() once to the correct entry frame
-  //   - play() and let it run naturally until the next cut
-  // No seeks during active playback. No background preloads.
+  // timeSec is tracked manually (not wall-clock) so that async seeks
+  // don't advance the playhead while awaiting — preventing the loop
+  // from jumping past totalDuration and stopping immediately at 22%.
   onProgress(22, 'Renderizando…');
 
-  const exportStart = performance.now();
+  // We track rendered time ourselves — incremented each rAF tick by the
+  // real delta, but paused while we await seekVideoPrecisely.
+  let timeSec = 0;
+  let lastRafTs: number | null = null;
   let activeClipKey: string | null = null;
   let activeMediaId: string | null = null;
 
   await new Promise<void>((resolve, reject) => {
-    async function tick() {
+    async function tick(rafTs: number) {
       if (signal?.aborted) {
         try { recorder.stop(); } catch { /* ignore */ }
         reject(new Error('Exportação cancelada.'));
         return;
       }
 
-      const elapsed = (performance.now() - exportStart) / 1000;
-      const timeSec = Math.min(elapsed, totalDuration);
+      // ── Advance timeSec by real wall-clock delta (paused during seeks) ──
+      if (lastRafTs !== null) {
+        const delta = (rafTs - lastRafTs) / 1000;
+        timeSec = Math.min(timeSec + delta, totalDuration);
+      }
+      lastRafTs = rafTs;
 
       // ── (a) Resolve active clip ───────────────────────────
       const activeResult = resolveActiveVideoItem(project, timeSec);
@@ -242,8 +247,13 @@ export async function exportProjectWithCanvas(
 
             el.playbackRate = item.videoDetails?.playbackRate ?? 1;
 
-            // Single seek to entry frame — no more seeks until next cut
+            // Seek to entry frame — timeSec does NOT advance during this await
+            // because we use delta-time from rAF timestamps, not performance.now()
             await seekVideoPrecisely(el, targetTime);
+
+            // After seek completes, reset lastRafTs so the NEXT rAF delta
+            // starts fresh (avoids a large jump caused by seek duration)
+            lastRafTs = null;
 
             const gain = gainNodes.get(item.mediaId);
             if (gain) {
@@ -300,16 +310,16 @@ export async function exportProjectWithCanvas(
         return;
       }
 
-      requestAnimationFrame(() => {
-        tick().catch((err) => {
+      requestAnimationFrame((ts) => {
+        tick(ts).catch((err) => {
           try { recorder.stop(); } catch { /* ignore */ }
           reject(err);
         });
       });
     }
 
-    requestAnimationFrame(() => {
-      tick().catch((err) => {
+    requestAnimationFrame((ts) => {
+      tick(ts).catch((err) => {
         try { recorder.stop(); } catch { /* ignore */ }
         reject(err);
       });
