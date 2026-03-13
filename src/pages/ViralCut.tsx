@@ -17,10 +17,10 @@ import { Toolbar } from '@/viralcut/components/Toolbar';
 import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
-import { exportTimelineWithFFmpeg } from '@/viralcut/export/exportTimelineWithFFmpeg';
+import { exportProjectWithCanvas } from '@/viralcut/export2/exportProjectWithCanvas';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
-  PanelLeft, PanelRight, Scissors, Music, Type, Layers, Zap,
+  PanelLeft, PanelRight, Scissors, Music, Type, Layers,
   Upload, Plus, Wand2, X, ZoomIn, ZoomOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -92,14 +92,13 @@ async function getMediaDuration(file: File): Promise<{ duration: number; width?:
   });
 }
 
-/** Compute project duration from tracks */
 function calcDuration(tracks: Track[]): number {
   let max = 0;
   for (const t of tracks) for (const i of t.items) if (i.endTime > max) max = i.endTime;
   return max;
 }
 
-type MobileTab = 'editar' | 'audio' | 'texto' | 'efeitos' | 'camada';
+type MobileTab = 'editar' | 'audio' | 'texto' | 'camada';
 
 const ViralCut = () => {
   const isMobile = useIsMobile();
@@ -134,7 +133,7 @@ const ViralCut = () => {
   // ── History ───────────────────────────────────────────────
   const history = useEditorHistory(project.tracks);
 
-  // ── Central project updater – sanitizes + optionally pushes history ──
+  // ── Central project updater ──────────────────────────────
   const updateProject = useCallback((
     updater: (prev: Project) => Project,
     opts: { pushHistory?: boolean } = {}
@@ -165,11 +164,8 @@ const ViralCut = () => {
   const canUndo = history.canUndo();
   const canRedo = history.canRedo();
 
-  // ── Persistence (autosave + JSON import/export) ───────────
-  const persistence = useProjectPersistence(project, (restored) => {
-    const safe = sanitizeProject(restored);
-    setProjectRaw(safe);
-  });
+  // ── Persistence (no-op stub — autosave removed) ───────────
+  const persistence = useProjectPersistence(project, () => {});
 
   // ── Keyboard shortcuts ────────────────────────────────────
   useEffect(() => {
@@ -179,7 +175,6 @@ const ViralCut = () => {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       if (e.code === 'Space') { e.preventDefault(); setIsPlaying((p) => !p); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? handleRedo() : handleUndo(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); persistence.saveNow(); }
       if (e.key === 's' || e.key === 'S') { e.preventDefault(); splitAllRef.current?.(); }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedItemId) {
@@ -225,7 +220,7 @@ const ViralCut = () => {
     return () => { if (tickRef.current) cancelAnimationFrame(tickRef.current); };
   }, [isPlaying, project.duration]);
 
-  // ── Memoised derived data for Timeline / PreviewPanel ─────
+  // ── Memoised derived data ─────────────────────────────────
   const stableTracks = useMemo(() => project.tracks, [project.tracks]);
 
   // ── Import media ──────────────────────────────────────────
@@ -468,7 +463,7 @@ const ViralCut = () => {
   }, [currentTime, updateProject]);
   splitAllRef.current = handleSplitAllAtPlayhead;
 
-  // ── Export – continuous single-pass engine ────────────────
+  // ── Export – Canvas + MediaRecorder pipeline ──────────────
   const exportAbortRef = useRef<AbortController | null>(null);
 
   const handleExport = useCallback(async (opts: ExportOptions) => {
@@ -480,7 +475,7 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
-      const mp4Blob = await exportTimelineWithFFmpeg(
+      const blob = await exportProjectWithCanvas(
         project,
         media,
         { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
@@ -488,27 +483,24 @@ const ViralCut = () => {
         abortCtrl.signal
       );
 
-      setExportState({ status: 'encoding', progress: 98, label: 'Iniciando download…' });
+      setExportState({ status: 'encoding', progress: 99, label: 'Iniciando download…' });
 
-      const dlUrl = URL.createObjectURL(mp4Blob);
+      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const dlUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = dlUrl;
-      a.download = `${project.name}_${opts.resolution}_${opts.fps}fps.mp4`;
+      a.download = `${project.name}_${opts.resolution}_${opts.fps}fps.${ext}`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(dlUrl), 30_000);
 
       setExportState({ status: 'done', progress: 100, label: 'Download iniciado!' });
     } catch (err: any) {
-      if (err?.message === 'Exportação cancelada.') {
+      if (err?.message?.includes('cancelad')) {
         setExportState({ status: 'idle', progress: 0, label: '' });
         return;
       }
       console.error('[ViralCut] Export error:', err);
-      let errMsg = err?.message ?? 'Tente novamente';
-      if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('load')) {
-        errMsg = 'Falha ao carregar FFmpeg (verifique a conexão com a internet)';
-      }
-      setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${errMsg}` });
+      setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${err?.message ?? 'Tente novamente'}` });
     }
   }, [project, media, isMobile]);
 
@@ -585,15 +577,22 @@ const ViralCut = () => {
 
   // ── Mobile editor ─────────────────────────────────────────
   if (isMobile) {
+    // 4 tabs — removed "efeitos"
     const mobileTabs: { id: MobileTab; icon: React.ReactNode; label: string }[] = [
       { id: 'editar', icon: <Scissors className="h-5 w-5" />, label: 'Editar' },
       { id: 'audio', icon: <Music className="h-5 w-5" />, label: 'Áudio' },
       { id: 'texto', icon: <Type className="h-5 w-5" />, label: 'Texto' },
-      { id: 'efeitos', icon: <Zap className="h-5 w-5" />, label: 'Efeitos' },
       { id: 'camada', icon: <Layers className="h-5 w-5" />, label: 'Camada' },
     ];
+
+    // Bottom bar height used for padding (tab bar ~56px + safe area)
+    const BOTTOM_BAR_H = 56;
+
     return (
+      // Root: full height, no overflow
       <div className="h-full flex flex-col bg-background overflow-hidden">
+
+        {/* Top bar */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0 bg-card/80 z-10">
           <div className="flex items-center gap-2">
             <button className="p-1 text-muted-foreground" onClick={handleUndo} disabled={!canUndo}>
@@ -610,7 +609,9 @@ const ViralCut = () => {
             Exportar
           </button>
         </div>
-        <div className="shrink-0" style={{ height: '42vh' }}>
+
+        {/* Preview */}
+        <div className="shrink-0" style={{ height: '40vh' }}>
           <PreviewPanel
             tracks={stableTracks}
             media={media}
@@ -626,15 +627,20 @@ const ViralCut = () => {
             onOpenProperties={handleItemDoubleClick}
           />
         </div>
-        <div className="flex-1 min-h-0 border-t border-border flex flex-col overflow-hidden">
+
+        {/* Timeline — occupies remaining space above bottom bar */}
+        <div
+          className="flex-1 min-h-0 border-t border-border flex flex-col overflow-hidden"
+          style={{ paddingBottom: BOTTOM_BAR_H }}
+        >
           <div className="flex items-center gap-2 px-2 py-1 bg-card/60 border-b border-border shrink-0">
             <span className="text-[10px] font-semibold text-foreground">Timeline</span>
             <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg px-1 py-0.5">
-              <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.max(20, z - 20))} title="Zoom out">
+              <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.max(20, z - 20))}>
                 <ZoomOut className="h-3 w-3" />
               </button>
               <span className="text-[10px] font-mono text-muted-foreground w-9 text-center tabular-nums">{zoom}px/s</span>
-              <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.min(300, z + 20))} title="Zoom in">
+              <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.min(300, z + 20))}>
                 <ZoomIn className="h-3 w-3" />
               </button>
             </div>
@@ -675,10 +681,14 @@ const ViralCut = () => {
           </div>
         </div>
 
+        {/* Slide-up panel (opens above bottom bar) */}
         {showMobilePanel && (
           <div className="fixed inset-0 z-40" onClick={() => { setShowMobilePanel(false); setShowAutoCut(false); }}>
-            <div className="absolute bottom-16 left-0 right-0 bg-card border-t border-border rounded-t-2xl shadow-2xl overflow-hidden"
-              style={{ maxHeight: '50vh' }} onClick={(e) => e.stopPropagation()}>
+            <div
+              className="absolute left-0 right-0 bg-card border-t border-border rounded-t-2xl shadow-2xl overflow-hidden"
+              style={{ bottom: BOTTOM_BAR_H, maxHeight: '50vh' }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
                 <span className="text-xs font-semibold text-foreground capitalize">
                   {showAutoCut ? 'Corte Automático' : mobileTab}
@@ -706,7 +716,7 @@ const ViralCut = () => {
                   <div className="p-4 text-center text-sm text-muted-foreground">
                     {mobileTab === 'editar' ? 'Selecione um clipe na timeline para editar' :
                      mobileTab === 'audio' ? 'Selecione um clipe de áudio na timeline' :
-                     mobileTab === 'efeitos' ? 'Efeitos em breve' : 'Selecione uma opção'}
+                     'Selecione uma opção'}
                   </div>
                 )}
               </div>
@@ -714,11 +724,13 @@ const ViralCut = () => {
           </div>
         )}
 
-        <div className="shrink-0 border-t border-border bg-card/95 safe-area-inset-bottom">
-          <div className="flex">
+        {/* FIXED bottom tab bar */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-md"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="flex" style={{ height: BOTTOM_BAR_H }}>
             {mobileTabs.map((tab) => (
               <button key={tab.id}
-                className={cn('flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors',
+                className={cn('flex-1 flex flex-col items-center justify-center gap-1 transition-colors',
                   mobileTab === tab.id && showMobilePanel && !showAutoCut ? 'text-primary' : 'text-muted-foreground')}
                 onClick={() => { setMobileTab(tab.id); setShowAutoCut(false); setShowMobilePanel(true); }}>
                 {tab.icon}
@@ -726,7 +738,7 @@ const ViralCut = () => {
               </button>
             ))}
             <button
-              className={cn('flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors',
+              className={cn('flex-1 flex flex-col items-center justify-center gap-1 transition-colors',
                 showAutoCut && showMobilePanel ? 'text-amber-500' : 'text-muted-foreground')}
               onClick={() => { setShowAutoCut(true); setShowMobilePanel(true); }}>
               <Wand2 className="h-5 w-5" />
@@ -799,11 +811,11 @@ const ViralCut = () => {
         <div className="flex items-center gap-2 px-3 py-1.5 bg-card/60 border-b border-border shrink-0">
           <span className="text-[11px] font-semibold text-foreground uppercase tracking-wide">Timeline</span>
           <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg px-1 py-0.5">
-            <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.max(20, z - 20))} title="Zoom out">
+            <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.max(20, z - 20))}>
               <ZoomOut className="h-3 w-3" />
             </button>
             <span className="text-[10px] font-mono text-muted-foreground w-9 text-center tabular-nums">{zoom}px/s</span>
-            <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.min(300, z + 20))} title="Zoom in">
+            <button className="p-0.5 hover:text-foreground text-muted-foreground transition-colors" onClick={() => setZoom((z) => Math.min(300, z + 20))}>
               <ZoomIn className="h-3 w-3" />
             </button>
           </div>
@@ -814,18 +826,18 @@ const ViralCut = () => {
           <button
             className={cn('flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors',
               showAutoCut ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' : 'text-muted-foreground hover:text-foreground border border-transparent')}
-            onClick={() => setShowAutoCut((v) => !v)} title="Corte Automático">
+            onClick={() => setShowAutoCut((v) => !v)}>
             <Wand2 className="h-3 w-3" />
             Auto Corte
           </button>
           <button
             className={cn('p-1 rounded transition-colors text-muted-foreground hover:text-foreground', showMedia && 'text-primary')}
-            onClick={() => setShowMedia((v) => !v)} title="Painel de mídia">
+            onClick={() => setShowMedia((v) => !v)}>
             <PanelLeft className="h-3.5 w-3.5" />
           </button>
           <button
             className={cn('p-1 rounded transition-colors text-muted-foreground hover:text-foreground', showProperties && 'text-primary')}
-            onClick={() => setShowProperties((v) => !v)} title="Propriedades">
+            onClick={() => setShowProperties((v) => !v)}>
             <PanelRight className="h-3.5 w-3.5" />
           </button>
         </div>
