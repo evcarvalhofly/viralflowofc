@@ -102,7 +102,7 @@ export async function exportScene(
 
   const outputFormat = config.container === 'mp4'
     ? new Mp4OutputFormat()
-    : new WebmOutputFormat();
+    : new WebMOutputFormat();
 
   const target = new BufferTarget();
   const output = new Output({ format: outputFormat, target });
@@ -111,9 +111,6 @@ export async function exportScene(
   const videoSource = new CanvasSource(renderer.canvas, {
     codec: config.videoCodec,
     bitrate: config.videoBitrate,
-    ...(config.videoCodec === 'avc'
-      ? { avc: { format: 'annexb' } }
-      : {}),
   });
   output.addVideoTrack(videoSource, { frameRate: FPS });
 
@@ -123,8 +120,6 @@ export async function exportScene(
     audioSource = new AudioBufferSource({
       codec: config.audioCodec as 'aac' | 'opus',
       bitrate: config.audioBitrate,
-      sampleRate: audioBuffer.sampleRate,
-      numberOfChannels: audioBuffer.numberOfChannels,
     });
     output.addAudioTrack(audioSource);
   }
