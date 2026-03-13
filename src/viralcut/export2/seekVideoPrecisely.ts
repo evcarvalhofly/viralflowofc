@@ -36,7 +36,13 @@ export async function seekVideoPrecisely(
 
   await new Promise<void>((resolve) => {
     let done = false;
-    const timeout = setTimeout(() => { if (!done) { done = true; resolve(); } }, 5000);
+    const timeout = setTimeout(() => {
+      if (!done) {
+        done = true;
+        cleanup();
+        resolve();
+      }
+    }, 1200);
 
     const cleanup = () => {
       clearTimeout(timeout);
