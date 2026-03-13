@@ -222,6 +222,19 @@ const ViralCut = () => {
   // ── Memoised derived data ─────────────────────────────────
   const stableTracks = useMemo(() => project.tracks, [project.tracks]);
 
+  // ── Auto-orient project from first video ─────────────────
+  const resolveAspectRatioFromMedia = useCallback((w?: number, h?: number): {
+    aspectRatio: Project['aspectRatio'];
+    projectWidth: number;
+    projectHeight: number;
+  } => {
+    if (!w || !h) return { aspectRatio: '16:9', projectWidth: 1920, projectHeight: 1080 };
+    const ratio = w / h;
+    if (h > w) return { aspectRatio: '9:16', projectWidth: 1080, projectHeight: 1920 };
+    if (Math.abs(ratio - 1) < 0.08) return { aspectRatio: '1:1', projectWidth: 1080, projectHeight: 1080 };
+    return { aspectRatio: '16:9', projectWidth: 1920, projectHeight: 1080 };
+  }, []);
+
   // ── Import media ──────────────────────────────────────────
   const handleImport = useCallback(async (files: FileList) => {
     for (const file of Array.from(files)) {
@@ -236,12 +249,41 @@ const ViralCut = () => {
         const targetType: Track['type'] = type === 'audio' ? 'audio' : type === 'image' ? 'image' : 'video';
         let track = p.tracks.find((t) => t.type === targetType);
         let tracks = p.tracks;
+
+        // ── Auto-orient: only on first video, only if project is still at defaults
+        const isFirstVideo =
+          type === 'video' &&
+          p.aspectRatio === '16:9' &&
+          p.width === 1920 &&
+          p.height === 1080 &&
+          (p.tracks.find((t) => t.type === 'video')?.items.length ?? 0) === 0;
+
+        let orientationPatch: Partial<Project> = {};
+        if (isFirstVideo && width && height) {
+          const resolved = resolveAspectRatioFromMedia(width, height);
+          console.log('[ViralCut] Auto project orientation from first video', {
+            mediaWidth: width,
+            mediaHeight: height,
+            oldAspectRatio: p.aspectRatio,
+            oldWidth: p.width,
+            oldHeight: p.height,
+            newAspectRatio: resolved.aspectRatio,
+            newWidth: resolved.projectWidth,
+            newHeight: resolved.projectHeight,
+          });
+          orientationPatch = {
+            aspectRatio: resolved.aspectRatio,
+            width: resolved.projectWidth,
+            height: resolved.projectHeight,
+          };
+        }
+
         if (!track && targetType === 'image') {
           const newTrack: Track = { id: createId(), type: 'image', items: [], locked: false, muted: false };
           tracks = [...p.tracks, newTrack];
           track = newTrack;
         }
-        if (!track) return p;
+        if (!track) return { ...p, ...orientationPatch };
         const lastEnd = track.items.reduce((acc, i) => Math.max(acc, i.endTime), 0);
         const dur = duration > 0 ? duration : 5;
         const item: TrackItem = {
@@ -255,10 +297,10 @@ const ViralCut = () => {
           imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS } : undefined,
         };
         const newTracks = tracks.map((t) => t.id === track!.id ? { ...t, items: [...t.items, item] } : t);
-        return { ...p, tracks: newTracks };
+        return { ...p, ...orientationPatch, tracks: newTracks };
       }, { pushHistory: true });
     }
-  }, [updateProject]);
+  }, [updateProject, resolveAspectRatioFromMedia]);
 
   const handleAutoCutImport = useCallback(async (files: FileList) => {
     await handleImport(files);
