@@ -242,18 +242,16 @@ export async function exportProjectWithCanvas(
             activeClipKey = clipKey;
             activeMediaId = item.mediaId;
 
-            // Calculate correct entry point in source media
             const clipOffset = Math.max(0, timeSec - item.startTime);
             const targetTime = (item.mediaStart ?? 0) + clipOffset * (item.videoDetails?.playbackRate ?? 1);
 
             el.playbackRate = item.videoDetails?.playbackRate ?? 1;
 
-            // Seek to entry frame — timeSec does NOT advance during this await
-            // because we use delta-time from rAF timestamps, not performance.now()
+            log(`Seeking ${item.mediaId} → ${targetTime.toFixed(3)}s`);
             await seekVideoPrecisely(el, targetTime);
+            log(`Seek OK ${item.mediaId}`);
 
-            // After seek completes, reset lastRafTs so the NEXT rAF delta
-            // starts fresh (avoids a large jump caused by seek duration)
+            // Reset delta timer so seek duration doesn't inflate timeSec
             lastRafTs = null;
 
             const gain = gainNodes.get(item.mediaId);
@@ -261,7 +259,9 @@ export async function exportProjectWithCanvas(
               gain.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
             }
 
-            try { await el.play(); } catch { el.play().catch(() => {}); }
+            // NEVER block the loop waiting for play() to resolve
+            safePlay(el).catch(() => {});
+            log(`Play dispatched ${item.mediaId}`);
 
           } else {
             // ── Same clip — keep gain in sync, NO seek ────────
