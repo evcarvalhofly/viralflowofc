@@ -8,7 +8,7 @@ import { Project, TrackItem } from '../types';
 import { PreparedExportAssets } from './prepareExportAssets';
 import { drawTextItemOnCanvas } from './textLayout';
 
-// Resolve which items are active at timeMs
+// Resolve which items are active at timeSec
 function getActiveItems(project: Project, timeSec: number) {
   let videoItem: TrackItem | null = null;
   const imageItems: TrackItem[] = [];
@@ -35,6 +35,8 @@ export interface RenderFrameParams {
   height: number;
   project: Project;
   assets: PreparedExportAssets;
+  /** If provided and video is not ready, draw this instead of black */
+  holdCanvas?: HTMLCanvasElement | null;
 }
 
 export function renderTimelineFrame({
@@ -44,50 +46,69 @@ export function renderTimelineFrame({
   height,
   project,
   assets,
+  holdCanvas,
 }: RenderFrameParams) {
-  // Clear
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, width, height);
-
   const { videoItem, imageItems, textItems } = getActiveItems(project, timeSec);
 
-  // ── Active video clip ─────────────────────────────────────
+  // ── Background ───────────────────────────────────────────
+  // Only clear to black when we actually have a video frame ready,
+  // otherwise hold the last good frame to avoid black flashes.
+  let videoReady = false;
+  let videoEl: HTMLVideoElement | undefined;
+
   if (videoItem) {
-    const el = assets.videos.get(videoItem.mediaId);
-    if (el && el.readyState >= 2) {
-      const vd = videoItem.videoDetails;
-      ctx.save();
+    videoEl = assets.videos.get(videoItem.mediaId);
+    videoReady = !!(videoEl && videoEl.readyState >= 2);
+  }
 
-      // Opacity
-      ctx.globalAlpha = vd?.opacity ?? 1;
-
-      // Filters
-      const filters: string[] = [];
-      if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
-      if (vd?.contrast != null && vd.contrast !== 1) filters.push(`contrast(${vd.contrast})`);
-      if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
-      if (filters.length) (ctx as any).filter = filters.join(' ');
-
-      // Flip
-      if (vd?.flipH || vd?.flipV) {
-        ctx.translate(vd.flipH ? width : 0, vd.flipV ? height : 0);
-        ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
-      }
-
-      // Draw video — cover-fit
-      const vw = el.videoWidth || width;
-      const vh = el.videoHeight || height;
-      const scale = Math.max(width / vw, height / vh);
-      const dw = vw * scale;
-      const dh = vh * scale;
-      const dx = (width - dw) / 2;
-      const dy = (height - dh) / 2;
-      ctx.drawImage(el, dx, dy, dw, dh);
-
-      (ctx as any).filter = 'none';
-      ctx.restore();
-      ctx.globalAlpha = 1;
+  if (!videoItem || !videoReady) {
+    // No active video or not yet ready — draw hold frame or black
+    if (holdCanvas) {
+      ctx.drawImage(holdCanvas, 0, 0, width, height);
+    } else {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, width, height);
     }
+  } else {
+    // Clear to black first, then video will cover it
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  // ── Active video clip ────────────────────────────────────
+  if (videoItem && videoEl && videoReady) {
+    const vd = videoItem.videoDetails;
+    ctx.save();
+
+    // Opacity
+    ctx.globalAlpha = vd?.opacity ?? 1;
+
+    // Filters
+    const filters: string[] = [];
+    if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
+    if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
+    if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
+    if (filters.length) (ctx as any).filter = filters.join(' ');
+
+    // Flip
+    if (vd?.flipH || vd?.flipV) {
+      ctx.translate(vd.flipH ? width : 0, vd.flipV ? height : 0);
+      ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+    }
+
+    // Draw video — cover-fit
+    const vw = videoEl.videoWidth || width;
+    const vh = videoEl.videoHeight || height;
+    const scale = Math.max(width / vw, height / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const dx = (width - dw) / 2;
+    const dy = (height - dh) / 2;
+    ctx.drawImage(videoEl, dx, dy, dw, dh);
+
+    (ctx as any).filter = 'none';
+    ctx.restore();
+    ctx.globalAlpha = 1;
   }
 
   // ── Image overlays ────────────────────────────────────────
