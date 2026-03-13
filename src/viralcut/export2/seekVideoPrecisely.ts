@@ -69,5 +69,8 @@ export async function seekVideoPrecisely(
     video.currentTime = target;
   });
 
-  await waitVideoFrame(video);
+  await Promise.race([
+    waitVideoFrame(video),
+    new Promise<void>((resolve) => setTimeout(resolve, 120)),
+  ]);
 }

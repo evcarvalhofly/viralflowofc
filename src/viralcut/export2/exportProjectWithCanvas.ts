@@ -21,6 +21,7 @@ import { prepareExportAssets, disposeExportAssets } from './prepareExportAssets'
 import { renderTimelineFrame } from './renderTimelineFrame';
 import { pickBestMimeType, pickBitrate, getExportDimensions } from './mediaRecorderUtils';
 import { seekVideoPrecisely } from './seekVideoPrecisely';
+import { safePlay } from './safePlay';
 import { fixWebmDuration } from './fixWebmDuration';
 
 const DEBUG = true;
