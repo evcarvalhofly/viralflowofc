@@ -369,11 +369,19 @@ export async function exportProjectWithCanvas(
   masterGain.disconnect();
   audioCtx.close().catch(() => {});
 
-  let finalBlob = new Blob(chunks, { type: mimeType || 'video/webm' });
+  const rawBlob = new Blob(chunks, { type: mimeType || 'video/webm' });
+  let finalBlob = rawBlob;
 
-  // Fix WebM duration metadata (shows as 0s on some mobile galleries)
-  onProgress(98, 'Corrigindo metadados…');
-  finalBlob = await fixWebmDuration(finalBlob, totalDuration);
+  onProgress(98, 'Finalizando arquivo…');
+
+  try {
+    if (rawBlob.type.includes('webm')) {
+      finalBlob = await fixWebmDuration(rawBlob, totalDuration);
+    }
+  } catch (error) {
+    console.warn('[ViralCut Export2] fixWebmDuration falhou, usando blob original', error);
+    finalBlob = rawBlob;
+  }
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
   log(
