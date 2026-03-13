@@ -9,7 +9,7 @@
 import {
   Output,
   Mp4OutputFormat,
-  WebmOutputFormat,
+  WebMOutputFormat,
   BufferTarget,
   CanvasSource,
   AudioBufferSource,
