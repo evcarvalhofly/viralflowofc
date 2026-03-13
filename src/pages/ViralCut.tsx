@@ -262,7 +262,6 @@ const ViralCut = () => {
 
   const handleAutoCutImport = useCallback(async (files: FileList) => {
     await handleImport(files);
-    setPendingAutoCutFile(files);
     setShowAutoCut(true);
     if (isMobile) { setShowMobilePanel(true); setMobileTab('editar'); }
   }, [handleImport, isMobile]);
