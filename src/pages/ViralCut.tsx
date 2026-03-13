@@ -292,10 +292,17 @@ const ViralCut = () => {
   const handleImport = useCallback(async (files: FileList) => {
     for (const file of Array.from(files)) {
       const url = URL.createObjectURL(file);
-      const { duration, width, height } = await getMediaDuration(file);
+      const meta = await getMediaMetadata(file);
+      const { duration, width, height, encodedWidth, encodedHeight, displayWidth, displayHeight, rotationDeg, orientation } = meta;
       const thumbnail = await generateThumbnail(file);
       const type: MediaFile['type'] = file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'image';
-      const mf: MediaFile = { id: createId(), name: file.name, type, file, url, duration, thumbnail, width, height };
+      const mf: MediaFile = {
+        id: createId(), name: file.name, type, file, url, duration, thumbnail,
+        width, height,
+        encodedWidth, encodedHeight,
+        displayWidth, displayHeight,
+        rotationDeg, orientation,
+      };
       setMedia((prev) => [...prev, mf]);
       setSelectedMediaId(mf.id);
       updateProject((p) => {
@@ -312,11 +319,14 @@ const ViralCut = () => {
           (p.tracks.find((t) => t.type === 'video')?.items.length ?? 0) === 0;
 
         let orientationPatch: Partial<Project> = {};
-        if (isFirstVideo && width && height) {
-          const resolved = resolveAspectRatioFromMedia(width, height);
+        // Use displayWidth/displayHeight (resolved) for aspect ratio decision
+        const orientW = displayWidth ?? width;
+        const orientH = displayHeight ?? height;
+        if (isFirstVideo && orientW && orientH) {
+          const resolved = resolveAspectRatioFromMedia(orientW, orientH);
           console.log('[ViralCut] Auto project orientation from first video', {
-            mediaWidth: width,
-            mediaHeight: height,
+            mediaWidth: orientW,
+            mediaHeight: orientH,
             oldAspectRatio: p.aspectRatio,
             oldWidth: p.width,
             oldHeight: p.height,
