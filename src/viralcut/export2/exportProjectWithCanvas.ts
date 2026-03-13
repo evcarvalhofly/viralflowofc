@@ -1,18 +1,18 @@
 // ============================================================
 // ViralCut Export2 – Universal Canvas → MediaRecorder pipeline
 //
-// Architecture (frame-by-frame deterministic):
+// Architecture (hybrid real-time):
 //   1. Pre-load all media assets
 //   2. Connect video elements to AudioContext for clean mixing
 //   3. Create canvas + captureStream(fps)
 //   4. Combine canvas video track + AudioContext audio track
 //   5. Start a SINGLE MediaRecorder
-//   6. For each frame tick:
-//        a. Identify active video item
-//        b. AWAIT seekVideoPrecisely → frame guaranteed ready
-//        c. renderTimelineFrame (no black flash possible)
-//        d. Capture holdFrame
-//        e. yield one rAF so captureStream grabs the frame
+//   6. rAF loop:
+//        a. Resolve active clip by wall-clock time
+//        b. On clip change → seekVideoPrecisely (once per cut)
+//        c. On drift > threshold → seekVideoPrecisely (rare)
+//        d. Otherwise → just draw current frame (fast path)
+//        e. Hold last good frame to avoid any black flash
 //   7. Stop recorder → fix WebM duration → return Blob
 // ============================================================
 
@@ -46,11 +46,6 @@ function captureHoldFrame(
   const hctx = holdCanvas.getContext('2d')!;
   hctx.clearRect(0, 0, holdCanvas.width, holdCanvas.height);
   hctx.drawImage(sourceCanvas, 0, 0);
-}
-
-/** Yield one animation frame so captureStream can grab the current canvas */
-function yieldFrame(): Promise<void> {
-  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 // ── Resolve active video item at a given time ─────────────────
@@ -127,7 +122,7 @@ export async function exportProjectWithCanvas(
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, width, height);
 
-  // holdCanvas retains the last good frame to avoid black flashes during transitions
+  // holdCanvas retains the last good frame to avoid black flashes
   const holdCanvas = document.createElement('canvas');
   holdCanvas.width = width;
   holdCanvas.height = height;
@@ -190,94 +185,134 @@ export async function exportProjectWithCanvas(
   const recorderDone = new Promise<void>((res) => { recorder.onstop = () => res(); });
 
   await audioCtx.resume().catch(() => {});
-  recorder.start(100);
+  recorder.start(500); // 500ms chunks — less pressure on mobile
   log('Recorder started');
 
-  // ── 8. Deterministic frame-by-frame render loop ───────────
-  // Unlike the old rAF loop, each tick:
-  //   (a) awaits seekVideoPrecisely → frame is guaranteed decoded
-  //   (b) renders the frame (no black can appear)
-  //   (c) yields one rAF so captureStream grabs it
-  // This makes the loop slower than real-time for long videos,
-  // but eliminates all black-flash possibilities.
+  // ── 8. Hybrid rAF loop ────────────────────────────────────
+  // - Seek ONLY on clip change or drift > threshold
+  // - Otherwise just draw current video frame (fast path)
+  // - Hold last good frame to prevent black flashes
   onProgress(22, 'Renderizando…');
 
-  const frameDuration = 1 / FPS;         // seconds per frame
-  const totalFrames = Math.ceil(totalDuration * FPS);
+  const DRIFT_THRESHOLD = 0.08; // seconds — seek only if drift exceeds this
+  const exportStart = performance.now();
 
-  let lastVideoMediaId: string | null = null;
+  let activeClipKey: string | null = null;
+  let activeVideoEl: HTMLVideoElement | null = null;
+  let seekPending = false;
 
-  for (let frameIndex = 0; frameIndex <= totalFrames; frameIndex++) {
-    if (signal?.aborted) {
-      recorder.stop();
-      throw new Error('Exportação cancelada.');
-    }
-
-    const timeSec = Math.min(frameIndex * frameDuration, totalDuration);
-
-    // ── (a) Identify & sync active video ─────────────────
-    const activeResult = resolveActiveVideoItem(project, timeSec);
-
-    if (activeResult) {
-      const { item, track } = activeResult;
-      const el = assets.videos.get(item.mediaId);
-
-      if (el) {
-        const rate = item.videoDetails?.playbackRate ?? 1;
-        const mediaTime = item.mediaStart + (timeSec - item.startTime) * rate;
-
-        // Update gain
-        const gainNode = gainNodes.get(item.mediaId);
-        if (gainNode) {
-          gainNode.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
-        }
-
-        // Seek precisely — this AWAITS the seeked event + frame callback
-        // so the canvas is never drawn with a stale/unready frame
-        await seekVideoPrecisely(el, mediaTime);
-
-        if (item.mediaId !== lastVideoMediaId) {
-          log(`Clip change at ${timeSec.toFixed(2)}s → ${item.name}`);
-          lastVideoMediaId = item.mediaId;
-        }
+  await new Promise<void>((resolve, reject) => {
+    function tick() {
+      if (signal?.aborted) {
+        recorder.stop();
+        reject(new Error('Exportação cancelada.'));
+        return;
       }
-    } else {
-      // Gap in timeline — silence audio
-      for (const [, gain] of gainNodes) {
-        gain.gain.value = 0;
+
+      const elapsed = (performance.now() - exportStart) / 1000;
+      const timeSec = Math.min(elapsed, totalDuration);
+
+      // ── (a) Resolve active clip ───────────────────────────
+      const activeResult = resolveActiveVideoItem(project, timeSec);
+
+      if (activeResult) {
+        const { item, track } = activeResult;
+        const clipKey = `${item.id}:${item.mediaId}`;
+        const el = assets.videos.get(item.mediaId);
+
+        if (el) {
+          const rate = item.videoDetails?.playbackRate ?? 1;
+          const mediaTime = item.mediaStart + (timeSec - item.startTime) * rate;
+
+          // Update gain
+          const gainNode = gainNodes.get(item.mediaId);
+          if (gainNode) {
+            gainNode.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
+          }
+
+          if (clipKey !== activeClipKey) {
+            // ── Clip changed — seek precisely (async, non-blocking) ──
+            log(`Clip change at ${timeSec.toFixed(2)}s → ${item.name}`);
+
+            // Mute all gains during transition
+            for (const [, g] of gainNodes) g.gain.value = 0;
+
+            activeClipKey = clipKey;
+            activeVideoEl = el;
+            seekPending = true;
+
+            seekVideoPrecisely(el, mediaTime).then(() => {
+              // Restore gain after seek
+              const gn = gainNodes.get(item.mediaId);
+              if (gn) gn.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
+              el.play().catch(() => {});
+              seekPending = false;
+            }).catch(() => {
+              seekPending = false;
+            });
+
+          } else if (!seekPending) {
+            // ── Same clip — check drift ───────────────────────
+            const drift = Math.abs(el.currentTime - mediaTime);
+            if (drift > DRIFT_THRESHOLD) {
+              log(`Drift ${drift.toFixed(3)}s at ${timeSec.toFixed(2)}s — correcting`);
+              seekPending = true;
+              seekVideoPrecisely(el, mediaTime).then(() => {
+                el.play().catch(() => {});
+                seekPending = false;
+              }).catch(() => {
+                seekPending = false;
+              });
+            }
+          }
+
+          activeVideoEl = el;
+        }
+      } else {
+        // Gap — silence all audio
+        for (const [, g] of gainNodes) g.gain.value = 0;
+        activeClipKey = null;
+        activeVideoEl = null;
       }
-      lastVideoMediaId = null;
-    }
 
-    // ── (b) Render frame ──────────────────────────────────
-    renderTimelineFrame({
-      ctx,
-      timeSec,
-      width,
-      height,
-      project,
-      assets,
-      holdCanvas,
-    });
+      // ── (b) Render frame ──────────────────────────────────
+      // If seek is pending, draw hold frame to avoid black flash
+      renderTimelineFrame({
+        ctx,
+        timeSec,
+        width,
+        height,
+        project,
+        assets,
+        holdCanvas: seekPending ? holdCanvas : holdCanvas, // always pass holdCanvas
+      });
 
-    // ── (c) Capture hold frame (for potential gaps) ───────
-    captureHoldFrame(canvas, holdCanvas);
+      // ── (c) Capture hold frame (last good frame) ──────────
+      if (!seekPending) {
+        captureHoldFrame(canvas, holdCanvas);
+      }
 
-    // ── (d) Yield so captureStream grabs this frame ───────
-    await yieldFrame();
-
-    // ── Progress (22–95%) ─────────────────────────────────
-    if (frameIndex % 15 === 0) {
-      const pct = 22 + Math.round((frameIndex / totalFrames) * 73);
+      // ── Progress (22–95%) ─────────────────────────────────
+      const pct = 22 + Math.round((timeSec / totalDuration) * 73);
       onProgress(
         Math.min(95, pct),
         `Renderizando… ${timeSec.toFixed(1)}s / ${totalDuration.toFixed(1)}s`
       );
-    }
-  }
 
-  log(`Render complete — ${totalFrames} frames rendered`);
-  recorder.stop();
+      // ── Done? ─────────────────────────────────────────────
+      if (timeSec >= totalDuration) {
+        recorder.stop();
+        resolve();
+        return;
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  });
+
+  log(`Render complete`);
 
   // ── 9. Finalize ───────────────────────────────────────────
   onProgress(96, 'Finalizando arquivo…');
