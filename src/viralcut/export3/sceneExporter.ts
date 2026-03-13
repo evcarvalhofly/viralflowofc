@@ -145,7 +145,7 @@ export async function exportScene(
   const totalFrames = Math.ceil(totalDuration * FPS);
   const frameDuration = 1 / FPS;
 
-  log(`Rendering ${totalFrames} frames @ ${FPS}fps`);
+  log(`Rendering ${totalFrames} frames @ ${FPS}fps, frameDuration=${frameDuration.toFixed(6)}s`);
 
   for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
     if (signal?.aborted) {
@@ -154,14 +154,16 @@ export async function exportScene(
       throw new Error('Exportação cancelada.');
     }
 
+    // Deterministic timestamp – no real-time dependency whatsoever
     const timeSec = frameIdx * frameDuration;
-    const timestamp = timeSec; // MediaBunny timestamp in seconds
+
+    console.log(`[ViralCut Export3] Frame time`, timeSec.toFixed(4));
 
     // Render frame onto canvas
     await renderer.renderFrame(project, timeSec);
 
-    // Add canvas snapshot to video track
-    await videoSource.add(timestamp, frameDuration);
+    // Add canvas snapshot to video track using exact deterministic timestamp
+    await videoSource.add(timeSec, frameDuration);
 
     // Progress: 30% → 95% during render
     if (frameIdx % Math.max(1, Math.floor(totalFrames / 100)) === 0) {
