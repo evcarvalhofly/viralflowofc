@@ -213,12 +213,15 @@ export async function exportProjectWithCanvas(
         return;
       }
 
-      // ── Advance timeSec by real wall-clock delta (paused during seeks) ──
+      // ── Advance timeSec by wall-clock delta (paused during seeks) ──
+      let wallDelta = 0;
       if (lastRafTs !== null) {
-        const delta = (rafTs - lastRafTs) / 1000;
-        timeSec = Math.min(timeSec + delta, totalDuration);
+        wallDelta = (rafTs - lastRafTs) / 1000;
       }
       lastRafTs = rafTs;
+
+      // Fallback: se não houver vídeo ativo, anda por relógio normal
+      timeSec = Math.min(timeSec + wallDelta, totalDuration);
 
       // ── (a) Resolve active clip ───────────────────────────
       const activeResult = resolveActiveVideoItem(project, timeSec);
@@ -227,6 +230,32 @@ export async function exportProjectWithCanvas(
         const { item, track } = activeResult;
         const clipKey = `${item.id}:${item.mediaId}`;
         const el = assets.videos.get(item.mediaId);
+        const playbackRate = item.videoDetails?.playbackRate ?? 1;
+
+        // Se já estamos no clip ativo e o vídeo realmente está tocando,
+        // o tempo da exportação deve seguir o currentTime real do vídeo.
+        if (
+          el &&
+          clipKey === activeClipKey &&
+          !el.paused &&
+          Number.isFinite(el.currentTime)
+        ) {
+          const mediaElapsed = Math.max(0, el.currentTime - (item.mediaStart ?? 0));
+          const clipElapsed = mediaElapsed / Math.max(0.0001, playbackRate);
+          const syncedTime = item.startTime + clipElapsed;
+
+          if (Number.isFinite(syncedTime)) {
+            timeSec = Math.min(
+              Math.max(item.startTime, syncedTime),
+              item.endTime
+            );
+          }
+        }
+
+        // Se o vídeo não estiver pronto, não deixar o clock disparar
+        if (el && el.readyState < 2) {
+          timeSec = Math.max(0, timeSec - Math.min(wallDelta, 0.05));
+        }
 
         if (el) {
           if (clipKey !== activeClipKey) {
@@ -259,9 +288,12 @@ export async function exportProjectWithCanvas(
               gain.gain.value = track.muted ? 0 : (item.videoDetails?.volume ?? 1);
             }
 
-            // NEVER block the loop waiting for play() to resolve
-            safePlay(el).catch(() => {});
+            // Await safePlay with short timeout so first frame is ready
+            await safePlay(el, 300).catch(() => {});
             log(`Play dispatched ${item.mediaId}`);
+
+            // Small window for decoder to release first frame
+            await new Promise<void>((resolve) => setTimeout(resolve, 34));
 
           } else {
             // ── Same clip — keep gain in sync, NO seek ────────
@@ -337,11 +369,19 @@ export async function exportProjectWithCanvas(
   masterGain.disconnect();
   audioCtx.close().catch(() => {});
 
-  let finalBlob = new Blob(chunks, { type: mimeType || 'video/webm' });
+  const rawBlob = new Blob(chunks, { type: mimeType || 'video/webm' });
+  let finalBlob = rawBlob;
 
-  // Fix WebM duration metadata (shows as 0s on some mobile galleries)
-  onProgress(98, 'Corrigindo metadados…');
-  finalBlob = await fixWebmDuration(finalBlob, totalDuration);
+  onProgress(98, 'Finalizando arquivo…');
+
+  try {
+    if (rawBlob.type.includes('webm')) {
+      finalBlob = await fixWebmDuration(rawBlob, totalDuration);
+    }
+  } catch (error) {
+    console.warn('[ViralCut Export2] fixWebmDuration falhou, usando blob original', error);
+    finalBlob = rawBlob;
+  }
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
   log(
