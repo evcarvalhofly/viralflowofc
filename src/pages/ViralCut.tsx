@@ -536,8 +536,8 @@ const ViralCut = () => {
             <Scissors className="h-9 w-9 text-primary" />
           </div>
           <div className="text-center">
-            <h2 className="text-xl font-bold text-foreground mb-1">Editor de Vídeo</h2>
-            <p className="text-sm text-muted-foreground">Edite vídeos profissionais diretamente no seu celular</p>
+            <h2 className="text-xl font-bold text-foreground mb-1">Editor de vídeo curto</h2>
+            <p className="text-sm text-muted-foreground">Recomendamos edição em vídeos até no máximo 1 minuto</p>
           </div>
           <button
             className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 hover:border-primary/60 transition-all px-5 py-4"
