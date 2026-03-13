@@ -1,13 +1,13 @@
 // ============================================================
-// ViralCut Export3 – Canvas Renderer (frame loop controller)
+// ViralCut Export3 – Canvas Renderer (v2)
 //
 // Manages the canvas and iterates deterministically frame by frame.
 // Calls VideoFrameCache to get the correct decoded frame for each
-// clip at each timestamp. Returns the canvas for use by MediaBunny.
+// clip at each timestamp. Passes rotation metadata to the renderer.
 // ============================================================
 
 import { Project, MediaFile } from '../types';
-import { VideoFrameCache } from './videoFrameCache';
+import { VideoFrameCache, VideoFrameMeta } from './videoFrameCache';
 import { renderTimelineFrame, FrameRenderAssets } from './renderTimelineFrame';
 
 export interface CanvasRendererOptions {
@@ -20,6 +20,7 @@ export class CanvasRenderer {
   private ctx: CanvasRenderingContext2D;
   private frameCache: VideoFrameCache;
   private images = new Map<string, ImageBitmap>();
+  private videoMeta = new Map<string, VideoFrameMeta>();
 
   constructor(opts: CanvasRendererOptions) {
     this.canvas = document.createElement('canvas');
@@ -60,7 +61,12 @@ export class CanvasRenderer {
       const mf = mediaMap.get(id);
       if (!mf?.url) continue;
       onProgress(`Carregando vídeo ${++loaded}/${total}…`);
-      await this.frameCache.prepare(id, mf.url);
+      // Pass the MediaFile so VideoFrameCache can detect rotation
+      await this.frameCache.prepare(id, mf.url, mf);
+
+      // Cache the metadata for use in renderTimelineFrame
+      const meta = this.frameCache.getMeta(id);
+      if (meta) this.videoMeta.set(id, meta);
     }
 
     for (const id of iArr) {
@@ -97,7 +103,7 @@ export class CanvasRenderer {
       if (activeVideoMediaId) break;
     }
 
-    // Fetch current video frame
+    // Fetch current video frame (may be reused from cache if same time)
     const videoFrames = new Map<string, ImageBitmap | null>();
     if (activeVideoMediaId !== null) {
       const frame = await this.frameCache.getFrame(
@@ -111,6 +117,7 @@ export class CanvasRenderer {
 
     const assets: FrameRenderAssets = {
       videoFrames,
+      videoMeta: this.videoMeta,
       images: this.images,
     };
 
@@ -123,8 +130,9 @@ export class CanvasRenderer {
       assets,
     });
 
-    // Release frame bitmap after drawing
-    videoFrames.forEach((bmp) => { if (bmp) { try { bmp.close(); } catch { /* ignore */ } } });
+    // NOTE: Do NOT close the frame bitmap here — the cache owns it
+    // and may reuse it for the next frame if the time delta is small.
+    // The cache disposes it when a new frame is decoded or on dispose().
   }
 
   private _loadImage(url: string): Promise<ImageBitmap | null> {
@@ -141,5 +149,6 @@ export class CanvasRenderer {
     this.frameCache.dispose();
     this.images.forEach((bmp) => { try { bmp.close(); } catch { /* ignore */ } });
     this.images.clear();
+    this.videoMeta.clear();
   }
 }
