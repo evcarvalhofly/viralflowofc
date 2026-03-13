@@ -61,48 +61,41 @@ export class VideoFrameCache {
       el.load();
     });
 
-    // ── Detect rotation from encoded vs declared dimensions ──
-    const encodedWidth = el.videoWidth || 0;
+    // ── Resolve geometry from MediaFile metadata (priority) ──
+    const encodedWidth  = el.videoWidth  || 0;
     const encodedHeight = el.videoHeight || 0;
 
-    // declared dimensions from MediaFile (set when user imports media)
-    const declaredWidth = mediaFile?.width ?? encodedWidth;
-    const declaredHeight = mediaFile?.height ?? encodedHeight;
+    // PRIORITY 1: use resolved rotation from MediaFile (set at import time)
+    const rotationDeg: 0 | 90 | 180 | 270 = mediaFile?.rotationDeg ?? 0;
 
-    let rotationDeg: 0 | 90 | 180 | 270 = 0;
+    // PRIORITY 2: use displayWidth/displayHeight from MediaFile if available
+    const resolvedDisplayW =
+      mediaFile?.displayWidth && mediaFile.displayWidth > 0
+        ? mediaFile.displayWidth
+        : (rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth);
 
-    // Heuristic: if the declared dimensions say portrait but the
-    // encoded element comes out landscape → the stream was recorded
-    // rotated 90° and the container carries a rotation matrix.
-    if (
-      declaredHeight > declaredWidth &&
-      encodedWidth > encodedHeight &&
-      encodedWidth > 0 &&
-      encodedHeight > 0
-    ) {
-      rotationDeg = 90;
-    } else if (
-      declaredWidth > declaredHeight &&
-      encodedHeight > encodedWidth &&
-      encodedWidth > 0 &&
-      encodedHeight > 0
-    ) {
-      rotationDeg = 270;
-    }
-
-    // displayWidth/displayHeight reflect the correct visual orientation
-    const displayWidth  = (rotationDeg === 90 || rotationDeg === 270) ? encodedHeight : encodedWidth;
-    const displayHeight = (rotationDeg === 90 || rotationDeg === 270) ? encodedWidth  : encodedHeight;
+    const resolvedDisplayH =
+      mediaFile?.displayHeight && mediaFile.displayHeight > 0
+        ? mediaFile.displayHeight
+        : (rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight);
 
     const meta: VideoFrameMeta = {
       encodedWidth,
       encodedHeight,
-      displayWidth: displayWidth  || declaredWidth,
-      displayHeight: displayHeight || declaredHeight,
+      displayWidth:  resolvedDisplayW  || encodedWidth,
+      displayHeight: resolvedDisplayH || encodedHeight,
       rotationDeg,
     };
 
-    console.log('[VideoFrameCache] Video meta', mediaId, meta);
+    // TEMP DEBUG
+    console.log('[ViralCut][frame-cache] resolved meta', {
+      mediaId,
+      encodedWidth,
+      encodedHeight,
+      displayWidth:  meta.displayWidth,
+      displayHeight: meta.displayHeight,
+      rotationDeg,
+    });
 
     this.cache.set(mediaId, {
       el,

@@ -12,8 +12,19 @@ export interface MediaFile {
   url: string;
   duration: number;
   thumbnail?: string;
+  // Visual (display) dimensions – use these for aspect ratio & rendering decisions
   width?: number;
   height?: number;
+  // Raw encoded dimensions straight from the video element
+  encodedWidth?: number;
+  encodedHeight?: number;
+  // Resolved visual dimensions after applying rotation (= displayWidth × displayHeight)
+  displayWidth?: number;
+  displayHeight?: number;
+  // Rotation stored in container metadata (cellphone footage)
+  rotationDeg?: 0 | 90 | 180 | 270;
+  // Visual orientation derived from displayWidth/displayHeight
+  orientation?: 'portrait' | 'landscape' | 'square';
 }
 
 export type TrackType = 'video' | 'audio' | 'text' | 'image';
