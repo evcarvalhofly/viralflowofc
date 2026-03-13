@@ -1,16 +1,29 @@
 // ============================================================
 // ViralCut Export2 – Per-frame renderer
 //
-// Called every requestAnimationFrame tick during export.
-// Draws: background → active video → image overlays → text
+// Called every frame tick during export.
+// Draws: holdCanvas (if no ready video) → video → image overlays → text
+//
+// Key fix: never clear to black unconditionally.
+// If videoEl is not ready, draw holdCanvas instead.
 // ============================================================
 import { Project, TrackItem } from '../types';
 import { PreparedExportAssets } from './prepareExportAssets';
 import { drawTextItemOnCanvas } from './textLayout';
 
-// Resolve which items are active at timeSec
-function getActiveItems(project: Project, timeSec: number) {
-  let videoItem: TrackItem | null = null;
+export interface RenderFrameParams {
+  ctx: CanvasRenderingContext2D;
+  timeSec: number;
+  width: number;
+  height: number;
+  project: Project;
+  assets: PreparedExportAssets;
+  /** Holds the last successfully rendered frame to avoid black on gaps */
+  holdCanvas?: HTMLCanvasElement | null;
+}
+
+// Resolve which items are active at timeSec (non-video layers)
+function getOverlayItems(project: Project, timeSec: number) {
   const imageItems: TrackItem[] = [];
   const textItems: TrackItem[] = [];
 
@@ -19,24 +32,29 @@ function getActiveItems(project: Project, timeSec: number) {
     for (const item of track.items) {
       if (timeSec < item.startTime) continue;
       if (timeSec >= item.endTime) continue;
-      if (track.type === 'video' && !videoItem) { videoItem = item; }
-      else if (track.type === 'image') { imageItems.push(item); }
-      else if (track.type === 'text') { textItems.push(item); }
+      if (track.type === 'image') imageItems.push(item);
+      else if (track.type === 'text') textItems.push(item);
     }
   }
 
-  return { videoItem, imageItems, textItems };
+  return { imageItems, textItems };
 }
 
-export interface RenderFrameParams {
-  ctx: CanvasRenderingContext2D;
-  timeSec: number;   // current project time in seconds
-  width: number;
-  height: number;
-  project: Project;
-  assets: PreparedExportAssets;
-  /** If provided and video is not ready, draw this instead of black */
-  holdCanvas?: HTMLCanvasElement | null;
+// Find the active video item and its element
+function getActiveVideoEl(
+  project: Project,
+  assets: PreparedExportAssets,
+  timeSec: number
+): { item: TrackItem; el: HTMLVideoElement } | null {
+  for (const track of project.tracks) {
+    if (track.type !== 'video' || track.muted) continue;
+    for (const item of track.items) {
+      if (timeSec < item.startTime || timeSec >= item.endTime) continue;
+      const el = assets.videos.get(item.mediaId);
+      if (el) return { item, el };
+    }
+  }
+  return null;
 }
 
 export function renderTimelineFrame({
@@ -48,55 +66,42 @@ export function renderTimelineFrame({
   assets,
   holdCanvas,
 }: RenderFrameParams) {
-  const { videoItem, imageItems, textItems } = getActiveItems(project, timeSec);
+  const activeVideo = getActiveVideoEl(project, assets, timeSec);
+  const videoReady = !!(activeVideo && activeVideo.el.readyState >= 2);
 
-  // ── Background ───────────────────────────────────────────
-  // Only clear to black when we actually have a video frame ready,
-  // otherwise hold the last good frame to avoid black flashes.
-  let videoReady = false;
-  let videoEl: HTMLVideoElement | undefined;
-
-  if (videoItem) {
-    videoEl = assets.videos.get(videoItem.mediaId);
-    videoReady = !!(videoEl && videoEl.readyState >= 2);
-  }
-
-  if (!videoItem || !videoReady) {
-    // No active video or not yet ready — draw hold frame or black
-    if (holdCanvas) {
-      ctx.drawImage(holdCanvas, 0, 0, width, height);
-    } else {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, width, height);
-    }
+  // ── Background ────────────────────────────────────────────
+  // Use black only when video is ready (it will cover it).
+  // When not ready, draw the held frame to avoid ANY black flash.
+  if (videoReady) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+  } else if (holdCanvas) {
+    ctx.drawImage(holdCanvas, 0, 0, width, height);
   } else {
-    // Clear to black first, then video will cover it
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, width, height);
   }
 
-  // ── Active video clip ────────────────────────────────────
-  if (videoItem && videoEl && videoReady) {
+  // ── Active video clip ─────────────────────────────────────
+  if (activeVideo && videoReady) {
+    const { item: videoItem, el: videoEl } = activeVideo;
     const vd = videoItem.videoDetails;
     ctx.save();
 
-    // Opacity
     ctx.globalAlpha = vd?.opacity ?? 1;
 
-    // Filters
     const filters: string[] = [];
     if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
     if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
     if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
     if (filters.length) (ctx as any).filter = filters.join(' ');
 
-    // Flip
     if (vd?.flipH || vd?.flipV) {
       ctx.translate(vd.flipH ? width : 0, vd.flipV ? height : 0);
       ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
     }
 
-    // Draw video — cover-fit
+    // Cover-fit
     const vw = videoEl.videoWidth || width;
     const vh = videoEl.videoHeight || height;
     const scale = Math.max(width / vw, height / vh);
@@ -110,6 +115,8 @@ export function renderTimelineFrame({
     ctx.restore();
     ctx.globalAlpha = 1;
   }
+
+  const { imageItems, textItems } = getOverlayItems(project, timeSec);
 
   // ── Image overlays ────────────────────────────────────────
   for (const imgItem of imageItems) {
