@@ -18,6 +18,7 @@ import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { exportProjectWithMediaBunny } from '@/viralcut/export3/exportProjectWithMediaBunny';
+import { probeVideoRotation } from '@/viralcut/utils/probeVideoRotation';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers,
@@ -70,79 +71,92 @@ interface MediaMetadata {
 }
 
 async function getMediaMetadata(file: File): Promise<MediaMetadata> {
-  return new Promise((resolve) => {
-    if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
-      resolve({ duration: 0 });
-      return;
-    }
-    const isVideo = file.type.startsWith('video/');
-    const objUrl = URL.createObjectURL(file);
-    const el = document.createElement(isVideo ? 'video' : 'audio') as HTMLVideoElement;
-    el.preload = 'metadata';
-    el.muted = true;
+  if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
+    return { duration: 0 };
+  }
 
-    const extract = (): MediaMetadata => {
-      const duration = sanitizeDuration(el.duration);
-      if (!isVideo) return { duration };
+  const isVideo = file.type.startsWith('video/');
 
-      const encodedWidth  = el.videoWidth  > 0 ? el.videoWidth  : undefined;
-      const encodedHeight = el.videoHeight > 0 ? el.videoHeight : undefined;
+  // ── Step 1: load element metadata (duration + raw encoded dims) ──
+  const objUrl = URL.createObjectURL(file);
+  const el = document.createElement(isVideo ? 'video' : 'audio') as HTMLVideoElement;
+  el.preload = 'metadata';
+  el.muted = true;
 
-      // Browser-decoded dimensions are always the raw encoded dimensions.
-      // The browser does NOT apply the container rotation matrix to videoWidth/videoHeight,
-      // so we cannot infer rotation from them reliably on all devices/browsers.
-      // We default rotationDeg=0 and use encoded dims as display dims.
-      // The heuristic in VideoFrameCache is now only a last-resort fallback.
-      const rotationDeg: 0 | 90 | 180 | 270 = 0;
-      const displayWidth  = encodedWidth;
-      const displayHeight = encodedHeight;
-
-      const orientation: MediaMetadata['orientation'] =
-        displayWidth && displayHeight
-          ? displayHeight > displayWidth ? 'portrait'
-            : displayWidth > displayHeight ? 'landscape'
-            : 'square'
-          : undefined;
-
-      // TEMP DEBUG
-      console.log('[ViralCut][import] media metadata', {
-        name: file.name,
-        encodedWidth,
-        encodedHeight,
-        displayWidth,
-        displayHeight,
-        rotationDeg,
-        orientation,
-      });
-
-      return {
-        duration,
-        width: displayWidth,
-        height: displayHeight,
-        encodedWidth,
-        encodedHeight,
-        displayWidth,
-        displayHeight,
-        rotationDeg,
-        orientation,
-      };
-    };
-
+  const loadedMeta = await new Promise<{ duration: number; encodedWidth?: number; encodedHeight?: number }>((resolve) => {
     const timeout = setTimeout(() => {
       URL.revokeObjectURL(objUrl);
-      resolve(extract());
+      resolve({ duration: 0 });
     }, 10000);
 
-    const done = (ok: boolean) => {
+    el.onloadedmetadata = () => {
       clearTimeout(timeout);
       URL.revokeObjectURL(objUrl);
-      resolve(ok ? extract() : { duration: 0 });
+      resolve({
+        duration: sanitizeDuration(el.duration),
+        encodedWidth: (el as HTMLVideoElement).videoWidth > 0 ? (el as HTMLVideoElement).videoWidth : undefined,
+        encodedHeight: (el as HTMLVideoElement).videoHeight > 0 ? (el as HTMLVideoElement).videoHeight : undefined,
+      });
     };
 
-    el.onloadedmetadata = () => done(true);
-    el.onerror = () => done(false);
+    el.onerror = () => {
+      clearTimeout(timeout);
+      URL.revokeObjectURL(objUrl);
+      resolve({ duration: 0 });
+    };
+
     el.src = objUrl;
   });
+
+  const { duration, encodedWidth, encodedHeight } = loadedMeta;
+
+  if (!isVideo) return { duration };
+
+  // ── Step 2: probe actual container rotation via FFmpeg ────────────
+  let rotationDeg: 0 | 90 | 180 | 270 = 0;
+  try {
+    rotationDeg = await probeVideoRotation(file);
+  } catch (err) {
+    console.warn('[ViralCut][import] probeVideoRotation failed, using 0', err);
+  }
+
+  // ── Step 3: resolve visual display dimensions ─────────────────────
+  // If the container rotation is 90 or 270, the encoded w/h are swapped
+  // relative to what the viewer actually sees.
+  const displayWidth: number | undefined =
+    rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth;
+  const displayHeight: number | undefined =
+    rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight;
+
+  const orientation: MediaMetadata['orientation'] =
+    displayWidth && displayHeight
+      ? displayHeight > displayWidth ? 'portrait'
+        : displayWidth > displayHeight ? 'landscape'
+        : 'square'
+      : undefined;
+
+  // TEMP DEBUG
+  console.log('[ViralCut][import] media metadata resolved', {
+    name: file.name,
+    encodedWidth,
+    encodedHeight,
+    rotationDeg,
+    displayWidth,
+    displayHeight,
+    orientation,
+  });
+
+  return {
+    duration,
+    width: displayWidth,
+    height: displayHeight,
+    encodedWidth,
+    encodedHeight,
+    displayWidth,
+    displayHeight,
+    rotationDeg,
+    orientation,
+  };
 }
 
 function calcDuration(tracks: Track[]): number {
