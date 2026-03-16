@@ -18,6 +18,7 @@ import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { exportProjectWithMediaBunny } from '@/viralcut/export3/exportProjectWithMediaBunny';
+import { probeVideoRotation } from '@/viralcut/utils/probeVideoRotation';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers,
