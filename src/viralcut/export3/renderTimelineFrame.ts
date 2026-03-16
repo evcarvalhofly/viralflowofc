@@ -1,9 +1,12 @@
 // ============================================================
-// ViralCut Export3 – Per-frame deterministic renderer (v2)
+// ViralCut Export3 – Per-frame deterministic renderer (v3)
 //
 // Renders one frame at a given time into a CanvasRenderingContext2D.
 // Receives pre-decoded ImageBitmaps from VideoFrameCache plus
 // rotation metadata so vertical phone footage renders correctly.
+//
+// v3: getEffectiveRotation() detects when the bitmap is "transposed"
+// (e.g. 2160x3840 encoded as 3840x2160) and auto-applies 90° rotation.
 // ============================================================
 
 import { Project, TrackItem } from '../types';
@@ -72,6 +75,40 @@ function drawCoverFit(
   ctx.drawImage(frame, dx, dy, dw, dh);
 }
 
+/**
+ * Detects when the raw bitmap dimensions are "transposed" relative to
+ * the declared display aspect ratio (e.g. a 2160x3840 video delivered by
+ * the browser as a 3840x2160 ImageBitmap). In that case we apply a 90°
+ * rotation so the frame is drawn upright.
+ */
+function getEffectiveRotation(
+  frame: ImageBitmap,
+  meta?: VideoFrameMeta
+): 0 | 90 | 180 | 270 {
+  const declaredRotation = meta?.rotationDeg ?? 0;
+  if (declaredRotation !== 0) return declaredRotation;
+
+  const displayW = meta?.displayWidth ?? frame.width;
+  const displayH = meta?.displayHeight ?? frame.height;
+
+  if (!displayW || !displayH || !frame.width || !frame.height) return 0;
+
+  const frameAspect   = frame.width  / frame.height;
+  const displayAspect = displayW / displayH;
+  const swappedAspect = displayH / displayW;
+
+  const directDiff  = Math.abs(frameAspect - displayAspect);
+  const swappedDiff = Math.abs(frameAspect - swappedAspect);
+
+  // If the bitmap fits much better when the display aspect is transposed,
+  // the frame came in sideways – apply a quarter-turn correction.
+  if (swappedDiff + 0.02 < directDiff) {
+    return 90;
+  }
+
+  return 0;
+}
+
 export function renderTimelineFrame({
   ctx,
   timeSec,
@@ -84,8 +121,6 @@ export function renderTimelineFrame({
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, width, height);
 
-  console.log('[renderTimelineFrame] Frame time', timeSec.toFixed(4));
-
   // ── Active video frame ─────────────────────────────────────
   const videoItem = getActiveVideoItem(project, timeSec);
   if (videoItem) {
@@ -94,23 +129,26 @@ export function renderTimelineFrame({
       const vd = videoItem.videoDetails;
       const meta = assets.videoMeta.get(videoItem.mediaId);
 
-      // PRIORITY: use meta.displayWidth/displayHeight as the visual size of the source
+      // Visual display dimensions (describe the intended visual size)
       const displayW = (meta?.displayWidth  ?? 0) > 0 ? meta!.displayWidth  : (frame.width  || width);
       const displayH = (meta?.displayHeight ?? 0) > 0 ? meta!.displayHeight : (frame.height || height);
-      const rotationDeg = meta?.rotationDeg ?? 0;
 
-      // Encoded dimensions (raw frame size from the video element)
-      const encW = (meta?.encodedWidth  ?? 0) > 0 ? meta!.encodedWidth  : frame.width;
-      const encH = (meta?.encodedHeight ?? 0) > 0 ? meta!.encodedHeight : frame.height;
+      // Effective rotation – auto-detects transposed bitmaps (e.g. 2160x3840 phones)
+      const rotationDeg = getEffectiveRotation(frame, meta);
+
+      // Raw source dimensions of the bitmap (used for rotated draw paths)
+      const srcW = frame.width;
+      const srcH = frame.height;
 
       // TEMP DEBUG
       console.log('[ViralCut][render] draw video', {
         mediaId: videoItem.mediaId,
-        displayW,
-        displayH,
-        rotationDeg,
         frameWidth: frame.width,
         frameHeight: frame.height,
+        displayW,
+        displayH,
+        declaredRotation: meta?.rotationDeg ?? 0,
+        effectiveRotation: rotationDeg,
       });
 
       ctx.save();
@@ -136,20 +174,19 @@ export function renderTimelineFrame({
 
       } else if (rotationDeg === 90 || rotationDeg === 270) {
         // ── 90° / 270° rotation ──────────────────────────────
-        // The encoded frame is landscape but represents portrait content.
-        // We rotate the canvas so the frame fills it without distortion.
+        // The raw bitmap is landscape but represents portrait content.
+        // Rotate the canvas and cover-fit using raw frame dims (srcW/srcH).
         ctx.translate(width / 2, height / 2);
         const rad = rotationDeg === 90 ? Math.PI / 2 : -Math.PI / 2;
         ctx.rotate(rad);
         ctx.scale(flipScaleX, flipScaleY);
 
-        // After rotating 90°: what was canvas-width is now canvas-height and vice-versa.
-        // We cover-fit using the encoded (pre-rotation) dims against the rotated canvas.
+        // After 90° rotation: effective canvas becomes (height × width).
         const rotatedCanvasW = height;
         const rotatedCanvasH = width;
-        const scale = Math.max(rotatedCanvasW / encW, rotatedCanvasH / encH);
-        const dw = encW * scale;
-        const dh = encH * scale;
+        const scale = Math.max(rotatedCanvasW / srcW, rotatedCanvasH / srcH);
+        const dw = srcW * scale;
+        const dh = srcH * scale;
         ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
 
       } else if (rotationDeg === 180) {
@@ -157,7 +194,6 @@ export function renderTimelineFrame({
         ctx.translate(width / 2, height / 2);
         ctx.rotate(Math.PI);
         ctx.scale(flipScaleX, flipScaleY);
-        // drawCoverFit offsets from (0,0) so translate back before drawing
         ctx.translate(-width / 2, -height / 2);
         drawCoverFit(ctx, frame, width, height, displayW, displayH);
       }
