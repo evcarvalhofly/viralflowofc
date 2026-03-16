@@ -340,6 +340,7 @@ const ViralCut = () => {
   const handleImport = useCallback(async (files: FileList) => {
     for (const file of Array.from(files)) {
       const url = URL.createObjectURL(file);
+      // Fast metadata — no FFmpeg, never blocks the UI
       const meta = await getMediaMetadata(file);
       const { duration, width, height, encodedWidth, encodedHeight, displayWidth, displayHeight, rotationDeg, orientation } = meta;
       const thumbnail = await generateThumbnail(file);
@@ -351,8 +352,15 @@ const ViralCut = () => {
         displayWidth, displayHeight,
         rotationDeg, orientation,
       };
+
+      // ── Add to state immediately so the editor opens right away ──
       setMedia((prev) => [...prev, mf]);
       setSelectedMediaId(mf.id);
+
+      // ── Capture project orientation state BEFORE updating ────────
+      let capturedIsFirstVideo = false;
+      let capturedAspectRatio: Project['aspectRatio'] = '16:9';
+
       updateProject((p) => {
         const targetType: Track['type'] = type === 'audio' ? 'audio' : type === 'image' ? 'image' : 'video';
         let track = p.tracks.find((t) => t.type === targetType);
@@ -366,22 +374,14 @@ const ViralCut = () => {
           p.height === 1080 &&
           (p.tracks.find((t) => t.type === 'video')?.items.length ?? 0) === 0;
 
+        capturedIsFirstVideo = isFirstVideo;
+        capturedAspectRatio = p.aspectRatio;
+
         let orientationPatch: Partial<Project> = {};
-        // Use displayWidth/displayHeight (resolved) for aspect ratio decision
         const orientW = displayWidth ?? width;
         const orientH = displayHeight ?? height;
         if (isFirstVideo && orientW && orientH) {
           const resolved = resolveAspectRatioFromMedia(orientW, orientH);
-          console.log('[ViralCut] Auto project orientation from first video', {
-            mediaWidth: orientW,
-            mediaHeight: orientH,
-            oldAspectRatio: p.aspectRatio,
-            oldWidth: p.width,
-            oldHeight: p.height,
-            newAspectRatio: resolved.aspectRatio,
-            newWidth: resolved.projectWidth,
-            newHeight: resolved.projectHeight,
-          });
           orientationPatch = {
             aspectRatio: resolved.aspectRatio,
             width: resolved.projectWidth,
@@ -410,6 +410,15 @@ const ViralCut = () => {
         const newTracks = tracks.map((t) => t.id === track!.id ? { ...t, items: [...t.items, item] } : t);
         return { ...p, ...orientationPatch, tracks: newTracks };
       }, { pushHistory: true });
+
+      // ── Background probe: refine rotation metadata without blocking ──
+      if (type === 'video') {
+        probeAndPatchRotation(
+          file, mf.id, encodedWidth, encodedHeight,
+          setMedia, updateProject, resolveAspectRatioFromMedia,
+          capturedIsFirstVideo, capturedAspectRatio,
+        );
+      }
     }
   }, [updateProject, resolveAspectRatioFromMedia]);
 
