@@ -70,14 +70,13 @@ interface MediaMetadata {
   orientation?: 'portrait' | 'landscape' | 'square';
 }
 
+// ── Fast metadata (no FFmpeg) — used for instant import ──────────────
 async function getMediaMetadata(file: File): Promise<MediaMetadata> {
   if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
     return { duration: 0 };
   }
 
   const isVideo = file.type.startsWith('video/');
-
-  // ── Step 1: load element metadata (duration + raw encoded dims) ──
   const objUrl = URL.createObjectURL(file);
   const el = document.createElement(isVideo ? 'video' : 'audio') as HTMLVideoElement;
   el.preload = 'metadata';
@@ -112,21 +111,10 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
 
   if (!isVideo) return { duration };
 
-  // ── Step 2: probe actual container rotation via FFmpeg ────────────
-  let rotationDeg: 0 | 90 | 180 | 270 = 0;
-  try {
-    rotationDeg = await probeVideoRotation(file);
-  } catch (err) {
-    console.warn('[ViralCut][import] probeVideoRotation failed, using 0', err);
-  }
-
-  // ── Step 3: resolve visual display dimensions ─────────────────────
-  // If the container rotation is 90 or 270, the encoded w/h are swapped
-  // relative to what the viewer actually sees.
-  const displayWidth: number | undefined =
-    rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth;
-  const displayHeight: number | undefined =
-    rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight;
+  // Safe fallback — rotationDeg resolved later in background via probeVideoRotation
+  const displayWidth = encodedWidth;
+  const displayHeight = encodedHeight;
+  const rotationDeg: 0 | 90 | 180 | 270 = 0;
 
   const orientation: MediaMetadata['orientation'] =
     displayWidth && displayHeight
@@ -134,17 +122,6 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
         : displayWidth > displayHeight ? 'landscape'
         : 'square'
       : undefined;
-
-  // TEMP DEBUG
-  console.log('[ViralCut][import] media metadata resolved', {
-    name: file.name,
-    encodedWidth,
-    encodedHeight,
-    rotationDeg,
-    displayWidth,
-    displayHeight,
-    orientation,
-  });
 
   return {
     duration,
@@ -157,6 +134,63 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
     rotationDeg,
     orientation,
   };
+}
+
+// ── Background probe: refines rotationDeg after import ───────────────
+// Called AFTER the MediaFile is already added to state so the UI is responsive.
+async function probeAndPatchRotation(
+  file: File,
+  mediaId: string,
+  encodedWidth: number | undefined,
+  encodedHeight: number | undefined,
+  setMedia: React.Dispatch<React.SetStateAction<MediaFile[]>>,
+  updateProject: (updater: (p: Project) => Project) => void,
+  resolveAspectRatioFromMedia: (w?: number, h?: number) => { aspectRatio: Project['aspectRatio']; projectWidth: number; projectHeight: number },
+  isFirstVideo: boolean,
+  currentAspectRatio: Project['aspectRatio'],
+) {
+  let rotationDeg: 0 | 90 | 180 | 270 = 0;
+  try {
+    rotationDeg = await probeVideoRotation(file);
+  } catch (err) {
+    console.warn('[ViralCut][probe] probeVideoRotation failed, keeping 0', err);
+    return;
+  }
+
+  if (rotationDeg === 0) return; // nothing changed
+
+  const displayWidth = rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth;
+  const displayHeight = rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight;
+  const orientation: MediaFile['orientation'] =
+    displayWidth && displayHeight
+      ? displayHeight > displayWidth ? 'portrait'
+        : displayWidth > displayHeight ? 'landscape'
+        : 'square'
+      : undefined;
+
+  console.log('[ViralCut][probe] rotation resolved', { mediaId, rotationDeg, displayWidth, displayHeight, orientation });
+
+  // Patch MediaFile
+  setMedia((prev) =>
+    prev.map((m) =>
+      m.id === mediaId
+        ? { ...m, rotationDeg, displayWidth, displayHeight, width: displayWidth, height: displayHeight, orientation }
+        : m
+    )
+  );
+
+  // Patch project orientation if this was the first video and it wasn't yet correct
+  if (isFirstVideo && displayWidth && displayHeight) {
+    const resolved = resolveAspectRatioFromMedia(displayWidth, displayHeight);
+    if (resolved.aspectRatio !== currentAspectRatio) {
+      updateProject((p) => ({
+        ...p,
+        aspectRatio: resolved.aspectRatio,
+        width: resolved.projectWidth,
+        height: resolved.projectHeight,
+      }));
+    }
+  }
 }
 
 function calcDuration(tracks: Track[]): number {
