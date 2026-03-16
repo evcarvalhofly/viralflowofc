@@ -1,21 +1,19 @@
 // ============================================================
-// ViralCut Export3 – Video Frame Cache (v2)
+// ViralCut Export3 – Video Frame Cache (v3)
 //
 // Decodes video frames deterministically for export.
 // Uses a hidden HTMLVideoElement per mediaId, seeking to the
 // exact frame time needed, then captures via createImageBitmap.
 //
-// Improvements over v1:
-//  - Stores rotation metadata per video (for cellphone footage)
-//  - Sequential frame reuse: skips seek + createImageBitmap when
-//    the requested time is within SEEK_THRESHOLD_SEC of the last
-//    decoded frame, returning the cached bitmap instead
-//  - Only creates new ImageBitmap when the frame actually changes
+// v3 changes:
+//  - SEEK_EPSILON_SEC = 0.001 (was 0.04) → frame-accurate at 30/60fps
+//  - Prioritizes mediaFile.displayWidth/Height and rotationDeg
 // ============================================================
 
 import { MediaFile } from '../types';
 
-const SEEK_THRESHOLD_SEC = 0.04; // Reduced from 0.1 → avoids duplicate frames
+// Only reuse when time is virtually identical (avoids duplicate frames at 30/60fps)
+const SEEK_EPSILON_SEC = 0.001;
 const SEEK_TIMEOUT_MS = 3000;
 
 export interface VideoFrameMeta {
@@ -118,17 +116,17 @@ export class VideoFrameCache {
     const entry = this.cache.get(mediaId);
     if (!entry) return null;
 
-    const { el, meta } = entry;
+    const { el } = entry;
     const targetTime = Math.max(
       0,
       Math.min(timeInMedia, Math.max(0, (el.duration || 9999) - 0.001))
     );
 
-    // ── Sequential reuse: skip seek + decode if time is close ──
+    // ── Reuse only when time is virtually identical (frame-accurate) ──
     if (
       entry.lastBitmap !== null &&
       entry.lastDecodedTime >= 0 &&
-      Math.abs(entry.lastDecodedTime - targetTime) < SEEK_THRESHOLD_SEC
+      Math.abs(entry.lastDecodedTime - targetTime) <= SEEK_EPSILON_SEC
     ) {
       return entry.lastBitmap;
     }
@@ -136,7 +134,7 @@ export class VideoFrameCache {
     // ── Seek only if needed ─────────────────────────────────────
     const needsSeek =
       entry.lastDecodedTime < 0 ||
-      Math.abs(el.currentTime - targetTime) > SEEK_THRESHOLD_SEC ||
+      Math.abs(el.currentTime - targetTime) > SEEK_EPSILON_SEC ||
       el.readyState < 2;
 
     if (needsSeek) {
@@ -169,7 +167,7 @@ export class VideoFrameCache {
   private _seekTo(el: HTMLVideoElement, time: number): Promise<void> {
     return new Promise<void>((resolve) => {
       // Already there
-      if (Math.abs(el.currentTime - time) < 0.01 && el.readyState >= 2) {
+      if (Math.abs(el.currentTime - time) <= SEEK_EPSILON_SEC && el.readyState >= 2) {
         resolve();
         return;
       }
