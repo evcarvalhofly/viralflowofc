@@ -75,21 +75,6 @@ function drawContainFitCentered(
   ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
 }
 
-// Helper: contain-fit draw centered at origin (for rotated canvas contexts)
-function drawContainFitCentered(
-  ctx: CanvasRenderingContext2D,
-  frame: CanvasImageSource,
-  boxW: number,
-  boxH: number,
-  srcW: number,
-  srcH: number
-) {
-  if (!srcW || !srcH || !boxW || !boxH) return;
-  const scale = Math.min(boxW / srcW, boxH / srcH);
-  const dw = srcW * scale;
-  const dh = srcH * scale;
-  ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
-}
 
 /**
  * Detects when the raw bitmap dimensions are "transposed" relative to
