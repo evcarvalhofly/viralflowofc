@@ -94,35 +94,43 @@ function drawContainFitCentered(
 
 /**
  * Detects when the raw bitmap dimensions are "transposed" relative to
- * the declared display aspect ratio (e.g. a 2160x3840 video delivered by
- * the browser as a 3840x2160 ImageBitmap). In that case we apply a 90°
- * rotation so the frame is drawn upright.
+ * the declared display aspect ratio.
+ *
+ * IMPORTANT: Many browsers (Chrome/Android) already auto-correct rotation
+ * when decoding via createImageBitmap, so the bitmap comes out portrait
+ * (e.g. 2160x3840) even when the container says rotate=90.
+ *
+ * Rule: only apply rotation if the BITMAP is landscape (width > height)
+ * but the DISPLAY is portrait (displayH > displayW). This means the browser
+ * did NOT auto-correct, so we must do it ourselves.
+ * Never rotate when the bitmap is already the correct orientation.
  */
 function getEffectiveRotation(
   frame: ImageBitmap,
   meta?: VideoFrameMeta
 ): 0 | 90 | 180 | 270 {
+  // If we have a declared rotation AND the raw bitmap is still in encoded
+  // (transposed) orientation, honour the declared rotation.
   const declaredRotation = meta?.rotationDeg ?? 0;
-  if (declaredRotation !== 0) return declaredRotation;
 
+  const bitmapIsLandscape = frame.width > frame.height;
   const displayW = meta?.displayWidth ?? frame.width;
   const displayH = meta?.displayHeight ?? frame.height;
+  const displayIsPortrait = displayH > displayW;
 
-  if (!displayW || !displayH || !frame.width || !frame.height) return 0;
-
-  const frameAspect   = frame.width  / frame.height;
-  const displayAspect = displayW / displayH;
-  const swappedAspect = displayH / displayW;
-
-  const directDiff  = Math.abs(frameAspect - displayAspect);
-  const swappedDiff = Math.abs(frameAspect - swappedAspect);
-
-  // If the bitmap fits much better when the display aspect is transposed,
-  // the frame came in sideways – apply a quarter-turn correction.
-  if (swappedDiff + 0.02 < directDiff) {
-    return 90;
+  // Only apply rotation when bitmap orientation contradicts expected display orientation.
+  // If the bitmap is already portrait (browser auto-corrected) → rotation = 0.
+  if (bitmapIsLandscape && displayIsPortrait) {
+    // Bitmap is landscape but should display as portrait → needs correction
+    return declaredRotation !== 0 ? declaredRotation : 90;
   }
 
+  if (!bitmapIsLandscape && !displayIsPortrait && displayW > displayH && frame.height > frame.width) {
+    // Bitmap is portrait but should display as landscape → needs correction
+    return declaredRotation !== 0 ? declaredRotation : 270;
+  }
+
+  // Bitmap orientation already matches display orientation → no rotation needed
   return 0;
 }
 
