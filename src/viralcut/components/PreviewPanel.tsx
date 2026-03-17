@@ -373,15 +373,24 @@ export function PreviewPanel({
     if (v && v.readyState >= 2 && activeVideoItem?.mediaFile && v.videoWidth > 0) {
       // Valid frame available — draw it
       const vd = activeVideoItem.item.videoDetails;
+      const mf = activeVideoItem.mediaFile;
+      const vW = mf?.displayWidth || v.videoWidth;
+      const vH = mf?.displayHeight || v.videoHeight;
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.save();
       ctx.globalAlpha = vd?.opacity ?? 1;
+      // Contain-fit: center video without stretching
+      const scale = Math.min(canvas.width / vW, canvas.height / vH);
+      const dw = vW * scale;
+      const dh = vH * scale;
+      const dx = (canvas.width - dw) / 2;
+      const dy = (canvas.height - dh) / 2;
       if (vd?.flipH || vd?.flipV) {
         ctx.translate(vd.flipH ? canvas.width : 0, vd.flipV ? canvas.height : 0);
         ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
       }
-      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(v, dx, dy, dw, dh);
       ctx.restore();
       lastValidFrameRef.current = true;
     } else if (!activeVideoItem) {
