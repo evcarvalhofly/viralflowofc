@@ -331,8 +331,9 @@ const ViralCut = () => {
   } => {
     if (!w || !h) return { aspectRatio: '16:9', projectWidth: 1920, projectHeight: 1080 };
     const ratio = w / h;
-    if (h > w) return { aspectRatio: '9:16', projectWidth: 1080, projectHeight: 1920 };
-    if (Math.abs(ratio - 1) < 0.08) return { aspectRatio: '1:1', projectWidth: 1080, projectHeight: 1080 };
+    if (ratio < 0.6) return { aspectRatio: '9:16', projectWidth: 1080, projectHeight: 1920 };
+    if (Math.abs(ratio - 1) < 0.1) return { aspectRatio: '1:1', projectWidth: 1080, projectHeight: 1080 };
+    if (ratio >= 0.6 && ratio < 0.9) return { aspectRatio: '4:5', projectWidth: 1080, projectHeight: 1350 };
     return { aspectRatio: '16:9', projectWidth: 1920, projectHeight: 1080 };
   }, []);
 

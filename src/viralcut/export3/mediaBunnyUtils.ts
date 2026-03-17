@@ -43,15 +43,19 @@ export function getExportDimensions(
 ): { width: number; height: number } {
   const is1080 = resolution === '1080p';
 
-  if (project.aspectRatio === '9:16') {
-    return is1080 ? { width: 1080, height: 1920 } : { width: 720, height: 1280 };
+  if (project.width && project.height) {
+    const ratio = project.width / project.height;
+    if (project.aspectRatio === '9:16' || ratio < 0.6) {
+      return is1080 ? { width: 1080, height: 1920 } : { width: 720, height: 1280 };
+    }
+    if (project.aspectRatio === '4:5' || (ratio >= 0.6 && ratio < 0.9)) {
+      return is1080 ? { width: 1080, height: 1350 } : { width: 720, height: 900 };
+    }
+    if (project.aspectRatio === '1:1' || (ratio >= 0.9 && ratio < 1.1)) {
+      return is1080 ? { width: 1080, height: 1080 } : { width: 720, height: 720 };
+    }
   }
-  if (project.aspectRatio === '4:5') {
-    return is1080 ? { width: 1080, height: 1350 } : { width: 720, height: 900 };
-  }
-  if (project.aspectRatio === '1:1') {
-    return is1080 ? { width: 1080, height: 1080 } : { width: 720, height: 720 };
-  }
+
   // Default 16:9 Landscape
   return is1080 ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
 }
