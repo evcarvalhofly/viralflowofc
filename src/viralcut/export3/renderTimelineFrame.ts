@@ -58,21 +58,38 @@ function getOverlayItems(project: Project, timeSec: number) {
   return { imageItems, textItems };
 }
 
-// Helper: cover-fit draw (fills canvas, may crop)
-function drawCoverFit(
+// Helper: contain-fit draw (shows full frame, may have black bars)
+function drawContainFit(
   ctx: CanvasRenderingContext2D,
-  frame: ImageBitmap,
+  frame: CanvasImageSource,
   canvasW: number,
   canvasH: number,
-  displayW: number,
-  displayH: number
+  srcW: number,
+  srcH: number
 ) {
-  const scale = Math.max(canvasW / displayW, canvasH / displayH);
-  const dw = displayW * scale;
-  const dh = displayH * scale;
+  if (!srcW || !srcH || !canvasW || !canvasH) return;
+  const scale = Math.min(canvasW / srcW, canvasH / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
   const dx = (canvasW - dw) / 2;
   const dy = (canvasH - dh) / 2;
   ctx.drawImage(frame, dx, dy, dw, dh);
+}
+
+// Helper: contain-fit draw centered at origin (for rotated canvas contexts)
+function drawContainFitCentered(
+  ctx: CanvasRenderingContext2D,
+  frame: CanvasImageSource,
+  boxW: number,
+  boxH: number,
+  srcW: number,
+  srcH: number
+) {
+  if (!srcW || !srcH || !boxW || !boxH) return;
+  const scale = Math.min(boxW / srcW, boxH / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
+  ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
 }
 
 /**
@@ -129,24 +146,19 @@ export function renderTimelineFrame({
       const vd = videoItem.videoDetails;
       const meta = assets.videoMeta.get(videoItem.mediaId);
 
-      // Visual display dimensions (describe the intended visual size)
-      const displayW = (meta?.displayWidth  ?? 0) > 0 ? meta!.displayWidth  : (frame.width  || width);
-      const displayH = (meta?.displayHeight ?? 0) > 0 ? meta!.displayHeight : (frame.height || height);
-
       // Effective rotation – auto-detects transposed bitmaps (e.g. 2160x3840 phones)
       const rotationDeg = getEffectiveRotation(frame, meta);
 
-      // Raw source dimensions of the bitmap (used for rotated draw paths)
-      const srcW = frame.width;
-      const srcH = frame.height;
+      // Raw bitmap dimensions
+      const rawW = frame.width;
+      const rawH = frame.height;
 
-      // TEMP DEBUG
-      console.log('[ViralCut][render] draw video', {
+      console.log('[ViralCut][render-final]', {
         mediaId: videoItem.mediaId,
-        frameWidth: frame.width,
-        frameHeight: frame.height,
-        displayW,
-        displayH,
+        rawW,
+        rawH,
+        projectW: width,
+        projectH: height,
         declaredRotation: meta?.rotationDeg ?? 0,
         effectiveRotation: rotationDeg,
       });
@@ -165,37 +177,25 @@ export function renderTimelineFrame({
       const flipScaleY = vd?.flipV ? -1 : 1;
 
       if (rotationDeg === 0) {
-        // ── No rotation – standard cover-fit using display dimensions ──
-        if (vd?.flipH || vd?.flipV) {
-          ctx.translate(vd.flipH ? width : 0, vd.flipV ? height : 0);
-          ctx.scale(flipScaleX, flipScaleY);
-        }
-        drawCoverFit(ctx, frame, width, height, displayW, displayH);
+        // ── No rotation – contain-fit ──────────────────────────
+        ctx.translate(vd?.flipH ? width : 0, vd?.flipV ? height : 0);
+        ctx.scale(flipScaleX, flipScaleY);
+        drawContainFit(ctx, frame, width, height, rawW, rawH);
 
       } else if (rotationDeg === 90 || rotationDeg === 270) {
-        // ── 90° / 270° rotation ──────────────────────────────
-        // The raw bitmap is landscape but represents portrait content.
-        // Rotate the canvas and cover-fit using raw frame dims (srcW/srcH).
+        // ── 90° / 270° rotation – rotate canvas then contain-fit ──
         ctx.translate(width / 2, height / 2);
-        const rad = rotationDeg === 90 ? Math.PI / 2 : -Math.PI / 2;
-        ctx.rotate(rad);
+        ctx.rotate(rotationDeg === 90 ? Math.PI / 2 : -Math.PI / 2);
         ctx.scale(flipScaleX, flipScaleY);
-
-        // After 90° rotation: effective canvas becomes (height × width).
-        const rotatedCanvasW = height;
-        const rotatedCanvasH = width;
-        const scale = Math.max(rotatedCanvasW / srcW, rotatedCanvasH / srcH);
-        const dw = srcW * scale;
-        const dh = srcH * scale;
-        ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
+        // After rotation, visible box is height×width
+        drawContainFitCentered(ctx, frame, height, width, rawW, rawH);
 
       } else if (rotationDeg === 180) {
-        // ── 180° rotation ────────────────────────────────────
+        // ── 180° rotation – contain-fit ───────────────────────
         ctx.translate(width / 2, height / 2);
         ctx.rotate(Math.PI);
         ctx.scale(flipScaleX, flipScaleY);
-        ctx.translate(-width / 2, -height / 2);
-        drawCoverFit(ctx, frame, width, height, displayW, displayH);
+        drawContainFitCentered(ctx, frame, width, height, rawW, rawH);
       }
 
       (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
