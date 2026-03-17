@@ -35,9 +35,12 @@ export function ExportModal({ open, onClose, onExport, exportState, project }: E
   const done = exportState.status === 'done';
   const hasError = exportState.status === 'error';
 
+  const dim1080 = getExportDimensions(project, '1080p');
+  const dim720 = getExportDimensions(project, '720p');
+
   const resOptions: { label: string; value: Res; sub: string }[] = [
-    { label: '1080p', value: '1080p', sub: '1920 × 1080' },
-    { label: '720p', value: '720p', sub: '1280 × 720' },
+    { label: '1080p', value: '1080p', sub: `${dim1080.width} × ${dim1080.height}` },
+    { label: '720p', value: '720p', sub: `${dim720.width} × ${dim720.height}` },
   ];
 
   const fpsOptions: { label: string; value: Fps; sub: string }[] = [
