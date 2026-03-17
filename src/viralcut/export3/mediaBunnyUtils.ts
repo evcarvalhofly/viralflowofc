@@ -43,32 +43,21 @@ export function getExportDimensions(
 ): { width: number; height: number } {
   const is1080 = resolution === '1080p';
 
-  // Prioritise explicit aspectRatio string first
-  if (project.aspectRatio === '9:16') {
+  // Force portrait if project height > width (handles any portrait format)
+  const isPortrait =
+    project.aspectRatio === '9:16' ||
+    (project.height != null && project.width != null && project.height > project.width);
+
+  if (isPortrait) {
     return is1080 ? { width: 1080, height: 1920 } : { width: 720, height: 1280 };
   }
+
   if (project.aspectRatio === '4:5') {
     return is1080 ? { width: 1080, height: 1350 } : { width: 720, height: 900 };
   }
+
   if (project.aspectRatio === '1:1') {
     return is1080 ? { width: 1080, height: 1080 } : { width: 720, height: 720 };
-  }
-  if (project.aspectRatio === '16:9') {
-    return is1080 ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
-  }
-
-  // Fallback: derive orientation from project pixel dimensions
-  if (project.width && project.height) {
-    const ratio = project.width / project.height;
-    if (ratio < 0.8) {
-      return is1080 ? { width: 1080, height: 1920 } : { width: 720, height: 1280 };
-    }
-    if (Math.abs(ratio - 1) < 0.15) {
-      return is1080 ? { width: 1080, height: 1080 } : { width: 720, height: 720 };
-    }
-    if (ratio >= 0.8 && ratio < 0.9) {
-      return is1080 ? { width: 1080, height: 1350 } : { width: 720, height: 900 };
-    }
   }
 
   // Default 16:9 Landscape
