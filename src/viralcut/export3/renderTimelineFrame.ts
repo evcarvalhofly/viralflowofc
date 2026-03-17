@@ -77,44 +77,78 @@ function drawContainFitCentered(
 
 
 /**
- * Detects when the raw bitmap dimensions are "transposed" relative to
- * the declared display aspect ratio.
+ * Detects the effective rotation needed to display the video correctly.
  *
- * IMPORTANT: Many browsers (Chrome/Android) already auto-correct rotation
- * when decoding via createImageBitmap, so the bitmap comes out portrait
- * (e.g. 2160x3840) even when the container says rotate=90.
+ * Strategy (in priority order):
  *
- * Rule: only apply rotation if the BITMAP is landscape (width > height)
- * but the DISPLAY is portrait (displayH > displayW). This means the browser
- * did NOT auto-correct, so we must do it ourselves.
- * Never rotate when the bitmap is already the correct orientation.
+ * 1. If the bitmap is landscape but the canvas/project is portrait AND
+ *    there is a declared rotation of 90/270 → trust declared rotation.
+ *
+ * 2. If the bitmap is landscape but the canvas/project is portrait and
+ *    NO display metadata is available → the browser did NOT auto-correct;
+ *    apply 90° (most common phone rotation).
+ *
+ * 3. If displayWidth/displayHeight ARE set and contradict the bitmap
+ *    orientation → apply declared rotation or infer 90/270.
+ *
+ * 4. If bitmap orientation already matches what we expect → 0 (no rotation).
+ *
+ * Key insight: when meta.displayWidth/Height are missing, fall back to
+ * checking declaredRotation directly instead of treating the bitmap as
+ * already-correct — avoids showing a landscape frame in a portrait canvas.
  */
 function getEffectiveRotation(
   frame: ImageBitmap,
-  meta?: VideoFrameMeta
+  meta?: VideoFrameMeta,
+  canvasW?: number,
+  canvasH?: number
 ): 0 | 90 | 180 | 270 {
-  // If we have a declared rotation AND the raw bitmap is still in encoded
-  // (transposed) orientation, honour the declared rotation.
-  const declaredRotation = meta?.rotationDeg ?? 0;
-
+  const declaredRotation = (meta?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
   const bitmapIsLandscape = frame.width > frame.height;
-  const displayW = meta?.displayWidth ?? frame.width;
-  const displayH = meta?.displayHeight ?? frame.height;
-  const displayIsPortrait = displayH > displayW;
+  const bitmapIsPortrait  = frame.height > frame.width;
 
-  // Only apply rotation when bitmap orientation contradicts expected display orientation.
-  // If the bitmap is already portrait (browser auto-corrected) → rotation = 0.
-  if (bitmapIsLandscape && displayIsPortrait) {
-    // Bitmap is landscape but should display as portrait → needs correction
-    return declaredRotation !== 0 ? declaredRotation : 90;
+  // ── Case A: displayWidth/Height are explicitly known ───────────────────
+  const hasDisplayMeta = meta?.displayWidth != null && meta?.displayHeight != null;
+  if (hasDisplayMeta) {
+    const displayW = meta!.displayWidth!;
+    const displayH = meta!.displayHeight!;
+    const displayIsPortrait  = displayH > displayW;
+    const displayIsLandscape = displayW > displayH;
+
+    if (bitmapIsLandscape && displayIsPortrait) {
+      return declaredRotation !== 0 ? declaredRotation : 90;
+    }
+    if (bitmapIsPortrait && displayIsLandscape) {
+      return declaredRotation !== 0 ? declaredRotation : 270;
+    }
+    // Orientations match → no rotation needed
+    return 0;
   }
 
-  if (!bitmapIsLandscape && !displayIsPortrait && displayW > displayH && frame.height > frame.width) {
-    // Bitmap is portrait but should display as landscape → needs correction
-    return declaredRotation !== 0 ? declaredRotation : 270;
+  // ── Case B: No display metadata — use declared rotation + bitmap shape ─
+  // If declared rotation is 90/270 and bitmap is still landscape,
+  // browser did NOT auto-correct → we must rotate.
+  if ((declaredRotation === 90 || declaredRotation === 270) && bitmapIsLandscape) {
+    return declaredRotation;
   }
 
-  // Bitmap orientation already matches display orientation → no rotation needed
+  // If declared rotation is 90/270 but bitmap is already portrait,
+  // browser auto-corrected → no extra rotation needed.
+  if ((declaredRotation === 90 || declaredRotation === 270) && bitmapIsPortrait) {
+    return 0;
+  }
+
+  // ── Case C: Canvas hint — if canvas is portrait but bitmap is landscape ─
+  // and no other info is available, apply 90° to correct phone footage.
+  if (canvasW != null && canvasH != null) {
+    const canvasIsPortrait = canvasH > canvasW;
+    if (bitmapIsLandscape && canvasIsPortrait) {
+      return declaredRotation !== 0 ? declaredRotation : 90;
+    }
+  }
+
+  if (declaredRotation === 180) return 180;
+
   return 0;
 }
 
