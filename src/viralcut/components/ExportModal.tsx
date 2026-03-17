@@ -6,6 +6,7 @@ import { X, Download, Film, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ExportState, Project } from '../types';
 import { cn } from '@/lib/utils';
+import { getExportDimensions } from '../export3/mediaBunnyUtils';
 
 interface ExportModalProps {
   open: boolean;
