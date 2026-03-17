@@ -53,7 +53,6 @@ export async function exportScene(
 
   // ── 2. Detect orientation from project (not from raw media dims) ──
   const orientation = resolveProjectOrientation(project);
-  const isPortrait = orientation === 'portrait';
 
   console.log('[Export3] Project orientation', {
     aspectRatio: project.aspectRatio,
@@ -62,7 +61,7 @@ export async function exportScene(
     resolvedOrientation: orientation,
   });
 
-  const { width, height } = getExportDimensions(isPortrait, opts.resolution);
+  const { width, height } = getExportDimensions(project, opts.resolution);
 
   console.log('[Export3] Output dimensions', { width, height, fps: FPS });
   log(`Output: ${width}×${height} @ ${FPS}fps, orientation=${orientation}`);

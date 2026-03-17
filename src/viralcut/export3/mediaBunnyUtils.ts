@@ -38,15 +38,22 @@ export function resolveProjectOrientation(project: { aspectRatio?: string; width
  * This prevents memory issues and encoder failures on high-res source videos (e.g. 2160×3840).
  */
 export function getExportDimensions(
-  isPortrait: boolean,
+  project: { aspectRatio?: string; width?: number; height?: number },
   resolution: '720p' | '1080p'
 ): { width: number; height: number } {
-  if (isPortrait) {
-    // Hard cap: max 1080×1920 regardless of resolution choice
-    return resolution === '1080p' ? { width: 1080, height: 1920 } : { width: 720, height: 1280 };
+  const is1080 = resolution === '1080p';
+
+  if (project.aspectRatio === '9:16') {
+    return is1080 ? { width: 1080, height: 1920 } : { width: 720, height: 1280 };
   }
-  // Hard cap: max 1920×1080 regardless of resolution choice
-  return resolution === '1080p' ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
+  if (project.aspectRatio === '4:5') {
+    return is1080 ? { width: 1080, height: 1350 } : { width: 720, height: 900 };
+  }
+  if (project.aspectRatio === '1:1') {
+    return is1080 ? { width: 1080, height: 1080 } : { width: 720, height: 720 };
+  }
+  // Default 16:9 Landscape
+  return is1080 ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
 }
 
 export function getVideoBitrate(width: number, height: number, fps: number): number {
