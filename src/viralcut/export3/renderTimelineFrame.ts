@@ -87,35 +87,33 @@ function drawVideoFrame(
   filters: string,
   rotationDeg: number
 ) {
-  const bmpW = frame.width;
-  const bmpH = frame.height;
-  if (!bmpW || !bmpH) return;
+  if (!frame.width || !frame.height) return;
 
   ctx.save();
   ctx.globalAlpha = opacity;
   if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters;
 
-  ctx.translate(canvasW / 2, canvasH / 2);
-
-  // Apply the real rotation detected from video metadata
-  if (rotationDeg !== 0) {
-    ctx.rotate((rotationDeg * Math.PI) / 180);
-  }
-
-  const flipScaleX = flipH ? -1 : 1;
-  const flipScaleY = flipV ? -1 : 1;
-  ctx.scale(flipScaleX, flipScaleY);
-
-  // Contain-fit: if rotated 90/270, the visual dimensions are swapped
+  // 1. Calculate visual dimensions after rotation
   const isRotated = rotationDeg === 90 || rotationDeg === 270;
-  const targetW = isRotated ? bmpH : bmpW;
-  const targetH = isRotated ? bmpW : bmpH;
+  const vW = isRotated ? frame.height : frame.width;
+  const vH = isRotated ? frame.width : frame.height;
 
-  const scale = Math.min(canvasW / targetW, canvasH / targetH);
-  const dw = bmpW * scale;
-  const dh = bmpH * scale;
+  // 2. Contain-fit scale (never stretch)
+  const scale = Math.min(canvasW / vW, canvasH / vH);
+  const dw = vW * scale;
+  const dh = vH * scale;
 
-  ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
+  // 3. Center, rotate, flip
+  ctx.translate(canvasW / 2, canvasH / 2);
+  if (rotationDeg !== 0) ctx.rotate((rotationDeg * Math.PI) / 180);
+  if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+
+  // 4. Draw — when rotated 90/270 the canvas axes are swapped, so use original bitmap dims
+  if (isRotated) {
+    ctx.drawImage(frame, -dh / 2, -dw / 2, dh, dw);
+  } else {
+    ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
+  }
 
   if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
   ctx.restore();
