@@ -1,12 +1,13 @@
 // ============================================================
-// ViralCut Export3 – Per-frame deterministic renderer (v3)
+// ViralCut Export3 – Per-frame deterministic renderer (v4)
 //
-// Renders one frame at a given time into a CanvasRenderingContext2D.
-// Receives pre-decoded ImageBitmaps from VideoFrameCache plus
-// rotation metadata so vertical phone footage renders correctly.
+// SIMPLIFIED APPROACH:
+// The browser's createImageBitmap() already applies orientation correction
+// from the video metadata. So the bitmap we receive is ALREADY in display
+// orientation (e.g. a 2160x3840 portrait bitmap for a phone video).
 //
-// v3: getEffectiveRotation() detects when the bitmap is "transposed"
-// (e.g. 2160x3840 encoded as 3840x2160) and auto-applies 90° rotation.
+// We simply contain-fit the bitmap into the canvas using its actual
+// pixel dimensions. NO rotation heuristics needed.
 // ============================================================
 
 import { Project, TrackItem } from '../types';
@@ -58,98 +59,75 @@ function getOverlayItems(project: Project, timeSec: number) {
   return { imageItems, textItems };
 }
 
-// Helper: contain-fit draw centered at origin (works for both rotated and non-rotated contexts)
-// Always draws centered at (0,0) in local coordinates — caller must translate to center first.
-function drawContainFitCentered(
-  ctx: CanvasRenderingContext2D,
-  frame: CanvasImageSource,
-  boxW: number,
-  boxH: number,
-  srcW: number,
-  srcH: number
-) {
-  if (!srcW || !srcH || !boxW || !boxH) return;
-  const scale = Math.min(boxW / srcW, boxH / srcH);
-  const dw = srcW * scale;
-  const dh = srcH * scale;
-  ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
-}
-
-
 /**
- * Detects the effective rotation needed to display the video correctly.
+ * Draws the frame centered and contain-fitted into the canvas.
  *
- * Strategy (in priority order):
+ * KEY INSIGHT: createImageBitmap() from a <video> element already returns
+ * a bitmap in the DISPLAY orientation — the browser applies EXIF/rotation
+ * metadata automatically. So bitmap.width / bitmap.height are the true
+ * visual dimensions. We never need to rotate.
  *
- * 1. If the bitmap is landscape but the canvas/project is portrait AND
- *    there is a declared rotation of 90/270 → trust declared rotation.
+ * For a 2160x3840 portrait phone video:
+ *   - el.videoWidth = 3840, el.videoHeight = 2160 (encoded)
+ *   - bitmap.width = 2160, bitmap.height = 3840 (display) ← browser corrects
+ *   OR
+ *   - bitmap.width = 3840, bitmap.height = 2160 (browser did NOT correct)
  *
- * 2. If the bitmap is landscape but the canvas/project is portrait and
- *    NO display metadata is available → the browser did NOT auto-correct;
- *    apply 90° (most common phone rotation).
- *
- * 3. If displayWidth/displayHeight ARE set and contradict the bitmap
- *    orientation → apply declared rotation or infer 90/270.
- *
- * 4. If bitmap orientation already matches what we expect → 0 (no rotation).
- *
- * Key insight: when meta.displayWidth/Height are missing, fall back to
- * checking declaredRotation directly instead of treating the bitmap as
- * already-correct — avoids showing a landscape frame in a portrait canvas.
+ * We handle both cases by always checking if we need to rotate based purely
+ * on whether the bitmap aspect ratio matches the canvas aspect ratio.
  */
-function getEffectiveRotation(
+function drawVideoFrame(
+  ctx: CanvasRenderingContext2D,
   frame: ImageBitmap,
-  meta?: VideoFrameMeta,
-  canvasW?: number,
-  canvasH?: number
-): 0 | 90 | 180 | 270 {
-  const declaredRotation = (meta?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
-  const bitmapIsLandscape = frame.width > frame.height;
-  const bitmapIsPortrait  = frame.height > frame.width;
+  canvasW: number,
+  canvasH: number,
+  flipH: boolean,
+  flipV: boolean,
+  opacity: number,
+  filters: string
+) {
+  const bmpW = frame.width;
+  const bmpH = frame.height;
 
-  // ── Case A: displayWidth/Height are explicitly known ───────────────────
-  const hasDisplayMeta = meta?.displayWidth != null && meta?.displayHeight != null;
-  if (hasDisplayMeta) {
-    const displayW = meta!.displayWidth!;
-    const displayH = meta!.displayHeight!;
-    const displayIsPortrait  = displayH > displayW;
-    const displayIsLandscape = displayW > displayH;
+  if (!bmpW || !bmpH) return;
 
-    if (bitmapIsLandscape && displayIsPortrait) {
-      return declaredRotation !== 0 ? declaredRotation : 90;
-    }
-    if (bitmapIsPortrait && displayIsLandscape) {
-      return declaredRotation !== 0 ? declaredRotation : 270;
-    }
-    // Orientations match → no rotation needed
-    return 0;
+  const canvasIsPortrait = canvasH >= canvasW;
+  const bitmapIsPortrait = bmpH >= bmpW;
+
+  // If the bitmap orientation doesn't match the canvas orientation,
+  // the browser did NOT auto-rotate — we must apply 90° rotation.
+  const needsRotation = canvasIsPortrait !== bitmapIsPortrait;
+
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters;
+
+  ctx.translate(canvasW / 2, canvasH / 2);
+
+  const flipScaleX = flipH ? -1 : 1;
+  const flipScaleY = flipV ? -1 : 1;
+
+  if (needsRotation) {
+    // Rotate 90° CW then contain-fit into the rotated box (canvasH × canvasW)
+    ctx.rotate(Math.PI / 2);
+    ctx.scale(flipScaleX, flipScaleY);
+    // After 90° CW rotation, the visible box becomes canvasH wide × canvasW tall
+    const scale = Math.min(canvasH / bmpW, canvasW / bmpH);
+    const dw = bmpW * scale;
+    const dh = bmpH * scale;
+    ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
+  } else {
+    // No rotation needed — contain-fit normally
+    ctx.scale(flipScaleX, flipScaleY);
+    const scale = Math.min(canvasW / bmpW, canvasH / bmpH);
+    const dw = bmpW * scale;
+    const dh = bmpH * scale;
+    ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
   }
 
-  // ── Case B: No display metadata — use declared rotation + bitmap shape ─
-  // If declared rotation is 90/270 and bitmap is still landscape,
-  // browser did NOT auto-correct → we must rotate.
-  if ((declaredRotation === 90 || declaredRotation === 270) && bitmapIsLandscape) {
-    return declaredRotation;
-  }
-
-  // If declared rotation is 90/270 but bitmap is already portrait,
-  // browser auto-corrected → no extra rotation needed.
-  if ((declaredRotation === 90 || declaredRotation === 270) && bitmapIsPortrait) {
-    return 0;
-  }
-
-  // ── Case C: Canvas hint — if canvas is portrait but bitmap is landscape ─
-  // and no other info is available, apply 90° to correct phone footage.
-  if (canvasW != null && canvasH != null) {
-    const canvasIsPortrait = canvasH > canvasW;
-    if (bitmapIsLandscape && canvasIsPortrait) {
-      return declaredRotation !== 0 ? declaredRotation : 90;
-    }
-  }
-
-  if (declaredRotation === 180) return 180;
-
-  return 0;
+  (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
+  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
 export function renderTimelineFrame({
@@ -170,65 +148,22 @@ export function renderTimelineFrame({
     const frame = assets.videoFrames.get(videoItem.mediaId);
     if (frame) {
       const vd = videoItem.videoDetails;
-      const meta = assets.videoMeta.get(videoItem.mediaId);
 
-      // Effective rotation – auto-detects transposed bitmaps (e.g. 2160x3840 phones)
-      // Pass canvas dimensions as a last-resort hint when display metadata is absent.
-      const rotationDeg = getEffectiveRotation(frame, meta, width, height);
-
-      // Raw bitmap dimensions
-      const rawW = frame.width;
-      const rawH = frame.height;
-
-      console.log('[ViralCut][render-final]', {
-        mediaId: videoItem.mediaId,
-        rawW,
-        rawH,
-        projectW: width,
-        projectH: height,
-        declaredRotation: meta?.rotationDeg ?? 0,
-        effectiveRotation: rotationDeg,
-      });
-
-      ctx.save();
-      ctx.globalAlpha = vd?.opacity ?? 1;
-
-      // CSS-style filter string
       const filters: string[] = [];
       if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
       if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
       if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
-      if (filters.length) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters.join(' ');
 
-      const flipScaleX = vd?.flipH ? -1 : 1;
-      const flipScaleY = vd?.flipV ? -1 : 1;
-
-      if (rotationDeg === 0) {
-        // ── No rotation – contain-fit centered ────────────────
-        ctx.translate(width / 2 + (vd?.flipH ? -width / 2 : 0), height / 2 + (vd?.flipV ? -height / 2 : 0));
-        ctx.translate(vd?.flipH ? -width / 2 : 0, vd?.flipV ? -height / 2 : 0);
-        ctx.scale(flipScaleX, flipScaleY);
-        drawContainFitCentered(ctx, frame, width, height, rawW, rawH);
-
-      } else if (rotationDeg === 90 || rotationDeg === 270) {
-        // ── 90° / 270° rotation – rotate canvas then contain-fit ──
-        ctx.translate(width / 2, height / 2);
-        ctx.rotate(rotationDeg === 90 ? Math.PI / 2 : -Math.PI / 2);
-        ctx.scale(flipScaleX, flipScaleY);
-        // After rotation, visible box is height×width
-        drawContainFitCentered(ctx, frame, height, width, rawW, rawH);
-
-      } else if (rotationDeg === 180) {
-        // ── 180° rotation – contain-fit ───────────────────────
-        ctx.translate(width / 2, height / 2);
-        ctx.rotate(Math.PI);
-        ctx.scale(flipScaleX, flipScaleY);
-        drawContainFitCentered(ctx, frame, width, height, rawW, rawH);
-      }
-
-      (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
-      ctx.restore();
-      ctx.globalAlpha = 1;
+      drawVideoFrame(
+        ctx,
+        frame,
+        width,
+        height,
+        vd?.flipH ?? false,
+        vd?.flipV ?? false,
+        vd?.opacity ?? 1,
+        filters.join(' ')
+      );
     }
   }
 
