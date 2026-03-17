@@ -58,22 +58,21 @@ function getOverlayItems(project: Project, timeSec: number) {
   return { imageItems, textItems };
 }
 
-// Helper: contain-fit draw (shows full frame, may have black bars)
-function drawContainFit(
+// Helper: contain-fit draw centered at origin (works for both rotated and non-rotated contexts)
+// Always draws centered at (0,0) in local coordinates — caller must translate to center first.
+function drawContainFitCentered(
   ctx: CanvasRenderingContext2D,
   frame: CanvasImageSource,
-  canvasW: number,
-  canvasH: number,
+  boxW: number,
+  boxH: number,
   srcW: number,
   srcH: number
 ) {
-  if (!srcW || !srcH || !canvasW || !canvasH) return;
-  const scale = Math.min(canvasW / srcW, canvasH / srcH);
+  if (!srcW || !srcH || !boxW || !boxH) return;
+  const scale = Math.min(boxW / srcW, boxH / srcH);
   const dw = srcW * scale;
   const dh = srcH * scale;
-  const dx = (canvasW - dw) / 2;
-  const dy = (canvasH - dh) / 2;
-  ctx.drawImage(frame, dx, dy, dw, dh);
+  ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
 }
 
 // Helper: contain-fit draw centered at origin (for rotated canvas contexts)

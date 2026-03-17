@@ -32,13 +32,20 @@ export function resolveProjectOrientation(project: { aspectRatio?: string; width
   return 'square';
 }
 
+/**
+ * Returns export canvas dimensions capped at 1080p max.
+ * Portrait max: 1080×1920. Landscape max: 1920×1080.
+ * This prevents memory issues and encoder failures on high-res source videos (e.g. 2160×3840).
+ */
 export function getExportDimensions(
   isPortrait: boolean,
   resolution: '720p' | '1080p'
 ): { width: number; height: number } {
   if (isPortrait) {
+    // Hard cap: max 1080×1920 regardless of resolution choice
     return resolution === '1080p' ? { width: 1080, height: 1920 } : { width: 720, height: 1280 };
   }
+  // Hard cap: max 1920×1080 regardless of resolution choice
   return resolution === '1080p' ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
 }
 
