@@ -58,21 +58,38 @@ function getOverlayItems(project: Project, timeSec: number) {
   return { imageItems, textItems };
 }
 
-// Helper: cover-fit draw (fills canvas, may crop)
-function drawCoverFit(
+// Helper: contain-fit draw (shows full frame, may have black bars)
+function drawContainFit(
   ctx: CanvasRenderingContext2D,
-  frame: ImageBitmap,
+  frame: CanvasImageSource,
   canvasW: number,
   canvasH: number,
-  displayW: number,
-  displayH: number
+  srcW: number,
+  srcH: number
 ) {
-  const scale = Math.max(canvasW / displayW, canvasH / displayH);
-  const dw = displayW * scale;
-  const dh = displayH * scale;
+  if (!srcW || !srcH || !canvasW || !canvasH) return;
+  const scale = Math.min(canvasW / srcW, canvasH / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
   const dx = (canvasW - dw) / 2;
   const dy = (canvasH - dh) / 2;
   ctx.drawImage(frame, dx, dy, dw, dh);
+}
+
+// Helper: contain-fit draw centered at origin (for rotated canvas contexts)
+function drawContainFitCentered(
+  ctx: CanvasRenderingContext2D,
+  frame: CanvasImageSource,
+  boxW: number,
+  boxH: number,
+  srcW: number,
+  srcH: number
+) {
+  if (!srcW || !srcH || !boxW || !boxH) return;
+  const scale = Math.min(boxW / srcW, boxH / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
+  ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
 }
 
 /**
