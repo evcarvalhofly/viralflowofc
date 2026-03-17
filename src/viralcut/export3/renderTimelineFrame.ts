@@ -169,10 +169,11 @@ export function renderTimelineFrame({
       const flipScaleY = vd?.flipV ? -1 : 1;
 
       if (rotationDeg === 0) {
-        // ── No rotation – contain-fit ──────────────────────────
-        ctx.translate(vd?.flipH ? width : 0, vd?.flipV ? height : 0);
+        // ── No rotation – contain-fit centered ────────────────
+        ctx.translate(width / 2 + (vd?.flipH ? -width / 2 : 0), height / 2 + (vd?.flipV ? -height / 2 : 0));
+        ctx.translate(vd?.flipH ? -width / 2 : 0, vd?.flipV ? -height / 2 : 0);
         ctx.scale(flipScaleX, flipScaleY);
-        drawContainFit(ctx, frame, width, height, rawW, rawH);
+        drawContainFitCentered(ctx, frame, width, height, rawW, rawH);
 
       } else if (rotationDeg === 90 || rotationDeg === 270) {
         // ── 90° / 270° rotation – rotate canvas then contain-fit ──
