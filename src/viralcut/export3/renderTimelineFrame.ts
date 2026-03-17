@@ -58,25 +58,8 @@ function getOverlayItems(project: Project, timeSec: number) {
   return { imageItems, textItems };
 }
 
-// Helper: contain-fit draw (shows full frame, may have black bars)
-function drawContainFit(
-  ctx: CanvasRenderingContext2D,
-  frame: CanvasImageSource,
-  canvasW: number,
-  canvasH: number,
-  srcW: number,
-  srcH: number
-) {
-  if (!srcW || !srcH || !canvasW || !canvasH) return;
-  const scale = Math.min(canvasW / srcW, canvasH / srcH);
-  const dw = srcW * scale;
-  const dh = srcH * scale;
-  const dx = (canvasW - dw) / 2;
-  const dy = (canvasH - dh) / 2;
-  ctx.drawImage(frame, dx, dy, dw, dh);
-}
-
-// Helper: contain-fit draw centered at origin (for rotated canvas contexts)
+// Helper: contain-fit draw centered at origin (works for both rotated and non-rotated contexts)
+// Always draws centered at (0,0) in local coordinates — caller must translate to center first.
 function drawContainFitCentered(
   ctx: CanvasRenderingContext2D,
   frame: CanvasImageSource,
@@ -91,6 +74,7 @@ function drawContainFitCentered(
   const dh = srcH * scale;
   ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
 }
+
 
 /**
  * Detects when the raw bitmap dimensions are "transposed" relative to
@@ -185,10 +169,11 @@ export function renderTimelineFrame({
       const flipScaleY = vd?.flipV ? -1 : 1;
 
       if (rotationDeg === 0) {
-        // ── No rotation – contain-fit ──────────────────────────
-        ctx.translate(vd?.flipH ? width : 0, vd?.flipV ? height : 0);
+        // ── No rotation – contain-fit centered ────────────────
+        ctx.translate(width / 2 + (vd?.flipH ? -width / 2 : 0), height / 2 + (vd?.flipV ? -height / 2 : 0));
+        ctx.translate(vd?.flipH ? -width / 2 : 0, vd?.flipV ? -height / 2 : 0);
         ctx.scale(flipScaleX, flipScaleY);
-        drawContainFit(ctx, frame, width, height, rawW, rawH);
+        drawContainFitCentered(ctx, frame, width, height, rawW, rawH);
 
       } else if (rotationDeg === 90 || rotationDeg === 270) {
         // ── 90° / 270° rotation – rotate canvas then contain-fit ──
