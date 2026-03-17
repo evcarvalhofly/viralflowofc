@@ -141,14 +141,15 @@ export class VideoFrameCache {
       await this._seekTo(el, targetTime);
     }
 
-    // ── Capture frame ──────────────────────────────────────────
-    const vw = el.videoWidth || outWidth;
-    const vh = el.videoHeight || outHeight;
+    // ── Capture frame using encoded dimensions (no aggressive resize) ──
+    const vw = el.videoWidth;
+    const vh = el.videoHeight;
     if (vw === 0 || vh === 0) return null;
 
     let bitmap: ImageBitmap | null = null;
     try {
-      bitmap = await createImageBitmap(el, 0, 0, vw, vh);
+      // Capture raw frame without resizing — rotation is handled by renderer
+      bitmap = await createImageBitmap(el);
     } catch {
       return null;
     }

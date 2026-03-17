@@ -84,19 +84,12 @@ function drawVideoFrame(
   flipH: boolean,
   flipV: boolean,
   opacity: number,
-  filters: string
+  filters: string,
+  rotationDeg: number
 ) {
   const bmpW = frame.width;
   const bmpH = frame.height;
-
   if (!bmpW || !bmpH) return;
-
-  const canvasIsPortrait = canvasH >= canvasW;
-  const bitmapIsPortrait = bmpH >= bmpW;
-
-  // If the bitmap orientation doesn't match the canvas orientation,
-  // the browser did NOT auto-rotate — we must apply 90° rotation.
-  const needsRotation = canvasIsPortrait !== bitmapIsPortrait;
 
   ctx.save();
   ctx.globalAlpha = opacity;
@@ -104,28 +97,27 @@ function drawVideoFrame(
 
   ctx.translate(canvasW / 2, canvasH / 2);
 
-  const flipScaleX = flipH ? -1 : 1;
-  const flipScaleY = flipV ? -1 : 1;
-
-  if (needsRotation) {
-    // Rotate 90° CW then contain-fit into the rotated box (canvasH × canvasW)
-    ctx.rotate(Math.PI / 2);
-    ctx.scale(flipScaleX, flipScaleY);
-    // After 90° CW rotation, the visible box becomes canvasH wide × canvasW tall
-    const scale = Math.min(canvasH / bmpW, canvasW / bmpH);
-    const dw = bmpW * scale;
-    const dh = bmpH * scale;
-    ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
-  } else {
-    // No rotation needed — contain-fit normally
-    ctx.scale(flipScaleX, flipScaleY);
-    const scale = Math.min(canvasW / bmpW, canvasH / bmpH);
-    const dw = bmpW * scale;
-    const dh = bmpH * scale;
-    ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
+  // Apply the real rotation detected from video metadata
+  if (rotationDeg !== 0) {
+    ctx.rotate((rotationDeg * Math.PI) / 180);
   }
 
-  (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
+  const flipScaleX = flipH ? -1 : 1;
+  const flipScaleY = flipV ? -1 : 1;
+  ctx.scale(flipScaleX, flipScaleY);
+
+  // Contain-fit: if rotated 90/270, the visual dimensions are swapped
+  const isRotated = rotationDeg === 90 || rotationDeg === 270;
+  const targetW = isRotated ? bmpH : bmpW;
+  const targetH = isRotated ? bmpW : bmpH;
+
+  const scale = Math.min(canvasW / targetW, canvasH / targetH);
+  const dw = bmpW * scale;
+  const dh = bmpH * scale;
+
+  ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
+
+  if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
   ctx.restore();
   ctx.globalAlpha = 1;
 }
@@ -148,6 +140,7 @@ export function renderTimelineFrame({
     const frame = assets.videoFrames.get(videoItem.mediaId);
     if (frame) {
       const vd = videoItem.videoDetails;
+      const meta = assets.videoMeta.get(videoItem.mediaId);
 
       const filters: string[] = [];
       if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
@@ -162,7 +155,8 @@ export function renderTimelineFrame({
         vd?.flipH ?? false,
         vd?.flipV ?? false,
         vd?.opacity ?? 1,
-        filters.join(' ')
+        filters.join(' '),
+        meta?.rotationDeg ?? 0
       );
     }
   }
