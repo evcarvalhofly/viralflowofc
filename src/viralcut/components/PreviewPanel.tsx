@@ -330,8 +330,8 @@ export function PreviewPanel({
   })();
 
   const { w: canvasW, h: canvasH } = previewSize(
-    activeVideoItem?.mediaFile?.width,
-    activeVideoItem?.mediaFile?.height
+    activeVideoItem?.mediaFile?.displayWidth || activeVideoItem?.mediaFile?.width,
+    activeVideoItem?.mediaFile?.displayHeight || activeVideoItem?.mediaFile?.height
   );
 
   const activeTextItems: TrackItem[] = tracks
