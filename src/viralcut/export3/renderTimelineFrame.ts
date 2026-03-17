@@ -173,7 +173,8 @@ export function renderTimelineFrame({
       const meta = assets.videoMeta.get(videoItem.mediaId);
 
       // Effective rotation – auto-detects transposed bitmaps (e.g. 2160x3840 phones)
-      const rotationDeg = getEffectiveRotation(frame, meta);
+      // Pass canvas dimensions as a last-resort hint when display metadata is absent.
+      const rotationDeg = getEffectiveRotation(frame, meta, width, height);
 
       // Raw bitmap dimensions
       const rawW = frame.width;
