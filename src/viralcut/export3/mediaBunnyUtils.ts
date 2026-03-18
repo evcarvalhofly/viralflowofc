@@ -33,34 +33,50 @@ export function resolveProjectOrientation(project: { aspectRatio?: string; width
 }
 
 /**
- * Returns export canvas dimensions capped at 1080p max.
- * Portrait max: 1080×1920. Landscape max: 1920×1080.
- * This prevents memory issues and encoder failures on high-res source videos (e.g. 2160×3840).
+ * Returns export canvas dimensions based on project aspect ratio and chosen resolution.
+ * Preserves orientation (portrait/landscape/square) calculated from project width/height ratio.
+ * Max long-side: 1920 for 1080p, 1280 for 720p.
  */
 export function getExportDimensions(
   project: { aspectRatio?: string; width?: number; height?: number },
   resolution: '720p' | '1080p'
 ): { width: number; height: number } {
   const is1080 = resolution === '1080p';
+  const baseSize = is1080 ? 1920 : 1280;
 
-  // Force portrait if project height > width (handles any portrait format)
-  const isPortrait =
-    project.aspectRatio === '9:16' ||
-    (project.height != null && project.width != null && project.height > project.width);
-
-  if (isPortrait) {
+  // 1. Use explicit aspect ratio presets first
+  if (project.aspectRatio === '9:16') {
     return is1080 ? { width: 1080, height: 1920 } : { width: 720, height: 1280 };
   }
-
   if (project.aspectRatio === '4:5') {
     return is1080 ? { width: 1080, height: 1350 } : { width: 720, height: 900 };
   }
-
   if (project.aspectRatio === '1:1') {
     return is1080 ? { width: 1080, height: 1080 } : { width: 720, height: 720 };
   }
+  if (project.aspectRatio === '16:9') {
+    return is1080 ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
+  }
 
-  // Default 16:9 Landscape
+  // 2. Fallback: derive from project pixel dimensions (handles any custom ratio)
+  if (project.width && project.height) {
+    const ratio = project.width / project.height;
+    if (ratio >= 1) {
+      // Landscape or square: long side = width
+      return {
+        width: baseSize,
+        height: Math.round(baseSize / ratio),
+      };
+    } else {
+      // Portrait: long side = height
+      return {
+        width: Math.round(baseSize * ratio),
+        height: baseSize,
+      };
+    }
+  }
+
+  // 3. Default: 16:9 Landscape
   return is1080 ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
 }
 
