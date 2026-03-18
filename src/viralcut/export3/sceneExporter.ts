@@ -96,7 +96,7 @@ export async function exportScene(
 
   const { width, height } = getExportDimensions(dimensionProject, opts.resolution);
 
-  log(`Output: ${width}×${height} @ ${FPS}fps, orientation=${orientation}`);
+  log(`Output: ${width}×${height} @ ${FPS}fps`);
 
   // ── 3. Detect best codec/container ─────────────────────────
   onProgress(4, 'Detectando suporte de codec…');
