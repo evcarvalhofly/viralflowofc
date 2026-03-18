@@ -19,7 +19,7 @@ import { Project, MediaFile } from '../types';
 import { sanitizeProject } from '../utils/sanitize';
 import { CanvasRenderer } from './canvasRenderer';
 import { createTimelineAudioBuffer } from './createTimelineAudioBuffer';
-import { getExportDimensions, detectBestExportConfig, resolveProjectOrientation } from './mediaBunnyUtils';
+import { getExportDimensions, detectBestExportConfig } from './mediaBunnyUtils';
 
 export interface SceneExportOptions {
   resolution: '720p' | '1080p';
