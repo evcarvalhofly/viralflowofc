@@ -1,13 +1,14 @@
 // ============================================================
-// ViralCut Export3 – Per-frame deterministic renderer (v4)
+// ViralCut Export3 – Per-frame deterministic renderer (v5)
 //
-// SIMPLIFIED APPROACH:
-// The browser's createImageBitmap() already applies orientation correction
-// from the video metadata. So the bitmap we receive is ALREADY in display
-// orientation (e.g. a 2160x3840 portrait bitmap for a phone video).
+// CORE STRATEGY:
+// createImageBitmap(videoEl) returns the RAW ENCODED frame — it does NOT
+// apply EXIF/container rotation. So for a phone video encoded as 3840×2160
+// with rotationDeg=90, the bitmap is 3840×2160 (landscape) but visually it
+// should be shown as 2160×3840 (portrait).
 //
-// We simply contain-fit the bitmap into the canvas using its actual
-// pixel dimensions. NO rotation heuristics needed.
+// We MUST rotate the canvas by rotationDeg to display it correctly.
+// We NEVER use orientation-mismatch heuristics — they are unreliable.
 // ============================================================
 
 import { Project, TrackItem } from '../types';
@@ -60,17 +61,16 @@ function getOverlayItems(project: Project, timeSec: number) {
 }
 
 /**
- * Draws the frame centered and contain-fitted into the canvas.
+ * Draws a raw encoded video frame onto the canvas, applying rotation
+ * and contain-fit scaling to preserve aspect ratio without stretching.
  *
- * STRATEGY: We receive both the raw ImageBitmap and the metadata rotationDeg.
- * The browser may or may not apply EXIF rotation when calling createImageBitmap().
- * We use a heuristic: if the bitmap's aspect ratio is the OPPOSITE of the canvas
- * aspect ratio (one is portrait and the other landscape), we apply 90° rotation
- * regardless of rotationDeg. This safely handles:
- *   - Browser that DOESN'T apply EXIF rotation (bitmap stays 3840×2160, canvas is 1080×1920)
- *   - Browser that DOES apply EXIF rotation (bitmap is 2160×3840, canvas is 1080×1920)
+ * KEY RULE: createImageBitmap() does NOT apply container rotation.
+ * The bitmap is always in ENCODED dimensions (e.g. 3840×2160 for a
+ * portrait phone video with rotationDeg=90). We apply the rotation
+ * ourselves via canvas transform so the display is correct.
  *
- * In both cases, the video fills the portrait canvas correctly.
+ * We NEVER use orientation-mismatch heuristics. We trust rotationDeg
+ * which comes from the FFmpeg probe stored in MediaFile.
  */
 function drawVideoFrame(
   ctx: CanvasRenderingContext2D,
@@ -89,40 +89,30 @@ function drawVideoFrame(
   ctx.globalAlpha = opacity;
   if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters;
 
-  // ── Smart rotation detection ─────────────────────────────
-  // Compare bitmap orientation vs canvas orientation.
-  // If they are mismatched (one portrait, one landscape), force rotation to 90°.
-  const bitmapIsLandscape = frame.width >= frame.height;
-  const canvasIsLandscape = canvasW >= canvasH;
-  const orientationMismatch = bitmapIsLandscape !== canvasIsLandscape;
+  // ── Step 1: Visual dimensions after applying rotationDeg ────────
+  // For rotationDeg=90 or 270, width and height are swapped visually.
+  const isRotated = rotationDeg === 90 || rotationDeg === 270;
+  const displayW = isRotated ? frame.height : frame.width;
+  const displayH = isRotated ? frame.width : frame.height;
 
-  // Use explicit rotationDeg if non-zero, otherwise auto-detect from mismatch
-  let effectiveRotation = rotationDeg;
-  if (effectiveRotation === 0 && orientationMismatch) {
-    effectiveRotation = 90; // force rotation to align bitmap with canvas
-  }
-  // If rotationDeg says rotate but bitmap is already correct orientation, skip rotation
-  if ((effectiveRotation === 90 || effectiveRotation === 270) && !orientationMismatch) {
-    effectiveRotation = 0; // browser already applied EXIF rotation to bitmap
-  }
+  // ── Step 2: Contain-fit scale into the canvas (never stretch) ───
+  const scale = Math.min(canvasW / displayW, canvasH / displayH);
+  const dw = displayW * scale;
+  const dh = displayH * scale;
 
-  const isRotated = effectiveRotation === 90 || effectiveRotation === 270;
+  console.log(`[ViralCut][render] bitmap=${frame.width}×${frame.height} rotDeg=${rotationDeg} canvas=${canvasW}×${canvasH} display=${displayW}×${displayH} scale=${scale.toFixed(4)} final=${Math.round(dw)}×${Math.round(dh)}`);
 
-  // Visual dimensions after effective rotation
-  const vW = isRotated ? frame.height : frame.width;
-  const vH = isRotated ? frame.width : frame.height;
-
-  // Contain-fit scale (never stretch)
-  const scale = Math.min(canvasW / vW, canvasH / vH);
-  const dw = vW * scale;
-  const dh = vH * scale;
-
-  // Center, rotate, flip
+  // ── Step 3: Translate to center, then rotate ────────────────────
   ctx.translate(canvasW / 2, canvasH / 2);
-  if (effectiveRotation !== 0) ctx.rotate((effectiveRotation * Math.PI) / 180);
+  if (rotationDeg !== 0) ctx.rotate((rotationDeg * Math.PI) / 180);
   if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
 
-  // Draw — when rotated 90/270 the canvas axes are swapped, so use original bitmap dims
+  // ── Step 4: Draw ────────────────────────────────────────────────
+  // After rotation, the canvas axes are swapped for 90/270.
+  // So the drawImage destination size uses ENCODED dims scaled to fit.
+  // encoded width maps to the rotated canvas X axis, encoded height to Y.
+  // The contain-fit was computed in display space (dw×dh),
+  // so: encW_scaled = dh, encH_scaled = dw (axes swapped by rotation).
   if (isRotated) {
     ctx.drawImage(frame, -dh / 2, -dw / 2, dh, dw);
   } else {

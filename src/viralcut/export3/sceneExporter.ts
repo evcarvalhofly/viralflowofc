@@ -13,13 +13,13 @@ import {
   BufferTarget,
   CanvasSource,
   AudioBufferSource,
-  QUALITY_HIGH,
 } from 'mediabunny';
+
 import { Project, MediaFile } from '../types';
 import { sanitizeProject } from '../utils/sanitize';
 import { CanvasRenderer } from './canvasRenderer';
 import { createTimelineAudioBuffer } from './createTimelineAudioBuffer';
-import { getExportDimensions, detectBestExportConfig, resolveProjectOrientation } from './mediaBunnyUtils';
+import { getExportDimensions, detectBestExportConfig } from './mediaBunnyUtils';
 
 export interface SceneExportOptions {
   resolution: '720p' | '1080p';
@@ -51,33 +51,44 @@ export async function exportScene(
   const mediaMap = new Map(media.map((m) => [m.id, m]));
   const FPS = opts.fps;
 
-  // ── 2. Detect orientation from project (not from raw media dims) ──
-  // IMPORTANT: The project's width/height may be stale if the background FFmpeg rotation
-  // probe hasn't finished by the time the user opens export. As a fallback, we check
-  // the first video media file's displayWidth/displayHeight (or encoded + rotationDeg)
-  // and use that to correctly set portrait/landscape.
-  const orientation = resolveProjectOrientation(project);
+  // ── 2. Resolve export dimensions from project + media metadata ──
+  // Priority:
+  //   1) project.aspectRatio preset (set by auto-orientation on import)
+  //   2) first video media file's DISPLAY dimensions (encodedWxH + rotationDeg)
+  //   3) project.width / project.height fallback
+  //   4) default 16:9
 
-  // Build a corrected project snapshot for dimension calculation
-  let dimensionProject = project as { aspectRatio?: string; width?: number; height?: number };
+  const firstVideoTrack = project.tracks.find((t) => t.type === 'video' && !t.muted);
+  const firstItem = firstVideoTrack?.items[0];
+  const firstMedia = firstItem ? mediaMap.get(firstItem.mediaId) : null;
 
-  if (orientation === 'landscape') {
-    // Double-check: if the first video clip's media file says it's actually portrait,
-    // override the project dimensions for the canvas (probe race condition safety).
-    const firstVideoTrack = project.tracks.find((t) => t.type === 'video' && !t.muted);
-    const firstItem = firstVideoTrack?.items[0];
-    if (firstItem) {
-      const mf = mediaMap.get(firstItem.mediaId);
-      if (mf) {
-        // Resolve display dimensions considering rotationDeg
-        const rDeg = mf.rotationDeg ?? 0;
-        const isRotated90 = rDeg === 90 || rDeg === 270;
-        const displayW = mf.displayWidth ?? (isRotated90 ? mf.encodedHeight : mf.encodedWidth) ?? mf.width;
-        const displayH = mf.displayHeight ?? (isRotated90 ? mf.encodedWidth : mf.encodedHeight) ?? mf.height;
-        if (displayW && displayH && displayH > displayW) {
-          // Media is actually portrait — override project for dimension calc
-          log(`Orientation override: media is portrait (${displayW}×${displayH}) but project says landscape. Fixing.`);
-          dimensionProject = { aspectRatio: '9:16', width: displayW, height: displayH };
+  // Build display dimensions from media file metadata (FFmpeg-probed)
+  let dimensionProject: { aspectRatio?: string; width?: number; height?: number } = project;
+
+  if (firstMedia) {
+    const rDeg = firstMedia.rotationDeg ?? 0;
+    const isRotated90 = rDeg === 90 || rDeg === 270;
+    const encW = firstMedia.encodedWidth ?? firstMedia.width ?? 0;
+    const encH = firstMedia.encodedHeight ?? firstMedia.height ?? 0;
+    // Display dimensions swap encoded W/H when rotated 90/270
+    const dispW = firstMedia.displayWidth  ?? (isRotated90 ? encH : encW);
+    const dispH = firstMedia.displayHeight ?? (isRotated90 ? encW : encH);
+
+    log(`Media geometry: encoded=${encW}×${encH} rotDeg=${rDeg} display=${dispW}×${dispH}`);
+
+    if (dispW > 0 && dispH > 0) {
+      // If the project's aspectRatio is already a reliable preset, keep it.
+      // Otherwise let the display dimensions drive the canvas size.
+      const hasReliableAspectRatio = ['9:16', '4:5', '1:1', '16:9'].includes(project.aspectRatio ?? '');
+      if (!hasReliableAspectRatio) {
+        dimensionProject = { width: dispW, height: dispH };
+      } else {
+        // Sanity-check: verify project AR matches display orientation
+        const projectIsPortrait = (project.height ?? 0) > (project.width ?? 1) || project.aspectRatio === '9:16' || project.aspectRatio === '4:5';
+        const mediaIsPortrait = dispH > dispW;
+        if (projectIsPortrait !== mediaIsPortrait) {
+          log(`Orientation mismatch! project=${projectIsPortrait ? 'portrait' : 'landscape'} media=${mediaIsPortrait ? 'portrait' : 'landscape'} → using media display dims`);
+          dimensionProject = { width: dispW, height: dispH };
         }
       }
     }
