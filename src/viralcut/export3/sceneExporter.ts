@@ -79,23 +79,42 @@ export async function exportScene(
 
   // ── 4. Correct canvas dimensions using PROBED metadata ──────
   // VideoFrameCache.prepare() captures a real decoded frame at load
-  // time and detects if the browser auto-applied rotation.
-  // This is the ONLY ground truth — ALWAYS override canvas dimensions
-  // with probe results, regardless of project.aspectRatio metadata.
+  // time and detects the TRUE display dimensions from the bitmap.
+  // We compute the target resolution directly from the probe's aspect
+  // ratio — bypassing getExportDimensions() which relies on project
+  // metadata that may be stale (e.g. project saved as 16:9 but video is 9:16).
   onProgress(14, 'Verificando orientação do vídeo…');
   if (firstVideoMediaId) {
     const meta = renderer.getVideoMeta(firstVideoMediaId);
     log('Probe meta:', meta);
     if (meta && meta.displayWidth > 0 && meta.displayHeight > 0) {
-      const corrected = getExportDimensions(
-        { width: meta.displayWidth, height: meta.displayHeight },
-        opts.resolution
-      );
-      // Always apply probe result — project.aspectRatio may be stale/wrong
-      log(`Canvas set via probe: ${width}×${height} → ${corrected.width}×${corrected.height}`);
-      renderer.resize(corrected.width, corrected.height);
-      width  = corrected.width;
-      height = corrected.height;
+      const dw = meta.displayWidth;
+      const dh = meta.displayHeight;
+      const is1080 = opts.resolution === '1080p';
+      const longSide = is1080 ? 1920 : 1280;
+      const shortSide = is1080 ? 1080 : 720;
+
+      let correctedW: number;
+      let correctedH: number;
+
+      if (dh > dw) {
+        // Portrait: height is the long side
+        correctedW = shortSide;
+        correctedH = longSide;
+      } else if (dw > dh) {
+        // Landscape: width is the long side
+        correctedW = longSide;
+        correctedH = shortSide;
+      } else {
+        // Square
+        correctedW = shortSide;
+        correctedH = shortSide;
+      }
+
+      log(`Canvas set via probe: ${width}×${height} → ${correctedW}×${correctedH} (display probe: ${dw}×${dh})`);
+      renderer.resize(correctedW, correctedH);
+      width  = correctedW;
+      height = correctedH;
     } else {
       log('Probe meta unavailable — keeping initial estimate:', width, '×', height);
     }
