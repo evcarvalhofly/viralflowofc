@@ -13,8 +13,8 @@ import {
   BufferTarget,
   CanvasSource,
   AudioBufferSource,
-  QUALITY_HIGH,
 } from 'mediabunny';
+
 import { Project, MediaFile } from '../types';
 import { sanitizeProject } from '../utils/sanitize';
 import { CanvasRenderer } from './canvasRenderer';
