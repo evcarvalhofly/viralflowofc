@@ -1,9 +1,10 @@
 // ============================================================
-// ViralCut Export3 – Canvas Renderer (v2)
+// ViralCut Export3 – Canvas Renderer (v3)
 //
-// Manages the canvas and iterates deterministically frame by frame.
-// Calls VideoFrameCache to get the correct decoded frame for each
-// clip at each timestamp. Passes rotation metadata to the renderer.
+// v3 changes:
+// - Added getVideoMeta() to expose probed VideoFrameMeta
+// - Added resize() to allow sceneExporter to correct canvas
+//   dimensions after VideoFrameCache probes the first frame.
 // ============================================================
 
 import { Project, MediaFile } from '../types';
@@ -30,6 +31,26 @@ export class CanvasRenderer {
     this.ctx.fillStyle = '#000';
     this.ctx.fillRect(0, 0, opts.width, opts.height);
     this.frameCache = new VideoFrameCache();
+  }
+
+  /**
+   * Resize the canvas. Call this after prepare() if probed metadata
+   * reveals the initial dimensions were wrong (e.g. due to un-probed rotation).
+   */
+  resize(w: number, h: number): void {
+    this.canvas.width  = w;
+    this.canvas.height = h;
+    this.ctx = this.canvas.getContext('2d', { alpha: false })!;
+    this.ctx.fillStyle = '#000';
+    this.ctx.fillRect(0, 0, w, h);
+  }
+
+  /**
+   * Returns the probed VideoFrameMeta for a given media ID.
+   * Available after prepare() has been called.
+   */
+  getVideoMeta(mediaId: string): VideoFrameMeta | null {
+    return this.videoMeta.get(mediaId) ?? null;
   }
 
   /**
@@ -61,10 +82,10 @@ export class CanvasRenderer {
       const mf = mediaMap.get(id);
       if (!mf?.url) continue;
       onProgress(`Carregando vídeo ${++loaded}/${total}…`);
-      // Pass the MediaFile so VideoFrameCache can detect rotation
+      // Pass the MediaFile so VideoFrameCache can use rotationDeg as fallback
       await this.frameCache.prepare(id, mf.url, mf);
 
-      // Cache the metadata for use in renderTimelineFrame
+      // Cache the probed metadata (includes probe-detected display dimensions)
       const meta = this.frameCache.getMeta(id);
       if (meta) this.videoMeta.set(id, meta);
     }
@@ -80,12 +101,10 @@ export class CanvasRenderer {
 
   /**
    * Renders the timeline state at `timeSec` onto the canvas.
-   * Fetches the required decoded video frame from VideoFrameCache.
    */
   async renderFrame(project: Project, timeSec: number): Promise<void> {
     const { width, height } = this.canvas;
 
-    // Gather active video mediaId so we can decode only what's needed
     let activeVideoMediaId: string | null = null;
     let activeVideoTime = 0;
 
@@ -103,7 +122,6 @@ export class CanvasRenderer {
       if (activeVideoMediaId) break;
     }
 
-    // Fetch current video frame (may be reused from cache if same time)
     const videoFrames = new Map<string, ImageBitmap | null>();
     if (activeVideoMediaId !== null) {
       const frame = await this.frameCache.getFrame(
@@ -129,10 +147,6 @@ export class CanvasRenderer {
       project,
       assets,
     });
-
-    // NOTE: Do NOT close the frame bitmap here — the cache owns it
-    // and may reuse it for the next frame if the time delta is small.
-    // The cache disposes it when a new frame is decoded or on dispose().
   }
 
   private _loadImage(url: string): Promise<ImageBitmap | null> {
