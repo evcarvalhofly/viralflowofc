@@ -56,42 +56,15 @@ export async function exportScene(
   const FPS = opts.fps;
 
   // ── 2. Initial dimension estimate ──────────────────────────
-  // We compute an initial estimate from project metadata.
-  // This will be CORRECTED after renderer.prepare() probes the
-  // actual bitmap dimensions (which are ground truth).
+  // Use project metadata as a ROUGH estimate only.
+  // This WILL be corrected in step 4 after VideoFrameCache probes
+  // the actual decoded bitmap — that is the only ground truth.
   const firstVideoTrack = project.tracks.find((t) => t.type === 'video' && !t.muted);
   const firstItem = firstVideoTrack?.items[0];
-  const firstMedia = firstItem ? mediaMap.get(firstItem.mediaId) : null;
   const firstVideoMediaId = firstItem?.mediaId ?? null;
 
-  let dimensionProject: { aspectRatio?: string; width?: number; height?: number } = project;
-
-  if (firstMedia) {
-    const rDeg = firstMedia.rotationDeg ?? 0;
-    const isRotated90 = rDeg === 90 || rDeg === 270;
-    const encW = firstMedia.encodedWidth  ?? firstMedia.width  ?? 0;
-    const encH = firstMedia.encodedHeight ?? firstMedia.height ?? 0;
-    const dispW = firstMedia.displayWidth  ?? (isRotated90 ? encH : encW);
-    const dispH = firstMedia.displayHeight ?? (isRotated90 ? encW : encH);
-
-    if (dispW > 0 && dispH > 0) {
-      const hasReliableAR = ['9:16', '4:5', '1:1', '16:9'].includes(project.aspectRatio ?? '');
-      if (!hasReliableAR) {
-        dimensionProject = { width: dispW, height: dispH };
-      } else {
-        const projectIsPortrait = (project.height ?? 0) > (project.width ?? 1)
-          || project.aspectRatio === '9:16'
-          || project.aspectRatio === '4:5';
-        const mediaIsPortrait = dispH > dispW;
-        if (projectIsPortrait !== mediaIsPortrait) {
-          dimensionProject = { width: dispW, height: dispH };
-        }
-      }
-    }
-  }
-
-  let { width, height } = getExportDimensions(dimensionProject, opts.resolution);
-  log(`Initial canvas estimate: ${width}×${height}`);
+  let { width, height } = getExportDimensions(project, opts.resolution);
+  log(`Initial canvas estimate: ${width}×${height} (will be corrected after probe)`);
 
   // ── 3. Prepare canvas renderer ──────────────────────────────
   onProgress(6, 'Inicializando renderer…');
@@ -105,25 +78,26 @@ export async function exportScene(
   if (signal?.aborted) { renderer.dispose(); throw new Error('Exportação cancelada.'); }
 
   // ── 4. Correct canvas dimensions using PROBED metadata ──────
-  // VideoFrameCache.prepare() captures a probe frame at load time
-  // and detects whether the browser auto-applied rotation.
-  // This is the ground truth — use it to override canvas dimensions.
+  // VideoFrameCache.prepare() captures a real decoded frame at load
+  // time and detects if the browser auto-applied rotation.
+  // This is the ONLY ground truth — ALWAYS override canvas dimensions
+  // with probe results, regardless of project.aspectRatio metadata.
   onProgress(14, 'Verificando orientação do vídeo…');
   if (firstVideoMediaId) {
     const meta = renderer.getVideoMeta(firstVideoMediaId);
+    log('Probe meta:', meta);
     if (meta && meta.displayWidth > 0 && meta.displayHeight > 0) {
       const corrected = getExportDimensions(
         { width: meta.displayWidth, height: meta.displayHeight },
         opts.resolution
       );
-      if (corrected.width !== width || corrected.height !== height) {
-        log(`Canvas corrected via probe: ${width}×${height} → ${corrected.width}×${corrected.height}`);
-        renderer.resize(corrected.width, corrected.height);
-        width  = corrected.width;
-        height = corrected.height;
-      } else {
-        log(`Canvas confirmed correct: ${width}×${height}`);
-      }
+      // Always apply probe result — project.aspectRatio may be stale/wrong
+      log(`Canvas set via probe: ${width}×${height} → ${corrected.width}×${corrected.height}`);
+      renderer.resize(corrected.width, corrected.height);
+      width  = corrected.width;
+      height = corrected.height;
+    } else {
+      log('Probe meta unavailable — keeping initial estimate:', width, '×', height);
     }
   }
 
