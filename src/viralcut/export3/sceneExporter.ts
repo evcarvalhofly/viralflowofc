@@ -4,11 +4,23 @@
 // Frame-by-frame export using MediaBunny's CanvasSource and
 // AudioBufferSource. Completely offline and deterministic.
 //
-// Canvas orientation fix (v4):
-// The canvas dimensions are now corrected AFTER renderer.prepare()
-// using the VideoFrameCache's probe-detected display dimensions.
-// This ensures portrait videos are always exported as portrait
-// even when the background FFmpeg rotation probe hasn't finished.
+// Canvas orientation fix (v5):
+// Uses a 3-layer fallback strategy to determine the correct
+// export canvas orientation:
+//
+// Layer 1 (primary): VideoFrameCache probe bitmap dimensions.
+//                    If the probe detected browser auto-rotation,
+//                    use the bitmap's display dims directly.
+//
+// Layer 2 (secondary): MediaFile.rotationDeg from mediaMap.
+//                      If the probe returned landscape dims but
+//                      the MediaFile says rotationDeg=90|270,
+//                      force portrait orientation. This handles
+//                      4K videos where the probe bitmap wasn't
+//                      rotated by the browser.
+//
+// Layer 3 (fallback): Project metadata (aspectRatio, width, height).
+//                     Only used when no video media is found.
 // ============================================================
 
 import {
@@ -55,14 +67,12 @@ export async function exportScene(
   const mediaMap = new Map(media.map((m) => [m.id, m]));
   const FPS = opts.fps;
 
-  // ── 2. Initial dimension estimate ──────────────────────────
-  // Use project metadata as a ROUGH estimate only.
-  // This WILL be corrected in step 4 after VideoFrameCache probes
-  // the actual decoded bitmap — that is the only ground truth.
+  // ── 2. Find first video media ID ───────────────────────────
   const firstVideoTrack = project.tracks.find((t) => t.type === 'video' && !t.muted);
   const firstItem = firstVideoTrack?.items[0];
   const firstVideoMediaId = firstItem?.mediaId ?? null;
 
+  // Initial rough estimate from project metadata
   let { width, height } = getExportDimensions(project, opts.resolution);
   log(`Initial canvas estimate: ${width}×${height} (will be corrected after probe)`);
 
@@ -77,47 +87,78 @@ export async function exportScene(
 
   if (signal?.aborted) { renderer.dispose(); throw new Error('Exportação cancelada.'); }
 
-  // ── 4. Correct canvas dimensions using PROBED metadata ──────
-  // VideoFrameCache.prepare() captures a real decoded frame at load
-  // time and detects the TRUE display dimensions from the bitmap.
-  // We compute the target resolution directly from the probe's aspect
-  // ratio — bypassing getExportDimensions() which relies on project
-  // metadata that may be stale (e.g. project saved as 16:9 but video is 9:16).
+  // ── 4. Correct canvas orientation (3-layer strategy) ────────
   onProgress(14, 'Verificando orientação do vídeo…');
+
   if (firstVideoMediaId) {
-    const meta = renderer.getVideoMeta(firstVideoMediaId);
-    log('Probe meta:', meta);
-    if (meta && meta.displayWidth > 0 && meta.displayHeight > 0) {
-      const dw = meta.displayWidth;
-      const dh = meta.displayHeight;
-      const is1080 = opts.resolution === '1080p';
-      const longSide = is1080 ? 1920 : 1280;
-      const shortSide = is1080 ? 1080 : 720;
+    const is1080 = opts.resolution === '1080p';
+    const longSide  = is1080 ? 1920 : 1280;
+    const shortSide = is1080 ? 1080 : 720;
 
-      let correctedW: number;
-      let correctedH: number;
+    // Layer 1: VideoFrameCache probe
+    const probeMeta = renderer.getVideoMeta(firstVideoMediaId);
+    log('Probe meta from frame cache:', probeMeta);
 
-      if (dh > dw) {
-        // Portrait: height is the long side
-        correctedW = shortSide;
-        correctedH = longSide;
-      } else if (dw > dh) {
-        // Landscape: width is the long side
-        correctedW = longSide;
-        correctedH = shortSide;
+    // Layer 2: MediaFile rotationDeg (set by FFmpeg probe at import time)
+    const mediaFileEntry = mediaMap.get(firstVideoMediaId);
+    const fileRotationDeg = mediaFileEntry?.rotationDeg ?? 0;
+    log('MediaFile rotationDeg:', fileRotationDeg);
+
+    // Determine whether the video is portrait or landscape using all available signals
+    let isPortrait = false;
+
+    if (probeMeta && probeMeta.displayWidth > 0 && probeMeta.displayHeight > 0) {
+      const probeIsPortrait = probeMeta.displayHeight > probeMeta.displayWidth;
+
+      // Check if the probe result conflicts with the rotationDeg metadata.
+      // If probe says landscape BUT rotationDeg says 90/270 (portrait), the probe
+      // was unreliable (e.g. 4K browser failed to auto-rotate the bitmap).
+      // In that case, trust the rotationDeg metadata instead.
+      const rotationSaysPortrait = fileRotationDeg === 90 || fileRotationDeg === 270;
+
+      if (!probeIsPortrait && rotationSaysPortrait) {
+        // Probe returned landscape dims but rotation metadata says portrait
+        // → rotationDeg is more reliable here (probe failed for 4K video)
+        isPortrait = true;
+        log(`Probe/rotation conflict: probe=${probeMeta.displayWidth}×${probeMeta.displayHeight} (landscape) but rotationDeg=${fileRotationDeg} → forcing portrait`);
+      } else if (probeIsPortrait) {
+        isPortrait = true;
+        log(`Probe confirms portrait: ${probeMeta.displayWidth}×${probeMeta.displayHeight}`);
       } else {
-        // Square
-        correctedW = shortSide;
-        correctedH = shortSide;
+        // Both probe and rotation agree on landscape
+        isPortrait = false;
+        log(`Both probe and rotation agree: landscape (probe: ${probeMeta.displayWidth}×${probeMeta.displayHeight}, rotationDeg=${fileRotationDeg})`);
       }
-
-      log(`Canvas set via probe: ${width}×${height} → ${correctedW}×${correctedH} (display probe: ${dw}×${dh})`);
-      renderer.resize(correctedW, correctedH);
-      width  = correctedW;
-      height = correctedH;
     } else {
-      log('Probe meta unavailable — keeping initial estimate:', width, '×', height);
+      // Layer 1 failed — fall back to rotationDeg only
+      isPortrait = fileRotationDeg === 90 || fileRotationDeg === 270;
+      log(`Probe meta unavailable — using rotationDeg=${fileRotationDeg} → isPortrait=${isPortrait}`);
     }
+
+    // Also check MediaFile's stored displayWidth/displayHeight (set at import)
+    if (mediaFileEntry?.displayWidth && mediaFileEntry?.displayHeight) {
+      const mediaFilePortrait = mediaFileEntry.displayHeight > mediaFileEntry.displayWidth;
+      if (mediaFilePortrait !== isPortrait) {
+        log(`MediaFile display dims (${mediaFileEntry.displayWidth}×${mediaFileEntry.displayHeight}) override — isPortrait=${mediaFilePortrait}`);
+        isPortrait = mediaFilePortrait;
+      }
+    }
+
+    let correctedW: number;
+    let correctedH: number;
+
+    if (isPortrait) {
+      correctedW = shortSide;
+      correctedH = longSide;
+    } else {
+      correctedW = longSide;
+      correctedH = shortSide;
+    }
+
+    log(`Canvas set: ${width}×${height} → ${correctedW}×${correctedH} (isPortrait=${isPortrait})`);
+    renderer.resize(correctedW, correctedH);
+    width  = correctedW;
+    height = correctedH;
   }
 
   log(`Final canvas: ${width}×${height} @ ${FPS}fps`);

@@ -1,22 +1,24 @@
 // ============================================================
-// ViralCut Export3 – Video Frame Cache (v4)
+// ViralCut Export3 – Video Frame Cache (v5)
 //
-// Key change in v4:
-// After the video element loads, we immediately capture a PROBE
-// frame via createImageBitmap(el) and compare its dimensions to
-// el.videoWidth × el.videoHeight.
+// v5: Deep fix for high-quality 4K portrait videos.
 //
-// WHY: Chrome's createImageBitmap() auto-applies container rotation
-// but el.videoWidth/videoHeight always returns the ENCODED dimensions.
-// So for a 3840×2160 encoded video with rotationDeg=90:
-//   el.videoWidth  = 3840  (encoded)
-//   el.videoHeight = 2160  (encoded)
-//   probeBitmap.width  = 2160  (display — Chrome rotated it)
-//   probeBitmap.height = 3840  (display — Chrome rotated it)
+// ROOT CAUSE of the landscape bug:
+//   For large 4K files, createImageBitmap(el) at t=0.001 often
+//   returns the bitmap in ENCODED orientation (landscape 3840×2160)
+//   because the browser hasn't decoded enough frames yet to apply
+//   the container rotation. The probe then incorrectly concludes
+//   browserAutoRotates=false AND displayWidth=3840 (landscape).
 //
-// By probing at load time, we know the TRUE display dimensions
-// regardless of whether rotationDeg metadata has been probed yet
-// (background FFmpeg probe may not have finished).
+// FIX STRATEGY (multi-layer):
+//   1. Retry probe up to 5 times at increasing seek positions
+//      until the bitmap dimensions differ from encoded (swap detected)
+//      OR we get a stable non-zero result.
+//   2. If after all retries the probe still matches encoded dims
+//      (no swap detected), ALWAYS fall back to rotationDeg from
+//      MediaFile metadata as the authoritative rotation source.
+//   3. rotationDeg=90|270 means display is portrait even if the
+//      bitmap probe returned landscape — this wins over the probe.
 // ============================================================
 
 import { MediaFile } from '../types';
@@ -40,6 +42,9 @@ interface VideoEntry {
   lastBitmap: ImageBitmap | null;
   meta: VideoFrameMeta;
 }
+
+// Probe seek positions to try (seconds into video)
+const PROBE_SEEK_POSITIONS = [0.001, 0.1, 0.5, 1.0, 2.0];
 
 export class VideoFrameCache {
   private cache = new Map<string, VideoEntry>();
@@ -72,77 +77,106 @@ export class VideoFrameCache {
     const encodedWidth  = el.videoWidth  || 0;
     const encodedHeight = el.videoHeight || 0;
 
-    // ── Probe: capture one frame to detect browser's actual bitmap dimensions ──
-    // Chrome auto-applies container rotation inside createImageBitmap().
-    // By comparing probe dims to videoWidth/videoHeight we know if it happened.
     let displayWidth  = encodedWidth;
     let displayHeight = encodedHeight;
     let browserAutoRotates = false;
 
+    // The rotationDeg from MediaFile metadata (set by FFmpeg probe at import)
+    const knownRotationDeg = (mediaFile?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
+
     if (encodedWidth > 0 && encodedHeight > 0) {
-      try {
-        // If video is at time 0 and has not decoded yet, seek slightly forward
-        if (el.readyState < 2 || el.currentTime === 0) {
-          el.currentTime = 0.001;
-          await new Promise<void>((resolve) => {
-            const done = () => resolve();
-            const t = setTimeout(done, 2000);
-            el.addEventListener('seeked', () => { clearTimeout(t); done(); }, { once: true });
-            el.addEventListener('timeupdate', () => { clearTimeout(t); done(); }, { once: true });
-          });
-        }
+      // ── Multi-attempt probe ────────────────────────────────────
+      // Try up to N seek positions. We stop early if we detect a
+      // browser swap (best-case scenario). If we never detect a swap,
+      // we fall back to knownRotationDeg as the authoritative source.
+      const tol = Math.max(4, Math.round(Math.max(encodedWidth, encodedHeight) * 0.01));
 
-        const probeBitmap = await createImageBitmap(el);
-        const bw = probeBitmap.width;
-        const bh = probeBitmap.height;
-        probeBitmap.close();
+      let probeResolved = false;
 
-        const tol = Math.max(4, Math.round(Math.max(encodedWidth, encodedHeight) * 0.01));
+      for (const seekPos of PROBE_SEEK_POSITIONS) {
+        const maxSeek = el.duration > 0 ? Math.min(seekPos, el.duration - 0.001) : seekPos;
+        if (maxSeek < 0) continue;
 
-        // Check if browser swapped W/H (applied 90° or 270° rotation)
-        const browserSwapped =
-          Math.abs(bw - encodedHeight) <= tol &&
-          Math.abs(bh - encodedWidth)  <= tol;
-
-        const browserNotSwapped =
-          Math.abs(bw - encodedWidth)  <= tol &&
-          Math.abs(bh - encodedHeight) <= tol;
-
-        if (browserSwapped) {
-          // Browser auto-rotated: bitmap is already in display orientation
-          displayWidth      = bw;
-          displayHeight     = bh;
-          browserAutoRotates = true;
-          console.log('[ViralCut][frame-cache] Browser auto-rotated. display:', bw, '×', bh);
-        } else if (browserNotSwapped) {
-          // Browser did NOT rotate: use rotationDeg metadata to set display dims
-          browserAutoRotates = false;
-          const rDeg = mediaFile?.rotationDeg ?? 0;
-          if (rDeg === 90 || rDeg === 270) {
-            displayWidth  = encodedHeight;
-            displayHeight = encodedWidth;
+        try {
+          // Seek to position
+          if (Math.abs(el.currentTime - maxSeek) > SEEK_EPSILON_SEC) {
+            el.currentTime = maxSeek;
+            await new Promise<void>((resolve) => {
+              const done = () => resolve();
+              const t = setTimeout(done, 2000);
+              el.addEventListener('seeked', () => { clearTimeout(t); done(); }, { once: true });
+              el.addEventListener('timeupdate', () => { clearTimeout(t); done(); }, { once: true });
+            });
           }
-          console.log('[ViralCut][frame-cache] No browser rotation. rDeg=', rDeg, 'display:', displayWidth, '×', displayHeight);
-        } else {
-          // Probe returned unexpected dims (partial decode, CORS, etc.)
-          // Fall back to rotationDeg as the most reliable signal
-          browserAutoRotates = false;
-          const rDeg = mediaFile?.rotationDeg ?? 0;
-          if (rDeg === 90 || rDeg === 270) {
-            displayWidth  = encodedHeight;
-            displayHeight = encodedWidth;
+
+          const probeBitmap = await createImageBitmap(el);
+          const bw = probeBitmap.width;
+          const bh = probeBitmap.height;
+          probeBitmap.close();
+
+          // Skip degenerate bitmaps (0-size or clearly invalid)
+          if (bw === 0 || bh === 0) {
+            console.log(`[ViralCut][frame-cache] Probe at t=${maxSeek}: degenerate bitmap (${bw}×${bh}), retrying...`);
+            continue;
           }
-          console.warn('[ViralCut][frame-cache] Unexpected probe dims:', bw, '×', bh,
-            '— falling back to rotationDeg=', rDeg, 'display:', displayWidth, '×', displayHeight);
+
+          const browserSwapped =
+            Math.abs(bw - encodedHeight) <= tol &&
+            Math.abs(bh - encodedWidth)  <= tol;
+
+          const browserNotSwapped =
+            Math.abs(bw - encodedWidth)  <= tol &&
+            Math.abs(bh - encodedHeight) <= tol;
+
+          if (browserSwapped) {
+            // Browser auto-rotated: bitmap is already in display orientation (portrait)
+            displayWidth      = bw;
+            displayHeight     = bh;
+            browserAutoRotates = true;
+            probeResolved = true;
+            console.log(`[ViralCut][frame-cache] Probe at t=${maxSeek}: browser auto-rotated. display: ${bw}×${bh}`);
+            break; // definitive — stop retrying
+          } else if (browserNotSwapped) {
+            // Bitmap matches encoded dims exactly.
+            // The browser did NOT apply rotation.
+            // Trust rotationDeg metadata to determine true display dims.
+            browserAutoRotates = false;
+            probeResolved = true;
+            console.log(`[ViralCut][frame-cache] Probe at t=${maxSeek}: no browser rotation detected. rotationDeg=${knownRotationDeg}`);
+            break; // also definitive — stop retrying
+          } else {
+            // Unexpected dims (partial decode, CORS, etc.) — retry
+            console.log(`[ViralCut][frame-cache] Probe at t=${maxSeek}: unexpected dims ${bw}×${bh} (encoded: ${encodedWidth}×${encodedHeight}), retrying...`);
+          }
+        } catch (e) {
+          console.warn(`[ViralCut][frame-cache] Probe at t=${seekPos} failed:`, e);
         }
-      } catch (e) {
-        // Probe failed — fall back to rotationDeg metadata
-        console.warn('[ViralCut][frame-cache] Probe frame failed:', e);
-        const rDeg = mediaFile?.rotationDeg ?? 0;
-        if (rDeg === 90 || rDeg === 270) {
+      }
+
+      // ── Apply rotationDeg as primary truth for display dims ────
+      // Regardless of probe outcome, rotationDeg from the MediaFile
+      // (set by FFmpeg probe at import) is the authoritative source
+      // for whether to swap display dimensions.
+      //
+      // If browserAutoRotates=true, the bitmap is already portrait —
+      // displayWidth/Height are already correct from the probe.
+      //
+      // If browserAutoRotates=false, use rotationDeg to derive display dims.
+      if (!browserAutoRotates) {
+        if (knownRotationDeg === 90 || knownRotationDeg === 270) {
+          // Container says rotate 90/270: display is portrait
           displayWidth  = encodedHeight;
           displayHeight = encodedWidth;
+          console.log(`[ViralCut][frame-cache] rotationDeg=${knownRotationDeg} → display: ${displayWidth}×${displayHeight} (portrait)`);
+        } else {
+          // No rotation: display matches encoded
+          displayWidth  = encodedWidth;
+          displayHeight = encodedHeight;
         }
+      }
+
+      if (!probeResolved) {
+        console.warn(`[ViralCut][frame-cache] All probe attempts failed — using rotationDeg=${knownRotationDeg} fallback`);
       }
     }
 
@@ -151,7 +185,7 @@ export class VideoFrameCache {
       encodedHeight,
       displayWidth:  displayWidth  || encodedWidth,
       displayHeight: displayHeight || encodedHeight,
-      rotationDeg:   (mediaFile?.rotationDeg ?? 0) as 0 | 90 | 180 | 270,
+      rotationDeg:   knownRotationDeg,
       browserAutoRotates,
     };
 
