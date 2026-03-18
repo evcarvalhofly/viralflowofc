@@ -62,19 +62,15 @@ function getOverlayItems(project: Project, timeSec: number) {
 /**
  * Draws the frame centered and contain-fitted into the canvas.
  *
- * KEY INSIGHT: createImageBitmap() from a <video> element already returns
- * a bitmap in the DISPLAY orientation — the browser applies EXIF/rotation
- * metadata automatically. So bitmap.width / bitmap.height are the true
- * visual dimensions. We never need to rotate.
+ * STRATEGY: We receive both the raw ImageBitmap and the metadata rotationDeg.
+ * The browser may or may not apply EXIF rotation when calling createImageBitmap().
+ * We use a heuristic: if the bitmap's aspect ratio is the OPPOSITE of the canvas
+ * aspect ratio (one is portrait and the other landscape), we apply 90° rotation
+ * regardless of rotationDeg. This safely handles:
+ *   - Browser that DOESN'T apply EXIF rotation (bitmap stays 3840×2160, canvas is 1080×1920)
+ *   - Browser that DOES apply EXIF rotation (bitmap is 2160×3840, canvas is 1080×1920)
  *
- * For a 2160x3840 portrait phone video:
- *   - el.videoWidth = 3840, el.videoHeight = 2160 (encoded)
- *   - bitmap.width = 2160, bitmap.height = 3840 (display) ← browser corrects
- *   OR
- *   - bitmap.width = 3840, bitmap.height = 2160 (browser did NOT correct)
- *
- * We handle both cases by always checking if we need to rotate based purely
- * on whether the bitmap aspect ratio matches the canvas aspect ratio.
+ * In both cases, the video fills the portrait canvas correctly.
  */
 function drawVideoFrame(
   ctx: CanvasRenderingContext2D,
@@ -93,22 +89,40 @@ function drawVideoFrame(
   ctx.globalAlpha = opacity;
   if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters;
 
-  // 1. Calculate visual dimensions after rotation
-  const isRotated = rotationDeg === 90 || rotationDeg === 270;
+  // ── Smart rotation detection ─────────────────────────────
+  // Compare bitmap orientation vs canvas orientation.
+  // If they are mismatched (one portrait, one landscape), force rotation to 90°.
+  const bitmapIsLandscape = frame.width >= frame.height;
+  const canvasIsLandscape = canvasW >= canvasH;
+  const orientationMismatch = bitmapIsLandscape !== canvasIsLandscape;
+
+  // Use explicit rotationDeg if non-zero, otherwise auto-detect from mismatch
+  let effectiveRotation = rotationDeg;
+  if (effectiveRotation === 0 && orientationMismatch) {
+    effectiveRotation = 90; // force rotation to align bitmap with canvas
+  }
+  // If rotationDeg says rotate but bitmap is already correct orientation, skip rotation
+  if ((effectiveRotation === 90 || effectiveRotation === 270) && !orientationMismatch) {
+    effectiveRotation = 0; // browser already applied EXIF rotation to bitmap
+  }
+
+  const isRotated = effectiveRotation === 90 || effectiveRotation === 270;
+
+  // Visual dimensions after effective rotation
   const vW = isRotated ? frame.height : frame.width;
   const vH = isRotated ? frame.width : frame.height;
 
-  // 2. Contain-fit scale (never stretch)
+  // Contain-fit scale (never stretch)
   const scale = Math.min(canvasW / vW, canvasH / vH);
   const dw = vW * scale;
   const dh = vH * scale;
 
-  // 3. Center, rotate, flip
+  // Center, rotate, flip
   ctx.translate(canvasW / 2, canvasH / 2);
-  if (rotationDeg !== 0) ctx.rotate((rotationDeg * Math.PI) / 180);
+  if (effectiveRotation !== 0) ctx.rotate((effectiveRotation * Math.PI) / 180);
   if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
 
-  // 4. Draw — when rotated 90/270 the canvas axes are swapped, so use original bitmap dims
+  // Draw — when rotated 90/270 the canvas axes are swapped, so use original bitmap dims
   if (isRotated) {
     ctx.drawImage(frame, -dh / 2, -dw / 2, dh, dw);
   } else {
