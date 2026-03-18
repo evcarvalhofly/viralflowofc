@@ -78,25 +78,26 @@ export async function exportScene(
   if (signal?.aborted) { renderer.dispose(); throw new Error('Exportação cancelada.'); }
 
   // ── 4. Correct canvas dimensions using PROBED metadata ──────
-  // VideoFrameCache.prepare() captures a probe frame at load time
-  // and detects whether the browser auto-applied rotation.
-  // This is the ground truth — use it to override canvas dimensions.
+  // VideoFrameCache.prepare() captures a real decoded frame at load
+  // time and detects if the browser auto-applied rotation.
+  // This is the ONLY ground truth — ALWAYS override canvas dimensions
+  // with probe results, regardless of project.aspectRatio metadata.
   onProgress(14, 'Verificando orientação do vídeo…');
   if (firstVideoMediaId) {
     const meta = renderer.getVideoMeta(firstVideoMediaId);
+    log('Probe meta:', meta);
     if (meta && meta.displayWidth > 0 && meta.displayHeight > 0) {
       const corrected = getExportDimensions(
         { width: meta.displayWidth, height: meta.displayHeight },
         opts.resolution
       );
-      if (corrected.width !== width || corrected.height !== height) {
-        log(`Canvas corrected via probe: ${width}×${height} → ${corrected.width}×${corrected.height}`);
-        renderer.resize(corrected.width, corrected.height);
-        width  = corrected.width;
-        height = corrected.height;
-      } else {
-        log(`Canvas confirmed correct: ${width}×${height}`);
-      }
+      // Always apply probe result — project.aspectRatio may be stale/wrong
+      log(`Canvas set via probe: ${width}×${height} → ${corrected.width}×${corrected.height}`);
+      renderer.resize(corrected.width, corrected.height);
+      width  = corrected.width;
+      height = corrected.height;
+    } else {
+      log('Probe meta unavailable — keeping initial estimate:', width, '×', height);
     }
   }
 
