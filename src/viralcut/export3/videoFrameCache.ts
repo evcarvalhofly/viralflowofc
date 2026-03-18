@@ -109,23 +109,31 @@ export class VideoFrameCache {
           Math.abs(bh - encodedHeight) <= tol;
 
         if (browserSwapped) {
-          // Browser auto-rotated: true display dimensions = probe bitmap dims
+          // Browser auto-rotated: bitmap is already in display orientation
           displayWidth      = bw;
           displayHeight     = bh;
           browserAutoRotates = true;
-          console.log('[ViralCut][frame-cache] Browser auto-rotated probe:', bw, '×', bh);
+          console.log('[ViralCut][frame-cache] Browser auto-rotated. display:', bw, '×', bh);
         } else if (browserNotSwapped) {
-          // Browser did NOT rotate: fall back to rotationDeg from metadata
+          // Browser did NOT rotate: use rotationDeg metadata to set display dims
           browserAutoRotates = false;
           const rDeg = mediaFile?.rotationDeg ?? 0;
           if (rDeg === 90 || rDeg === 270) {
             displayWidth  = encodedHeight;
             displayHeight = encodedWidth;
           }
-          console.log('[ViralCut][frame-cache] Browser did not rotate. rDeg=', rDeg, 'display:', displayWidth, '×', displayHeight);
+          console.log('[ViralCut][frame-cache] No browser rotation. rDeg=', rDeg, 'display:', displayWidth, '×', displayHeight);
         } else {
-          // Unexpected dims — keep encoded as display fallback
-          console.warn('[ViralCut][frame-cache] Unexpected probe dims:', bw, '×', bh, 'encoded:', encodedWidth, '×', encodedHeight);
+          // Probe returned unexpected dims (partial decode, CORS, etc.)
+          // Fall back to rotationDeg as the most reliable signal
+          browserAutoRotates = false;
+          const rDeg = mediaFile?.rotationDeg ?? 0;
+          if (rDeg === 90 || rDeg === 270) {
+            displayWidth  = encodedHeight;
+            displayHeight = encodedWidth;
+          }
+          console.warn('[ViralCut][frame-cache] Unexpected probe dims:', bw, '×', bh,
+            '— falling back to rotationDeg=', rDeg, 'display:', displayWidth, '×', displayHeight);
         }
       } catch (e) {
         // Probe failed — fall back to rotationDeg metadata
