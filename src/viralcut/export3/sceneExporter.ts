@@ -52,18 +52,39 @@ export async function exportScene(
   const FPS = opts.fps;
 
   // ── 2. Detect orientation from project (not from raw media dims) ──
+  // IMPORTANT: The project's width/height may be stale if the background FFmpeg rotation
+  // probe hasn't finished by the time the user opens export. As a fallback, we check
+  // the first video media file's displayWidth/displayHeight (or encoded + rotationDeg)
+  // and use that to correctly set portrait/landscape.
   const orientation = resolveProjectOrientation(project);
 
-  console.log('[Export3] Project orientation', {
-    aspectRatio: project.aspectRatio,
-    projectWidth: project.width,
-    projectHeight: project.height,
-    resolvedOrientation: orientation,
-  });
+  // Build a corrected project snapshot for dimension calculation
+  let dimensionProject = project as { aspectRatio?: string; width?: number; height?: number };
 
-  const { width, height } = getExportDimensions(project, opts.resolution);
+  if (orientation === 'landscape') {
+    // Double-check: if the first video clip's media file says it's actually portrait,
+    // override the project dimensions for the canvas (probe race condition safety).
+    const firstVideoTrack = project.tracks.find((t) => t.type === 'video' && !t.muted);
+    const firstItem = firstVideoTrack?.items[0];
+    if (firstItem) {
+      const mf = mediaMap.get(firstItem.mediaId);
+      if (mf) {
+        // Resolve display dimensions considering rotationDeg
+        const rDeg = mf.rotationDeg ?? 0;
+        const isRotated90 = rDeg === 90 || rDeg === 270;
+        const displayW = mf.displayWidth ?? (isRotated90 ? mf.encodedHeight : mf.encodedWidth) ?? mf.width;
+        const displayH = mf.displayHeight ?? (isRotated90 ? mf.encodedWidth : mf.encodedHeight) ?? mf.height;
+        if (displayW && displayH && displayH > displayW) {
+          // Media is actually portrait — override project for dimension calc
+          log(`Orientation override: media is portrait (${displayW}×${displayH}) but project says landscape. Fixing.`);
+          dimensionProject = { aspectRatio: '9:16', width: displayW, height: displayH };
+        }
+      }
+    }
+  }
 
-  console.log('[Export3] Output dimensions', { width, height, fps: FPS });
+  const { width, height } = getExportDimensions(dimensionProject, opts.resolution);
+
   log(`Output: ${width}×${height} @ ${FPS}fps, orientation=${orientation}`);
 
   // ── 3. Detect best codec/container ─────────────────────────
