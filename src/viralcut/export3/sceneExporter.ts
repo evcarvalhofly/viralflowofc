@@ -56,42 +56,15 @@ export async function exportScene(
   const FPS = opts.fps;
 
   // ── 2. Initial dimension estimate ──────────────────────────
-  // We compute an initial estimate from project metadata.
-  // This will be CORRECTED after renderer.prepare() probes the
-  // actual bitmap dimensions (which are ground truth).
+  // Use project metadata as a ROUGH estimate only.
+  // This WILL be corrected in step 4 after VideoFrameCache probes
+  // the actual decoded bitmap — that is the only ground truth.
   const firstVideoTrack = project.tracks.find((t) => t.type === 'video' && !t.muted);
   const firstItem = firstVideoTrack?.items[0];
-  const firstMedia = firstItem ? mediaMap.get(firstItem.mediaId) : null;
   const firstVideoMediaId = firstItem?.mediaId ?? null;
 
-  let dimensionProject: { aspectRatio?: string; width?: number; height?: number } = project;
-
-  if (firstMedia) {
-    const rDeg = firstMedia.rotationDeg ?? 0;
-    const isRotated90 = rDeg === 90 || rDeg === 270;
-    const encW = firstMedia.encodedWidth  ?? firstMedia.width  ?? 0;
-    const encH = firstMedia.encodedHeight ?? firstMedia.height ?? 0;
-    const dispW = firstMedia.displayWidth  ?? (isRotated90 ? encH : encW);
-    const dispH = firstMedia.displayHeight ?? (isRotated90 ? encW : encH);
-
-    if (dispW > 0 && dispH > 0) {
-      const hasReliableAR = ['9:16', '4:5', '1:1', '16:9'].includes(project.aspectRatio ?? '');
-      if (!hasReliableAR) {
-        dimensionProject = { width: dispW, height: dispH };
-      } else {
-        const projectIsPortrait = (project.height ?? 0) > (project.width ?? 1)
-          || project.aspectRatio === '9:16'
-          || project.aspectRatio === '4:5';
-        const mediaIsPortrait = dispH > dispW;
-        if (projectIsPortrait !== mediaIsPortrait) {
-          dimensionProject = { width: dispW, height: dispH };
-        }
-      }
-    }
-  }
-
-  let { width, height } = getExportDimensions(dimensionProject, opts.resolution);
-  log(`Initial canvas estimate: ${width}×${height}`);
+  let { width, height } = getExportDimensions(project, opts.resolution);
+  log(`Initial canvas estimate: ${width}×${height} (will be corrected after probe)`);
 
   // ── 3. Prepare canvas renderer ──────────────────────────────
   onProgress(6, 'Inicializando renderer…');
