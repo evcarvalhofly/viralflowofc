@@ -91,14 +91,8 @@ export async function exportScene(
   if (signal?.aborted) { renderer.dispose(); throw new Error('Exportação cancelada.'); }
 
   // ── 4. Determine correct canvas orientation ──────────────────
-  // Priority chain (highest → lowest):
-  //   1. media.orientation (already resolved by probeAndPatchRotation — most reliable post-probe)
-  //   2. displayWidth/displayHeight (set by probe)
-  //   3. encodedDims + rotationDeg (raw FFmpeg metadata)
-  //   4. VideoFrameCache probe (live bitmap dimensions)
-  //   5. Project aspectRatio / fallback
-  // Safety override: if project says portrait AND any metadata supports portrait,
-  // never downgrade to landscape just because encodedW > encodedH (raw 4K landscape dims).
+  // DEFINITIVE LOGIC: Use FFmpeg-probed metadata as primary source.
+  // This is set at import time and is the most reliable orientation signal.
   onProgress(14, 'Verificando orientação do vídeo…');
 
   if (firstVideoMediaId) {
@@ -106,53 +100,47 @@ export async function exportScene(
     const longSide  = is1080 ? 1920 : 1280;
     const shortSide = is1080 ? 1080 : 720;
 
-    const mfe = mediaMap.get(firstVideoMediaId);
-    const rotDeg          = mfe?.rotationDeg    ?? 0;
-    const encW            = mfe?.encodedWidth   ?? 0;
-    const encH            = mfe?.encodedHeight  ?? 0;
-    const dispW           = mfe?.displayWidth   ?? 0;
-    const dispH           = mfe?.displayHeight  ?? 0;
-    const explicitOri     = mfe?.orientation;
-    const projectIsPortrait = project.height > project.width
-      || project.aspectRatio === '9:16'
-      || project.aspectRatio === '4:5';
-
+    const mediaFileEntry = mediaMap.get(firstVideoMediaId);
     log('MediaFile entry:', {
-      rotationDeg: rotDeg, encodedWidth: encW, encodedHeight: encH,
-      displayWidth: dispW, displayHeight: dispH, orientation: explicitOri,
-      projectAspectRatio: project.aspectRatio, projectWidth: project.width, projectHeight: project.height,
+      rotationDeg: mediaFileEntry?.rotationDeg,
+      encodedWidth: mediaFileEntry?.encodedWidth,
+      encodedHeight: mediaFileEntry?.encodedHeight,
+      displayWidth: mediaFileEntry?.displayWidth,
+      displayHeight: mediaFileEntry?.displayHeight,
+      orientation: mediaFileEntry?.orientation,
     });
 
     let isPortrait = false;
     let orientationSource = 'unknown';
 
-    // ── Priority 1: explicit orientation resolved by probeAndPatchRotation ──
-    if (explicitOri === 'portrait') {
-      isPortrait = true;
-      orientationSource = 'media.orientation=portrait';
-    } else if (explicitOri === 'landscape') {
-      isPortrait = false;
-      orientationSource = 'media.orientation=landscape';
-    }
+    // ── Priority 1: encodedDims + rotationDeg (FFmpeg probe — most reliable) ──
+    const rotDeg = mediaFileEntry?.rotationDeg ?? 0;
+    const encW = mediaFileEntry?.encodedWidth ?? 0;
+    const encH = mediaFileEntry?.encodedHeight ?? 0;
 
-    // ── Priority 2: resolved display dimensions (set by probe) ──
-    if (orientationSource === 'unknown' && dispW > 0 && dispH > 0) {
-      isPortrait = dispH > dispW;
-      orientationSource = `displayDims (${dispW}×${dispH})`;
-    }
-
-    // ── Priority 3: encodedDims + rotationDeg ──
-    if (orientationSource === 'unknown' && encW > 0 && encH > 0) {
+    if (encW > 0 && encH > 0) {
       if (rotDeg === 90 || rotDeg === 270) {
+        // Rotation metadata says portrait — swap encoded dims
         isPortrait = true;
-        orientationSource = `encodedDims+rotationDeg (${encW}×${encH}, rot=${rotDeg})`;
-      } else {
+        orientationSource = `encodedDims+rotationDeg (encoded: ${encW}×${encH}, rotDeg: ${rotDeg})`;
+      } else if (rotDeg === 0 || rotDeg === 180) {
+        // No rotation — use encoded dims as-is
         isPortrait = encH > encW;
-        orientationSource = `encodedDims (${encW}×${encH}, rot=${rotDeg})`;
+        orientationSource = `encodedDims+rotationDeg=0 (encoded: ${encW}×${encH})`;
       }
     }
 
-    // ── Priority 4: VideoFrameCache probe ──
+    // ── Priority 2: displayWidth/displayHeight (set after FFmpeg probe) ──
+    if (orientationSource === 'unknown' || (encW === 0 && encH === 0)) {
+      const dispW = mediaFileEntry?.displayWidth ?? 0;
+      const dispH = mediaFileEntry?.displayHeight ?? 0;
+      if (dispW > 0 && dispH > 0) {
+        isPortrait = dispH > dispW;
+        orientationSource = `displayDims (${dispW}×${dispH})`;
+      }
+    }
+
+    // ── Priority 3: VideoFrameCache probe (last resort for video) ──
     if (orientationSource === 'unknown') {
       const probeMeta = renderer.getVideoMeta(firstVideoMediaId);
       if (probeMeta && probeMeta.displayWidth > 0 && probeMeta.displayHeight > 0) {
@@ -161,31 +149,7 @@ export async function exportScene(
       }
     }
 
-    // ── Priority 5: project fallback ──
-    if (orientationSource === 'unknown') {
-      isPortrait = projectIsPortrait;
-      orientationSource = `projectFallback (${project.aspectRatio})`;
-    }
-
-    // ── Safety override ──────────────────────────────────────
-    // If the project is portrait AND any orientation signal says portrait
-    // (displayDims, rotationDeg, or explicit orientation), never let raw
-    // encoded landscape dims (e.g. 3840×2160) override to landscape.
-    const rotSaysPortrait  = rotDeg === 90 || rotDeg === 270;
-    const dispSaysPortrait = dispH > dispW;
-    const anyPortraitSignal = explicitOri === 'portrait' || rotSaysPortrait || dispSaysPortrait;
-
-    if (projectIsPortrait && anyPortraitSignal && !isPortrait) {
-      isPortrait = true;
-      orientationSource += ' + safetyPortraitOverride';
-    }
-
-    log('Orientation decision:', {
-      isPortrait, orientationSource, rotationDeg: rotDeg,
-      encodedWidth: encW, encodedHeight: encH,
-      displayWidth: dispW, displayHeight: dispH,
-      explicitOrientation: explicitOri, projectAspectRatio: project.aspectRatio,
-    });
+    log(`Orientation decision: isPortrait=${isPortrait} via [${orientationSource}]`);
 
     const correctedW = isPortrait ? shortSide : longSide;
     const correctedH = isPortrait ? longSide  : shortSide;

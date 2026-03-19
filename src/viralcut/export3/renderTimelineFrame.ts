@@ -101,10 +101,6 @@ function isBitmapAlreadyRotatedByBrowser(
  *
  * Uses live bitmap dimensions compared to stored meta for authoritative detection.
  * This prevents double-rotation bugs where probe and render-time behavior differ.
- *
- * Additional safety fallback: if metadata says rotationDeg=0 but the canvas is
- * portrait and the bitmap arrives landscape while displayDims say portrait,
- * apply 90° manually (handles cases where rotation probe ran after export started).
  */
 function resolveRotation(
   frame: ImageBitmap,
@@ -112,53 +108,32 @@ function resolveRotation(
   canvasH: number,
   meta: VideoFrameMeta | null
 ): 0 | 90 {
-  const canvasIsPortrait  = canvasH > canvasW;
-  const bitmapIsPortrait  = frame.height > frame.width;
-
   if (meta) {
-    const rDeg = meta.rotationDeg ?? 0;
-    const displayIsPortrait =
-      (meta.displayHeight ?? 0) > (meta.displayWidth ?? 0);
+    const rDeg = meta.rotationDeg;
 
     if (rDeg === 90 || rDeg === 270) {
+      // Check if THIS bitmap was already rotated by the browser at render time
       const alreadyRotated = isBitmapAlreadyRotatedByBrowser(frame, meta);
 
-      console.log('[ViralCut][render] resolveRotation quarter-turn', {
-        rotationDeg: rDeg,
-        frameWidth: frame.width, frameHeight: frame.height,
-        canvasW, canvasH,
-        encodedWidth: meta.encodedWidth, encodedHeight: meta.encodedHeight,
-        displayWidth: meta.displayWidth, displayHeight: meta.displayHeight,
-        alreadyRotated,
-      });
-
-      return alreadyRotated ? 0 : 90;
+      if (alreadyRotated) {
+        // Browser rotated the bitmap — it's already portrait, draw as-is
+        return 0;
+      } else {
+        // Browser did NOT rotate — bitmap is still in encoded (landscape) orientation
+        // We must rotate manually to achieve portrait on the canvas
+        return 90;
+      }
     }
 
-    // Safety fallback: metadata says rotationDeg=0, but canvas is portrait,
-    // bitmap arrived landscape, and display dimensions confirm portrait.
-    // This can happen when the export started before probeAndPatchRotation finished.
-    if (rDeg === 0 && canvasIsPortrait && !bitmapIsPortrait && displayIsPortrait) {
-      console.log('[ViralCut][render] safety rotation fallback applied', {
-        rotationDeg: rDeg,
-        frameWidth: frame.width, frameHeight: frame.height,
-        canvasW, canvasH,
-        displayWidth: meta.displayWidth, displayHeight: meta.displayHeight,
-      });
-      return 90;
-    }
-
+    // rotationDeg = 0 or 180: no 90° rotation needed
     return 0;
   }
 
-  // ── Generic fallback when meta is missing ──────────────────
-  if (bitmapIsPortrait !== canvasIsPortrait) {
-    console.log('[ViralCut][render] generic orientation fallback applied', {
-      frameWidth: frame.width, frameHeight: frame.height, canvasW, canvasH,
-    });
-    return 90;
-  }
-
+  // ── Fallback: orientation-based heuristic ──────────────────
+  // Used when meta is unavailable (natively portrait videos, etc.)
+  const bitmapIsPortrait = frame.height > frame.width;
+  const canvasIsPortrait = canvasH > canvasW;
+  if (bitmapIsPortrait !== canvasIsPortrait) return 90;
   return 0;
 }
 
