@@ -89,7 +89,7 @@ const CategoryCard = ({ cat }: { cat: VideoCategory }) => {
         {/* Emoji + label + badge — grows to fill available space */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-xl shrink-0">{cat.emoji}</span>
-          <span className="font-semibold text-sm truncate">{cat.label}</span>
+          <span className="font-semibold text-sm leading-tight">{cat.label}</span>
           <Badge variant="outline" className={`text-xs shrink-0 ${cat.color}`}>
             {cat.driveId ? "Disponível" : "Em breve"}
           </Badge>
