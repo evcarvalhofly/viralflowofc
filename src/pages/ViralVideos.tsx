@@ -85,24 +85,26 @@ const CategoryCard = ({ cat }: { cat: VideoCategory }) => {
 
   return (
     <Card className="border-border/60 overflow-hidden">
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">
-          <span className="text-xl">{cat.emoji}</span>
-          <span className="font-semibold text-sm">{cat.label}</span>
-          <Badge variant="outline" className={`text-xs ${cat.color}`}>
+      <div className="flex flex-wrap items-center gap-3 p-4">
+        {/* Emoji + label + badge — grows to fill available space */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-xl shrink-0">{cat.emoji}</span>
+          <span className="font-semibold text-sm truncate">{cat.label}</span>
+          <Badge variant="outline" className={`text-xs shrink-0 ${cat.color}`}>
             {cat.driveId ? "Disponível" : "Em breve"}
           </Badge>
         </div>
 
+        {/* Button — never shrinks below its natural width */}
         {folderUrl ? (
-          <a href={folderUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="outline" className="gap-2 text-xs">
+          <a href={folderUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+            <Button size="sm" variant="outline" className="gap-2 text-xs whitespace-nowrap">
               <FolderOpen className="h-3.5 w-3.5" />
               Ver vídeos
             </Button>
           </a>
         ) : (
-          <Button size="sm" variant="outline" className="gap-2 text-xs" disabled>
+          <Button size="sm" variant="outline" className="gap-2 text-xs whitespace-nowrap shrink-0" disabled>
             <FolderOpen className="h-3.5 w-3.5" />
             Em breve
           </Button>
