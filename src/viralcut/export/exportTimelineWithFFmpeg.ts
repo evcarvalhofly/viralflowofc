@@ -85,15 +85,27 @@ export async function exportTimelineWithFFmpeg(
     .flatMap((t) => t.items);
 
   const firstMf = mediaMap.get(allVideoItems[0]?.mediaId ?? '');
-  const srcW = firstMf?.width ?? 1920;
-  const srcH = firstMf?.height ?? 1080;
+
+  // Use displayWidth/displayHeight which already account for rotation detected at import.
+  // Fall back to width/height, then to project dimensions.
+  const srcW = firstMf?.displayWidth ?? firstMf?.width ?? cleanedProject.width ?? 1920;
+  const srcH = firstMf?.displayHeight ?? firstMf?.height ?? cleanedProject.height ?? 1080;
+  const rotationDeg = (firstMf?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
+
   const targetLongSide = opts.resolution === '1080p' ? 1920 : 1280;
   const exportScale = Math.min(targetLongSide / Math.max(srcW, srcH), 1);
-  const outW = Math.max(2, Math.round((srcW * exportScale) / 2) * 2);
-  const outH = Math.max(2, Math.round((srcH * exportScale) / 2) * 2);
+
+  let outW = Math.max(2, Math.round((srcW * exportScale) / 2) * 2);
+  let outH = Math.max(2, Math.round((srcH * exportScale) / 2) * 2);
+
+  // If the source is portrait but the computed output is landscape, swap to preserve orientation.
+  if (srcH > srcW && outW > outH) {
+    [outW, outH] = [outH, outW];
+  }
+
   const FPS = opts.fps;
 
-  exportLog(`Resolução: ${outW}×${outH} @ ${FPS}fps | ${allVideoItems.length} clips de vídeo`);
+  exportLog(`Resolução: ${outW}×${outH} @ ${FPS}fps | Rotação: ${rotationDeg}° | ${allVideoItems.length} clips de vídeo`);
 
   // ── 4. Load FFmpeg ─────────────────────────────────────────
   onProgress(6, 'Carregando FFmpeg…');
