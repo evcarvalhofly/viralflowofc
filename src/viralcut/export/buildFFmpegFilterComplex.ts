@@ -41,7 +41,8 @@ export function buildFFmpegFilterComplex(
   project: Project,
   inputMap: Map<string, FFmpegInputEntry>,
   outW: number,
-  outH: number
+  outH: number,
+  rotationDeg: 0 | 90 | 180 | 270 = 0
 ): FilterComplexResult {
   const parts: string[] = [];
   const segments: Segment[] = [];
@@ -106,6 +107,15 @@ export function buildFFmpegFilterComplex(
 
     // trim to [mediaStart, mediaEnd]
     vChain += `trim=start=${mediaStart.toFixed(6)}:end=${mediaEnd.toFixed(6)},setpts=PTS-STARTPTS`;
+
+    // Rotate if the source file has rotation metadata (transpose bakes the rotation into frames)
+    if (rotationDeg === 90) {
+      vChain += ',transpose=1'; // 90° clockwise
+    } else if (rotationDeg === 270) {
+      vChain += ',transpose=2'; // 90° counter-clockwise
+    } else if (rotationDeg === 180) {
+      vChain += ',hflip,vflip';
+    }
 
     // scale to output resolution
     vChain += `,scale=${outW}:${outH}:force_original_aspect_ratio=decrease,pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2`;
