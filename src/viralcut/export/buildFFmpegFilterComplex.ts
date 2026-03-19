@@ -41,7 +41,8 @@ export function buildFFmpegFilterComplex(
   project: Project,
   inputMap: Map<string, FFmpegInputEntry>,
   outW: number,
-  outH: number
+  outH: number,
+  rotationDeg: 0 | 90 | 180 | 270 = 0
 ): FilterComplexResult {
   const parts: string[] = [];
   const segments: Segment[] = [];
