@@ -343,20 +343,87 @@ const ViralCut = () => {
   }, []);
 
   // ── Import media ──────────────────────────────────────────
+  const [transcodeStatus, setTranscodeStatus] = useState<string | null>(null);
+
   const handleImport = useCallback(async (files: FileList) => {
     for (const file of Array.from(files)) {
-      const url = URL.createObjectURL(file);
-      // Fast metadata — no FFmpeg, never blocks the UI
+      const isVideo = file.type.startsWith('video/');
+
+      // ── Fast metadata (no FFmpeg) ─────────────────────────
       const meta = await getMediaMetadata(file);
-      const { duration, width, height, encodedWidth, encodedHeight, displayWidth, displayHeight, rotationDeg, orientation } = meta;
-      const thumbnail = await generateThumbnail(file);
-      const type: MediaFile['type'] = file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'image';
+      const { duration: rawDuration, encodedWidth, encodedHeight } = meta;
+
+      // ── Probe rotation first so we know display orientation ──
+      let rotationDeg: 0 | 90 | 180 | 270 = 0;
+      if (isVideo) {
+        try { rotationDeg = await probeVideoRotation(file); } catch (_) { /* keep 0 */ }
+      }
+
+      // ── Transcode high-res videos (> 1920px on any side) ──────────
+      let activeFile = file;
+      let activeUrl = URL.createObjectURL(file);
+      let finalWidth = meta.width;
+      let finalHeight = meta.height;
+      let finalDisplayWidth = meta.displayWidth;
+      let finalDisplayHeight = meta.displayHeight;
+      let finalRotationDeg: 0 | 90 | 180 | 270 = rotationDeg;
+
+      if (isVideo && encodedWidth && encodedHeight) {
+        const displayW = rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth;
+        const displayH = rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight;
+        const needsDownscale = displayW > 1920 || displayH > 1920;
+
+        if (needsDownscale) {
+          URL.revokeObjectURL(activeUrl); // will be replaced
+          setTranscodeStatus(`Otimizando "${file.name.slice(0, 30)}"…`);
+          try {
+            const result = await transcodeHighResVideo(
+              file, encodedWidth, encodedHeight, rotationDeg,
+              (msg) => setTranscodeStatus(msg),
+            );
+            activeFile = result.file;
+            activeUrl = result.url;
+            finalWidth = result.width;
+            finalHeight = result.height;
+            finalDisplayWidth = result.width;
+            finalDisplayHeight = result.height;
+            // Rotation is baked in — no more metadata rotation
+            finalRotationDeg = 0;
+          } catch (err) {
+            console.error('[ViralCut][transcode] Failed, using original:', err);
+            activeUrl = URL.createObjectURL(file);
+          } finally {
+            setTranscodeStatus(null);
+          }
+        }
+      }
+
+      // Re-read duration from the final file if it was transcoded
+      let duration = rawDuration;
+      if (activeFile !== file) {
+        try {
+          const newMeta = await getMediaMetadata(activeFile);
+          if (newMeta.duration > 0) duration = newMeta.duration;
+        } catch (_) { /* keep original */ }
+      }
+
+      const thumbnail = await generateThumbnail(activeFile);
+      const type: MediaFile['type'] = isVideo ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'image';
+
+      const orientation: MediaFile['orientation'] =
+        finalDisplayWidth && finalDisplayHeight
+          ? finalDisplayHeight > finalDisplayWidth ? 'portrait'
+            : finalDisplayWidth > finalDisplayHeight ? 'landscape'
+            : 'square'
+          : undefined;
+
       const mf: MediaFile = {
-        id: createId(), name: file.name, type, file, url, duration, thumbnail,
-        width, height,
-        encodedWidth, encodedHeight,
-        displayWidth, displayHeight,
-        rotationDeg, orientation,
+        id: createId(), name: file.name, type,
+        file: activeFile, url: activeUrl, duration, thumbnail,
+        width: finalWidth, height: finalHeight,
+        encodedWidth: finalDisplayWidth, encodedHeight: finalDisplayHeight,
+        displayWidth: finalDisplayWidth, displayHeight: finalDisplayHeight,
+        rotationDeg: finalRotationDeg, orientation,
       };
 
       // ── Add to state immediately so the editor opens right away ──
@@ -384,8 +451,8 @@ const ViralCut = () => {
         capturedAspectRatio = p.aspectRatio;
 
         let orientationPatch: Partial<Project> = {};
-        const orientW = displayWidth ?? width;
-        const orientH = displayHeight ?? height;
+        const orientW = finalDisplayWidth ?? finalWidth;
+        const orientH = finalDisplayHeight ?? finalHeight;
         if (isFirstVideo && orientW && orientH) {
           const resolved = resolveAspectRatioFromMedia(orientW, orientH);
           orientationPatch = {
@@ -417,8 +484,9 @@ const ViralCut = () => {
         return { ...p, ...orientationPatch, tracks: newTracks };
       }, { pushHistory: true });
 
-      // ── Background probe: refine rotation metadata without blocking ──
-      if (type === 'video') {
+      // ── Background probe: refine rotation if NOT transcoded ──────
+      // (transcoded videos already have rotation baked in — skip probe)
+      if (type === 'video' && activeFile === file) {
         probeAndPatchRotation(
           file, mf.id, encodedWidth, encodedHeight,
           setMedia, updateProject, resolveAspectRatioFromMedia,
