@@ -336,18 +336,8 @@ const ViralCut = () => {
         return { ...p, ...orientationPatch, tracks: newTracks };
       }, { pushHistory: true });
 
-      // ── Background probe: refine rotation metadata without blocking ──
-      // The promise is stored so handleExport can await it before starting export.
-      if (type === 'video') {
-        const probePromise = probeAndPatchRotation(
-          file, mf.id, encodedWidth, encodedHeight,
-          setMedia, updateProject, resolveAspectRatioFromMedia,
-          capturedIsFirstVideo, capturedAspectRatio,
-          probedMetaRef,
-        );
-        pendingProbesRef.current.set(mf.id, probePromise);
-        probePromise.finally(() => pendingProbesRef.current.delete(mf.id));
-      }
+      // No background probe needed — browser already returns
+      // display-corrected dimensions from video.videoWidth/videoHeight.
     }
   }, [updateProject, resolveAspectRatioFromMedia]);
 
