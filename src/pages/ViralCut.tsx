@@ -139,6 +139,10 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
 // ── Background probe: refines rotationDeg after import ───────────────
 // Called AFTER the MediaFile is already added to state so the UI is responsive.
 // Returns a Promise so handleExport can await it before starting export.
+//
+// KEY: probedMetaRef is written SYNCHRONOUSLY before setMedia() is called.
+// This ensures handleExport can read authoritative rotation data immediately
+// after Promise.allSettled(pendingProbes) — without waiting for React to flush.
 async function probeAndPatchRotation(
   file: File,
   mediaId: string,
@@ -149,6 +153,12 @@ async function probeAndPatchRotation(
   resolveAspectRatioFromMedia: (w?: number, h?: number) => { aspectRatio: Project['aspectRatio']; projectWidth: number; projectHeight: number },
   isFirstVideo: boolean,
   currentAspectRatio: Project['aspectRatio'],
+  probedMetaRef: React.MutableRefObject<Map<string, {
+    rotationDeg: 0 | 90 | 180 | 270;
+    displayWidth?: number;
+    displayHeight?: number;
+    orientation?: 'portrait' | 'landscape' | 'square';
+  }>>,
 ): Promise<void> {
   let rotationDeg: 0 | 90 | 180 | 270 = 0;
   try {
@@ -172,7 +182,11 @@ async function probeAndPatchRotation(
 
   console.log('[ViralCut][probe] rotation resolved', { mediaId, rotationDeg, displayWidth, displayHeight, orientation });
 
-  // Always patch MediaFile with definitive metadata
+  // ── Write to mutable ref FIRST (synchronous, no React flush lag) ──
+  // handleExport reads this map directly after awaiting pendingProbes.
+  probedMetaRef.current.set(mediaId, { rotationDeg, displayWidth, displayHeight, orientation });
+
+  // ── Then update React state for UI display ──
   setMedia((prev) =>
     prev.map((m) =>
       m.id === mediaId
@@ -216,11 +230,23 @@ const ViralCut = () => {
   // ensuring rotationDeg is always set before orientation is resolved.
   const pendingProbesRef = useRef<Map<string, Promise<void>>>(new Map());
 
+  // ── Probed metadata override map ──────────────────────────
+  // Written SYNCHRONOUSLY inside probeAndPatchRotation when the probe
+  // resolves. handleExport reads this map DIRECTLY after awaiting probes,
+  // bypassing the React state flush lag that caused the orientation race.
+  // Key: mediaId  Value: patched rotation/display metadata
+  const probedMetaRef = useRef<Map<string, {
+    rotationDeg: 0 | 90 | 180 | 270;
+    displayWidth?: number;
+    displayHeight?: number;
+    orientation?: 'portrait' | 'landscape' | 'square';
+  }>>(new Map());
+
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
   const [media, setMedia] = useState<MediaFile[]>([]);
-  // Ref kept in sync with media state — used inside handleExport to read
-  // the freshest media values after pending probes have updated state.
+  // Ref kept in sync with media state — used as base for building freshMedia
+  // in handleExport (patched with probedMetaRef overrides to avoid state lag).
   const mediaRef = useRef<MediaFile[]>([]);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -435,6 +461,7 @@ const ViralCut = () => {
           file, mf.id, encodedWidth, encodedHeight,
           setMedia, updateProject, resolveAspectRatioFromMedia,
           capturedIsFirstVideo, capturedAspectRatio,
+          probedMetaRef,
         );
         pendingProbesRef.current.set(mf.id, probePromise);
         probePromise.finally(() => pendingProbesRef.current.delete(mf.id));
@@ -643,7 +670,7 @@ const ViralCut = () => {
   }, [currentTime, updateProject]);
   splitAllRef.current = handleSplitAllAtPlayhead;
 
-  // ── Export – Canvas + MediaRecorder pipeline ──────────────
+  // ── Export ────────────────────────────────────────────────
   const exportAbortRef = useRef<AbortController | null>(null);
 
   const handleExport = useCallback(async (opts: ExportOptions) => {
@@ -656,8 +683,6 @@ const ViralCut = () => {
 
     try {
       // ── Wait for all pending rotation probes before exporting ──
-      // This ensures rotationDeg / displayWidth / displayHeight are set
-      // on all MediaFile entries before the export pipeline reads them.
       const pendingProbes = [...pendingProbesRef.current.values()];
       if (pendingProbes.length > 0) {
         setExportState({ status: 'preparing', progress: 2, label: 'Aguardando análise de rotação…' });
@@ -666,11 +691,37 @@ const ViralCut = () => {
         console.log('[ViralCut][export] All rotation probes complete.');
       }
 
-      // ── Get fresh media state after probes complete ──
-      // React state may have been updated by probeAndPatchRotation — we need
-      // a snapshot that reflects the patched rotationDeg values.
-      // We do this by reading from a ref that stays in sync with state.
-      const freshMedia = mediaRef.current;
+      // ── Build freshMedia: start from mediaRef snapshot, then apply
+      // probedMetaRef overrides synchronously.
+      //
+      // WHY: After Promise.allSettled(pendingProbes), probeAndPatchRotation
+      // has already written final metadata to probedMetaRef.current.
+      // However React's setMedia() inside the probe is ASYNC — mediaRef.current
+      // may not yet reflect the patched rotationDeg values.
+      //
+      // Reading probedMetaRef directly guarantees we get the correct
+      // rotationDeg/displayWidth/displayHeight without any flush lag.
+      const freshMedia = mediaRef.current.map((m) => {
+        const patch = probedMetaRef.current.get(m.id);
+        if (!patch) return m;
+        return {
+          ...m,
+          rotationDeg: patch.rotationDeg,
+          displayWidth: patch.displayWidth,
+          displayHeight: patch.displayHeight,
+          orientation: patch.orientation,
+          width: patch.displayWidth ?? m.width,
+          height: patch.displayHeight ?? m.height,
+        };
+      });
+
+      console.log('[ViralCut][export] freshMedia rotation overrides applied:', freshMedia.map((m) => ({
+        id: m.id,
+        rotationDeg: m.rotationDeg,
+        displayWidth: m.displayWidth,
+        displayHeight: m.displayHeight,
+        orientation: m.orientation,
+      })));
 
       const blob = await exportProjectWithMediaBunny(
         project,
