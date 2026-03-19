@@ -1120,6 +1120,18 @@ const ViralCut = () => {
         onChange={(e) => { if (e.target.files?.[0]) { persistence.importJson(e.target.files[0]); e.target.value = ''; } }} />
 
       <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
+
+      {/* Transcode progress overlay */}
+      {transcodeStatus && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-sm gap-3 px-6">
+          <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center animate-pulse">
+            <Wand2 className="h-8 w-8 text-primary" />
+          </div>
+          <p className="text-base font-bold text-foreground text-center">Otimizando vídeo HD…</p>
+          <p className="text-sm text-muted-foreground text-center">{transcodeStatus}</p>
+          <p className="text-xs text-muted-foreground/60 text-center">Redimensionando para resolução de exportação. Aguarde…</p>
+        </div>
+      )}
     </div>
   );
 };
