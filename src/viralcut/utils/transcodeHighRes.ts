@@ -156,8 +156,11 @@ export async function transcodeHighResVideo(
   onProgress?.('Finalizando…');
 
   const data = await ff.readFile(outputName);
-  const uint8 = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
-  const blob = new Blob([uint8.buffer.slice(0)], { type: 'video/mp4' });
+  // FileData can be Uint8Array | string; we need a plain ArrayBuffer for Blob
+  const rawBytes = typeof data === 'string'
+    ? new TextEncoder().encode(data)
+    : new Uint8Array(data.buffer instanceof ArrayBuffer ? data.buffer : data.buffer.slice(0));
+  const blob = new Blob([rawBytes], { type: 'video/mp4' });
   const transcodedFile = new File([blob], file.name.replace(/\.[^.]+$/, '') + '_hd.mp4', { type: 'video/mp4' });
   const url = URL.createObjectURL(transcodedFile);
 
