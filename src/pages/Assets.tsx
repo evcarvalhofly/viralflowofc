@@ -1391,7 +1391,6 @@ const AssetCard = ({
   favCount?: number;
   showCount?: boolean;
 }) => {
-  const [playing, setPlaying] = useState(false);
   const viewUrl     = `https://drive.google.com/file/d/${asset.driveId}/view`;
   const downloadUrl = `https://drive.google.com/uc?export=download&id=${asset.driveId}`;
 
@@ -1402,8 +1401,6 @@ const AssetCard = ({
         <VideoDriveFrame
           driveId={asset.driveId}
           title={asset.label}
-          playing={playing}
-          onPlay={() => setPlaying(true)}
         />
         <div className="absolute top-2 right-2 z-10 flex flex-col items-center gap-0.5">
           <button
