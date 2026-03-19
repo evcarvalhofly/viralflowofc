@@ -25,7 +25,7 @@
 // ============================================================
 
 import { Project, TrackItem } from '../types';
-import { drawTextItemOnCanvas } from '../export2/textLayout';
+import { drawTextItemOnCanvas } from './textLayout';
 import { VideoFrameMeta } from './videoFrameCache';
 
 export interface FrameRenderAssets {
