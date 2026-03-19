@@ -1339,49 +1339,40 @@ const effectGroups: EffectGroup[] = [
 const thumbUrl = (id: string) =>
   `https://drive.google.com/thumbnail?id=${id}&sz=w640`;
 
-/* ── Unified Video Frame (9:16, crop-center para landscape) ── */
+/* ── Unified Video Frame (9:16) ── */
 const VideoDriveFrame = ({
   driveId,
   title,
-  playing,
-  onPlay,
 }: {
   driveId: string;
   title: string;
-  playing: boolean;
-  onPlay: () => void;
+  playing?: boolean;
+  onPlay?: () => void;
 }) => {
-  const previewUrl = `https://drive.google.com/file/d/${driveId}/preview`;
   const thumbnail  = thumbUrl(driveId);
+  const viewUrl    = `https://drive.google.com/file/d/${driveId}/view`;
+
+  const handlePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(viewUrl, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div
       className="relative w-full overflow-hidden bg-black cursor-pointer group rounded-t-xl"
       style={{ aspectRatio: "9/16" }}
-      onClick={(e) => { e.stopPropagation(); if (!playing) onPlay(); }}
+      onClick={handlePlay}
     >
-      {playing ? (
-        <iframe
-          src={previewUrl}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-0"
-          style={{ width: "190%", height: "100%" }}
-          allow="autoplay"
-          title={title}
-        />
-      ) : (
-        <>
-          <img
-            src={thumbnail}
-            alt={title}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
-            <div className="rounded-full bg-background/90 shadow-lg p-3">
-              <Play className="text-primary fill-primary h-5 w-5" />
-            </div>
-          </div>
-        </>
-      )}
+      <img
+        src={thumbnail}
+        alt={title}
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+      <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+        <div className="rounded-full bg-background/90 shadow-lg p-3">
+          <Play className="text-primary fill-primary h-5 w-5" />
+        </div>
+      </div>
     </div>
   );
 };
