@@ -1,5 +1,5 @@
 // ============================================================
-// ViralCut – Core Types (Expanded with all features)
+// ViralCut – Core Types
 // ============================================================
 
 export type MediaType = 'video' | 'audio' | 'image';
@@ -12,18 +12,10 @@ export interface MediaFile {
   url: string;
   duration: number;
   thumbnail?: string;
-  // Visual (display) dimensions – use these for aspect ratio & rendering decisions
+  // Visual dimensions from browser (already rotation-corrected)
   width?: number;
   height?: number;
-  // Raw encoded dimensions straight from the video element
-  encodedWidth?: number;
-  encodedHeight?: number;
-  // Resolved visual dimensions after applying rotation (= displayWidth × displayHeight)
-  displayWidth?: number;
-  displayHeight?: number;
-  // Rotation stored in container metadata (cellphone footage)
-  rotationDeg?: 0 | 90 | 180 | 270;
-  // Visual orientation derived from displayWidth/displayHeight
+  // Orientation locked at import time — single source of truth for export
   orientation?: 'portrait' | 'landscape' | 'square';
 }
 
@@ -173,7 +165,6 @@ export const DEFAULT_AUDIO_DETAILS: AudioDetails = {
 export const DEFAULT_TEXT_DETAILS: TextDetails = {
   text: 'Texto aqui',
   // fontSize is stored as % of canvas HEIGHT (e.g. 3.5 = 3.5% of height)
-  // This ensures preview and exported video always match exactly
   fontSize: 3.5,
   fontFamily: 'Inter, sans-serif',
   color: '#ffffff',

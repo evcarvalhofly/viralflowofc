@@ -1,41 +1,34 @@
 // ============================================================
-// ViralCut Export3 – Video Frame Cache (v6 — clean)
+// ViralCut Export3 – Video Frame Cache (v7 — orientation-free)
 //
-// SINGLE SOURCE OF TRUTH: video.videoWidth / video.videoHeight
+// Single source of truth: video.videoWidth / video.videoHeight
+// from the browser decoder — already display-correct.
 //
-// The browser always returns visually-correct display dimensions
-// from videoWidth/videoHeight — rotation metadata is already applied
-// by the browser's decoder. We NEVER read rotationDeg here.
-//
-// No FFmpeg. No metadata. No rotation heuristics.
+// No rotation. No metadata. No FFmpeg.
 // ============================================================
 
-const SEEK_EPSILON_SEC = 0.001;
-const SEEK_TIMEOUT_MS  = 5000;
+const SEEK_EPSILON_SEC   = 1 / 120;   // ~8ms — skip seek if within this range
+const FRAME_REUSE_EPSILON = 1 / 60;   // ~16ms — reuse cached bitmap if within this range
+const SEEK_TIMEOUT_MS    = 8000;
 
-export interface VideoFrameMeta {
-  displayWidth:  number;   // Browser-reported, already rotation-corrected
-  displayHeight: number;
-}
-
-interface VideoEntry {
-  el:               HTMLVideoElement;
-  lastDecodedTime:  number;
-  lastBitmap:       ImageBitmap | null;
-  meta:             VideoFrameMeta;
+interface CachedFrame {
+  bitmap: ImageBitmap | null;
+  time: number;
 }
 
 export class VideoFrameCache {
-  private cache = new Map<string, VideoEntry>();
+  private videos     = new Map<string, HTMLVideoElement>();
+  private frameCache = new Map<string, CachedFrame>();
 
-  async prepare(mediaId: string, url: string): Promise<void> {
-    if (this.cache.has(mediaId)) return;
+  async prepare(id: string, url: string): Promise<void> {
+    if (this.videos.has(id)) return;
 
     const el = document.createElement('video');
+    el.crossOrigin = 'anonymous';
     el.muted       = true;
     el.playsInline = true;
-    el.crossOrigin = 'anonymous';
     el.preload     = 'auto';
+    el.src         = url;
 
     await new Promise<void>((resolve) => {
       let settled = false;
@@ -48,77 +41,19 @@ export class VideoFrameCache {
       const timer = setTimeout(done, 15_000);
       el.addEventListener('canplaythrough', done, { once: true });
       el.addEventListener('canplay',        done, { once: true });
+      el.addEventListener('loadeddata',     done, { once: true });
       el.addEventListener('error',          done, { once: true });
-      el.src = url;
       el.load();
     });
 
-    // Trust browser completely — videoWidth/videoHeight are already display-correct
-    const displayWidth  = el.videoWidth  || 0;
-    const displayHeight = el.videoHeight || 0;
-
-    const meta: VideoFrameMeta = { displayWidth, displayHeight };
-
-    console.log('[ViralCut][frame-cache] prepared', { mediaId, displayWidth, displayHeight });
-
-    this.cache.set(mediaId, { el, lastDecodedTime: -1, lastBitmap: null, meta });
-  }
-
-  getMeta(mediaId: string): VideoFrameMeta | null {
-    return this.cache.get(mediaId)?.meta ?? null;
-  }
-
-  async getFrame(
-    mediaId:      string,
-    timeInMedia:  number,
-  ): Promise<ImageBitmap | null> {
-    const entry = this.cache.get(mediaId);
-    if (!entry) return null;
-
-    const { el } = entry;
-    const targetTime = Math.max(
-      0,
-      Math.min(timeInMedia, Math.max(0, (el.duration || 9999) - 0.001))
+    this.videos.set(id, el);
+    console.log('[VideoFrameCache] prepared', id,
+      el.videoWidth, 'x', el.videoHeight,
+      el.videoHeight > el.videoWidth ? 'portrait' : 'landscape'
     );
-
-    // Reuse cached bitmap when time hasn't changed
-    if (
-      entry.lastBitmap !== null &&
-      entry.lastDecodedTime >= 0 &&
-      Math.abs(entry.lastDecodedTime - targetTime) <= SEEK_EPSILON_SEC
-    ) {
-      return entry.lastBitmap;
-    }
-
-    const needsSeek =
-      entry.lastDecodedTime < 0 ||
-      Math.abs(el.currentTime - targetTime) > SEEK_EPSILON_SEC ||
-      el.readyState < 2;
-
-    if (needsSeek) {
-      await this._seekTo(el, targetTime);
-    }
-
-    if (el.videoWidth === 0 || el.videoHeight === 0) return null;
-
-    let bitmap: ImageBitmap | null = null;
-    try {
-      bitmap = await createImageBitmap(el);
-    } catch {
-      return null;
-    }
-
-    if (entry.lastBitmap) {
-      try { entry.lastBitmap.close(); } catch { /* ignore */ }
-    }
-
-    entry.lastDecodedTime = targetTime;
-    entry.lastBitmap      = bitmap;
-
-    return bitmap;
   }
 
-  private _seekTo(el: HTMLVideoElement, time: number): Promise<void> {
+  private waitSeek(el: HTMLVideoElement, time: number): Promise<void> {
     return new Promise<void>((resolve) => {
       if (Math.abs(el.currentTime - time) <= SEEK_EPSILON_SEC && el.readyState >= 2) {
         resolve();
@@ -130,26 +65,59 @@ export class VideoFrameCache {
         if (done) return;
         done = true;
         clearTimeout(timer);
-        el.removeEventListener('seeked', onSeeked);
-        el.removeEventListener('error',  onError);
+        el.removeEventListener('seeked', finish);
+        el.removeEventListener('error',  finish);
         resolve();
       };
 
-      const timer   = setTimeout(finish, SEEK_TIMEOUT_MS);
-      const onSeeked = () => finish();
-      const onError  = () => finish();
-
-      el.addEventListener('seeked', onSeeked, { once: true });
-      el.addEventListener('error',  onError,  { once: true });
+      const timer = setTimeout(finish, SEEK_TIMEOUT_MS);
+      el.addEventListener('seeked', finish, { once: true });
+      el.addEventListener('error',  finish, { once: true });
       el.currentTime = time;
     });
   }
 
+  async getFrame(id: string, time: number): Promise<ImageBitmap | null> {
+    const el = this.videos.get(id);
+    if (!el) return null;
+
+    // Reuse cached bitmap when time hasn't changed significantly
+    const prev = this.frameCache.get(id);
+    if (prev && Math.abs(prev.time - time) <= FRAME_REUSE_EPSILON) {
+      return prev.bitmap;
+    }
+
+    const targetTime = Math.max(0, Math.min(time, Math.max(0, (el.duration || 9999) - 0.001)));
+    await this.waitSeek(el, targetTime);
+
+    if (el.videoWidth === 0 || el.videoHeight === 0) return null;
+
+    let bitmap: ImageBitmap | null = null;
+    try {
+      bitmap = await createImageBitmap(el);
+    } catch {
+      return null;
+    }
+
+    // Release old bitmap
+    const old = this.frameCache.get(id);
+    if (old?.bitmap) {
+      try { old.bitmap.close(); } catch { /* ignore */ }
+    }
+
+    this.frameCache.set(id, { bitmap, time: targetTime });
+    return bitmap;
+  }
+
   dispose() {
-    this.cache.forEach(({ el, lastBitmap }) => {
-      try { el.pause(); el.src = ''; } catch { /* ignore */ }
-      if (lastBitmap) { try { lastBitmap.close(); } catch { /* ignore */ } }
+    this.frameCache.forEach(({ bitmap }) => {
+      try { bitmap?.close(); } catch { /* ignore */ }
     });
-    this.cache.clear();
+    this.frameCache.clear();
+
+    this.videos.forEach((el) => {
+      try { el.pause(); el.removeAttribute('src'); el.load(); } catch { /* ignore */ }
+    });
+    this.videos.clear();
   }
 }
