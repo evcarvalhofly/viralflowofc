@@ -165,7 +165,7 @@ export async function exportTimelineWithFFmpeg(
 
   let filterResult;
   try {
-    filterResult = buildFFmpegFilterComplex(cleanedProject, inputMap, outW, outH);
+    filterResult = buildFFmpegFilterComplex(cleanedProject, inputMap, outW, outH, rotationDeg);
   } catch (err: any) {
     throw new Error(`Falha ao construir pipeline: ${err?.message ?? err}`);
   }
