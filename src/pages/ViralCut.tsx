@@ -210,6 +210,12 @@ const ViralCut = () => {
   const autoCutImportRef = useRef<HTMLInputElement>(null);
   const splitAllRef = useRef<(() => void) | null>(null);
 
+  // ── Pending rotation probes ────────────────────────────────
+  // Stores in-flight probeAndPatchRotation promises keyed by mediaId.
+  // handleExport awaits ALL pending probes before starting export,
+  // ensuring rotationDeg is always set before orientation is resolved.
+  const pendingProbesRef = useRef<Map<string, Promise<void>>>(new Map());
+
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
   const [media, setMedia] = useState<MediaFile[]>([]);
