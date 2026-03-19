@@ -138,6 +138,7 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
 
 // ── Background probe: refines rotationDeg after import ───────────────
 // Called AFTER the MediaFile is already added to state so the UI is responsive.
+// Returns a Promise<void> so the export pipeline can await it.
 async function probeAndPatchRotation(
   file: File,
   mediaId: string,
@@ -148,41 +149,68 @@ async function probeAndPatchRotation(
   resolveAspectRatioFromMedia: (w?: number, h?: number) => { aspectRatio: Project['aspectRatio']; projectWidth: number; projectHeight: number },
   isFirstVideo: boolean,
   currentAspectRatio: Project['aspectRatio'],
-) {
+): Promise<void> {
   let rotationDeg: 0 | 90 | 180 | 270 = 0;
+
   try {
     rotationDeg = await probeVideoRotation(file);
   } catch (err) {
-    console.warn('[ViralCut][probe] probeVideoRotation failed, keeping 0', err);
+    console.warn('[ViralCut][probe] probeVideoRotation failed, keeping existing orientation', err);
     return;
   }
 
-  if (rotationDeg === 0) return; // nothing changed
+  const safeEncodedWidth = encodedWidth ?? 0;
+  const safeEncodedHeight = encodedHeight ?? 0;
 
-  const displayWidth = rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth;
-  const displayHeight = rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight;
+  if (!safeEncodedWidth || !safeEncodedHeight) {
+    console.warn('[ViralCut][probe] missing encoded dimensions, skipping patch', {
+      mediaId, encodedWidth, encodedHeight, rotationDeg,
+    });
+    return;
+  }
+
+  const isQuarterTurn = rotationDeg === 90 || rotationDeg === 270;
+  const displayWidth  = isQuarterTurn ? safeEncodedHeight : safeEncodedWidth;
+  const displayHeight = isQuarterTurn ? safeEncodedWidth  : safeEncodedHeight;
+
   const orientation: MediaFile['orientation'] =
-    displayWidth && displayHeight
-      ? displayHeight > displayWidth ? 'portrait'
-        : displayWidth > displayHeight ? 'landscape'
-        : 'square'
-      : undefined;
+    displayHeight > displayWidth ? 'portrait'
+    : displayWidth > displayHeight ? 'landscape'
+    : 'square';
 
-  console.log('[ViralCut][probe] rotation resolved', { mediaId, rotationDeg, displayWidth, displayHeight, orientation });
+  console.log('[ViralCut][probe] resolved', {
+    mediaId, encodedWidth: safeEncodedWidth, encodedHeight: safeEncodedHeight,
+    rotationDeg, displayWidth, displayHeight, orientation,
+  });
 
-  // Patch MediaFile
   setMedia((prev) =>
     prev.map((m) =>
       m.id === mediaId
-        ? { ...m, rotationDeg, displayWidth, displayHeight, width: displayWidth, height: displayHeight, orientation }
+        ? {
+            ...m,
+            encodedWidth: safeEncodedWidth,
+            encodedHeight: safeEncodedHeight,
+            rotationDeg,
+            displayWidth,
+            displayHeight,
+            width: displayWidth,
+            height: displayHeight,
+            orientation,
+          }
         : m
     )
   );
 
-  // Patch project orientation if this was the first video and it wasn't yet correct
-  if (isFirstVideo && displayWidth && displayHeight) {
+  if (isFirstVideo) {
     const resolved = resolveAspectRatioFromMedia(displayWidth, displayHeight);
     if (resolved.aspectRatio !== currentAspectRatio) {
+      console.log('[ViralCut][probe] patching first project orientation', {
+        mediaId,
+        fromAspectRatio: currentAspectRatio,
+        toAspectRatio: resolved.aspectRatio,
+        width: resolved.projectWidth,
+        height: resolved.projectHeight,
+      });
       updateProject((p) => ({
         ...p,
         aspectRatio: resolved.aspectRatio,
