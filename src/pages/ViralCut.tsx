@@ -219,6 +219,9 @@ const ViralCut = () => {
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
   const [media, setMedia] = useState<MediaFile[]>([]);
+  // Ref kept in sync with media state — used inside handleExport to read
+  // the freshest media values after pending probes have updated state.
+  const mediaRef = useRef<MediaFile[]>([]);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
