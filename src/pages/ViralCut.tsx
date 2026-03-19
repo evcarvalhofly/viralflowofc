@@ -651,9 +651,26 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
+      // ── Wait for all pending rotation probes before exporting ──
+      // This ensures rotationDeg / displayWidth / displayHeight are set
+      // on all MediaFile entries before the export pipeline reads them.
+      const pendingProbes = [...pendingProbesRef.current.values()];
+      if (pendingProbes.length > 0) {
+        setExportState({ status: 'preparing', progress: 2, label: 'Aguardando análise de rotação…' });
+        console.log(`[ViralCut][export] Waiting for ${pendingProbes.length} pending rotation probe(s)…`);
+        await Promise.allSettled(pendingProbes);
+        console.log('[ViralCut][export] All rotation probes complete.');
+      }
+
+      // ── Get fresh media state after probes complete ──
+      // React state may have been updated by probeAndPatchRotation — we need
+      // a snapshot that reflects the patched rotationDeg values.
+      // We do this by reading from a ref that stays in sync with state.
+      const freshMedia = mediaRef.current;
+
       const blob = await exportProjectWithMediaBunny(
         project,
-        media,
+        freshMedia,
         { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
         (progress, label) => setExportState({ status: 'encoding', progress, label }),
         abortCtrl.signal
@@ -678,7 +695,7 @@ const ViralCut = () => {
       console.error('[ViralCut] Export error:', err);
       setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${err?.message ?? 'Tente novamente'}` });
     }
-  }, [project, media, isMobile]);
+  }, [project, isMobile]);
 
   // ── Derived selection ─────────────────────────────────────
   const selectedItem = useMemo(
