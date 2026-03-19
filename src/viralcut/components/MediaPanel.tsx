@@ -199,10 +199,11 @@ export function MediaPanel({
                 <div
                   className="mt-2 rounded px-2 py-1 text-center truncate"
                   style={{
-                    fontSize: Math.min(preset.fontSize / 4, 14),
+                    fontSize: preset.label === 'Título' ? 18 : preset.label === 'Destaque' ? 16 : preset.label === 'Subtítulo' ? 14 : 13,
                     color: preset.color,
                     backgroundColor: (preset as any).backgroundColor || 'transparent',
                     fontFamily: preset.fontFamily,
+                    fontWeight: 'bold',
                   }}
                 >
                   {preset.label}
