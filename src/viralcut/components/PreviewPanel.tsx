@@ -374,8 +374,8 @@ export function PreviewPanel({
       // Valid frame available — draw it
       const vd = activeVideoItem.item.videoDetails;
       const mf = activeVideoItem.mediaFile;
-      const vW = mf?.displayWidth || v.videoWidth;
-      const vH = mf?.displayHeight || v.videoHeight;
+      const vW = mf?.width || v.videoWidth;
+      const vH = mf?.height || v.videoHeight;
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.save();
