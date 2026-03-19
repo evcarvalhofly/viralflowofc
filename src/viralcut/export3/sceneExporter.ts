@@ -149,6 +149,23 @@ export async function exportScene(
       }
     }
 
+    // ── Priority 4: project.aspectRatio (set at import and patched by background probe) ──
+    // This is a strong signal because probeAndPatchRotation also updates the project
+    // aspect ratio after detecting rotation. If we still don't know, trust the project.
+    if (orientationSource === 'unknown') {
+      const ar = project.aspectRatio;
+      if (ar === '9:16' || ar === '4:5') {
+        isPortrait = true;
+        orientationSource = `projectAspectRatio (${ar})`;
+      } else if (ar === '16:9') {
+        isPortrait = false;
+        orientationSource = `projectAspectRatio (${ar})`;
+      } else if (ar === '1:1') {
+        isPortrait = false; // square — use landscape canvas (equal sides)
+        orientationSource = `projectAspectRatio (${ar} — square)`;
+      }
+    }
+
     log(`Orientation decision: isPortrait=${isPortrait} via [${orientationSource}]`);
 
     const correctedW = isPortrait ? shortSide : longSide;
