@@ -168,8 +168,10 @@ export async function exportScene(
 
     log(`Orientation decision: isPortrait=${isPortrait} via [${orientationSource}]`);
 
-    const correctedW = isPortrait ? shortSide : longSide;
-    const correctedH = isPortrait ? longSide  : shortSide;
+    // For 1:1 square projects, use equal sides
+    const isSquare = project.aspectRatio === '1:1';
+    const correctedW = isSquare ? shortSide : (isPortrait ? shortSide : longSide);
+    const correctedH = isSquare ? shortSide : (isPortrait ? longSide  : shortSide);
 
     log(`Canvas: ${width}×${height} → ${correctedW}×${correctedH}`);
     renderer.resize(correctedW, correctedH);
