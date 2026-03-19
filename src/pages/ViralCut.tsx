@@ -668,6 +668,22 @@ const ViralCut = () => {
   // ── Export – Canvas + MediaRecorder pipeline ──────────────
   const exportAbortRef = useRef<AbortController | null>(null);
 
+  // Waits for all background rotation probes to finish before encoding starts.
+  // This is critical: probes run after import and may not be done yet when export begins.
+  const waitForPendingRotationProbes = useCallback(async () => {
+    const entries = Array.from(pendingRotationProbesRef.current.entries());
+    if (entries.length === 0) {
+      console.log('[ViralCut][export] no pending rotation probes');
+      return;
+    }
+    console.log('[ViralCut][export] waiting for pending rotation probes', {
+      count: entries.length,
+      mediaIds: entries.map(([id]) => id),
+    });
+    await Promise.all(entries.map(([, promise]) => promise));
+    console.log('[ViralCut][export] all rotation probes resolved');
+  }, []);
+
   const handleExport = useCallback(async (opts: ExportOptions) => {
     exportAbortRef.current?.abort();
     const abortCtrl = new AbortController();
@@ -677,6 +693,13 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
+      // ── CRITICAL: Wait for all rotation probes to complete before encoding ──
+      // Without this, high-res vertical videos export as landscape if the probe
+      // hasn't finished updating rotationDeg/displayWidth/displayHeight yet.
+      await waitForPendingRotationProbes();
+
+      setExportState({ status: 'preparing', progress: 8, label: 'Consolidando orientação dos vídeos…' });
+
       const blob = await exportProjectWithMediaBunny(
         project,
         media,
@@ -704,7 +727,7 @@ const ViralCut = () => {
       console.error('[ViralCut] Export error:', err);
       setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${err?.message ?? 'Tente novamente'}` });
     }
-  }, [project, media, isMobile]);
+  }, [project, media, isMobile, waitForPendingRotationProbes]);
 
   // ── Derived selection ─────────────────────────────────────
   const selectedItem = useMemo(
