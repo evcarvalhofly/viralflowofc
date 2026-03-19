@@ -216,11 +216,23 @@ const ViralCut = () => {
   // ensuring rotationDeg is always set before orientation is resolved.
   const pendingProbesRef = useRef<Map<string, Promise<void>>>(new Map());
 
+  // ── Probed metadata override map ──────────────────────────
+  // Written SYNCHRONOUSLY inside probeAndPatchRotation when the probe
+  // resolves. handleExport reads this map DIRECTLY after awaiting probes,
+  // bypassing the React state flush lag that caused the orientation race.
+  // Key: mediaId  Value: patched rotation/display metadata
+  const probedMetaRef = useRef<Map<string, {
+    rotationDeg: 0 | 90 | 180 | 270;
+    displayWidth?: number;
+    displayHeight?: number;
+    orientation?: 'portrait' | 'landscape' | 'square';
+  }>>(new Map());
+
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
   const [media, setMedia] = useState<MediaFile[]>([]);
-  // Ref kept in sync with media state — used inside handleExport to read
-  // the freshest media values after pending probes have updated state.
+  // Ref kept in sync with media state — used as base for building freshMedia
+  // in handleExport (patched with probedMetaRef overrides to avoid state lag).
   const mediaRef = useRef<MediaFile[]>([]);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
