@@ -236,6 +236,9 @@ const ViralCut = () => {
   const autoCutImportRef = useRef<HTMLInputElement>(null);
   const splitAllRef = useRef<(() => void) | null>(null);
 
+  // ── Pending rotation probe tracking (prevents export before probes finish) ──
+  const pendingRotationProbesRef = useRef<Map<string, Promise<void>>>(new Map());
+
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
   const [media, setMedia] = useState<MediaFile[]>([]);
