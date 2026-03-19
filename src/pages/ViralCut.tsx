@@ -138,6 +138,7 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
 
 // ── Background probe: refines rotationDeg after import ───────────────
 // Called AFTER the MediaFile is already added to state so the UI is responsive.
+// Returns a Promise so handleExport can await it before starting export.
 async function probeAndPatchRotation(
   file: File,
   mediaId: string,
@@ -148,17 +149,18 @@ async function probeAndPatchRotation(
   resolveAspectRatioFromMedia: (w?: number, h?: number) => { aspectRatio: Project['aspectRatio']; projectWidth: number; projectHeight: number },
   isFirstVideo: boolean,
   currentAspectRatio: Project['aspectRatio'],
-) {
+): Promise<void> {
   let rotationDeg: 0 | 90 | 180 | 270 = 0;
   try {
     rotationDeg = await probeVideoRotation(file);
   } catch (err) {
     console.warn('[ViralCut][probe] probeVideoRotation failed, keeping 0', err);
-    return;
+    // Even on failure, ensure display dims are set correctly from encoded dims
   }
 
-  if (rotationDeg === 0) return; // nothing changed
-
+  // IMPORTANT: Always compute display dims — even when rotationDeg=0.
+  // This ensures the MediaFile always has displayWidth/displayHeight set,
+  // which the export pipeline uses as a reliable orientation signal.
   const displayWidth = rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth;
   const displayHeight = rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight;
   const orientation: MediaFile['orientation'] =
@@ -170,7 +172,7 @@ async function probeAndPatchRotation(
 
   console.log('[ViralCut][probe] rotation resolved', { mediaId, rotationDeg, displayWidth, displayHeight, orientation });
 
-  // Patch MediaFile
+  // Always patch MediaFile with definitive metadata
   setMedia((prev) =>
     prev.map((m) =>
       m.id === mediaId
@@ -208,9 +210,18 @@ const ViralCut = () => {
   const autoCutImportRef = useRef<HTMLInputElement>(null);
   const splitAllRef = useRef<(() => void) | null>(null);
 
+  // ── Pending rotation probes ────────────────────────────────
+  // Stores in-flight probeAndPatchRotation promises keyed by mediaId.
+  // handleExport awaits ALL pending probes before starting export,
+  // ensuring rotationDeg is always set before orientation is resolved.
+  const pendingProbesRef = useRef<Map<string, Promise<void>>>(new Map());
+
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
   const [media, setMedia] = useState<MediaFile[]>([]);
+  // Ref kept in sync with media state — used inside handleExport to read
+  // the freshest media values after pending probes have updated state.
+  const mediaRef = useRef<MediaFile[]>([]);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
@@ -291,6 +302,7 @@ const ViralCut = () => {
   // ── Ref to latest tracks for RAF/effect callbacks ─────────
   const tracksRef = useRef(project.tracks);
   useEffect(() => { tracksRef.current = project.tracks; }, [project.tracks]);
+  useEffect(() => { mediaRef.current = media; }, [media]);
 
   // ── Playback ticker ───────────────────────────────────────
   const tickRef = useRef<number | null>(null);
@@ -417,12 +429,15 @@ const ViralCut = () => {
       }, { pushHistory: true });
 
       // ── Background probe: refine rotation metadata without blocking ──
+      // The promise is stored so handleExport can await it before starting export.
       if (type === 'video') {
-        probeAndPatchRotation(
+        const probePromise = probeAndPatchRotation(
           file, mf.id, encodedWidth, encodedHeight,
           setMedia, updateProject, resolveAspectRatioFromMedia,
           capturedIsFirstVideo, capturedAspectRatio,
         );
+        pendingProbesRef.current.set(mf.id, probePromise);
+        probePromise.finally(() => pendingProbesRef.current.delete(mf.id));
       }
     }
   }, [updateProject, resolveAspectRatioFromMedia]);
@@ -640,9 +655,26 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
+      // ── Wait for all pending rotation probes before exporting ──
+      // This ensures rotationDeg / displayWidth / displayHeight are set
+      // on all MediaFile entries before the export pipeline reads them.
+      const pendingProbes = [...pendingProbesRef.current.values()];
+      if (pendingProbes.length > 0) {
+        setExportState({ status: 'preparing', progress: 2, label: 'Aguardando análise de rotação…' });
+        console.log(`[ViralCut][export] Waiting for ${pendingProbes.length} pending rotation probe(s)…`);
+        await Promise.allSettled(pendingProbes);
+        console.log('[ViralCut][export] All rotation probes complete.');
+      }
+
+      // ── Get fresh media state after probes complete ──
+      // React state may have been updated by probeAndPatchRotation — we need
+      // a snapshot that reflects the patched rotationDeg values.
+      // We do this by reading from a ref that stays in sync with state.
+      const freshMedia = mediaRef.current;
+
       const blob = await exportProjectWithMediaBunny(
         project,
-        media,
+        freshMedia,
         { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
         (progress, label) => setExportState({ status: 'encoding', progress, label }),
         abortCtrl.signal
@@ -667,7 +699,7 @@ const ViralCut = () => {
       console.error('[ViralCut] Export error:', err);
       setExportState({ status: 'error', progress: 0, label: '', error: `Erro ao exportar: ${err?.message ?? 'Tente novamente'}` });
     }
-  }, [project, media, isMobile]);
+  }, [project, isMobile]);
 
   // ── Derived selection ─────────────────────────────────────
   const selectedItem = useMemo(

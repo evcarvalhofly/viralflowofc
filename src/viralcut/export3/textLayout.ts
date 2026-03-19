@@ -1,6 +1,5 @@
 // ============================================================
-// ViralCut Export2 – Text rendering on canvas
-// Matches exactly what PreviewPanel renders for text items.
+// ViralCut Export3 – Text rendering on canvas
 // ============================================================
 import { TrackItem } from '../types';
 
@@ -27,7 +26,6 @@ export function drawTextItemOnCanvas(
   ctx.textAlign = (td.textAlign as CanvasTextAlign) || 'center';
   ctx.textBaseline = 'middle';
 
-  // Word-wrap
   const words = (td.text || '').split(' ');
   const lineHeight = fontSize * 1.35;
   const lines: string[] = [];
@@ -46,7 +44,6 @@ export function drawTextItemOnCanvas(
   const totalH = lines.length * lineHeight;
   const topY = y - totalH / 2;
 
-  // Background box
   if (td.backgroundColor && td.backgroundColor !== 'transparent') {
     const padX = fontSize * 0.5;
     const padY = fontSize * 0.25;
@@ -58,7 +55,6 @@ export function drawTextItemOnCanvas(
     ctx.fill();
   }
 
-  // Shadow
   if (td.boxShadow?.blur > 0) {
     ctx.shadowColor = td.boxShadow.color ?? '#000';
     ctx.shadowOffsetX = td.boxShadow.x ?? 2;
@@ -67,7 +63,6 @@ export function drawTextItemOnCanvas(
   }
 
   ctx.fillStyle = td.color || '#ffffff';
-
   lines.forEach((l, li) => {
     const lineY = topY + li * lineHeight + lineHeight / 2;
     ctx.fillText(l, x, lineY, maxW);
