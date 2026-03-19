@@ -139,6 +139,10 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
 // ── Background probe: refines rotationDeg after import ───────────────
 // Called AFTER the MediaFile is already added to state so the UI is responsive.
 // Returns a Promise so handleExport can await it before starting export.
+//
+// KEY: probedMetaRef is written SYNCHRONOUSLY before setMedia() is called.
+// This ensures handleExport can read authoritative rotation data immediately
+// after Promise.allSettled(pendingProbes) — without waiting for React to flush.
 async function probeAndPatchRotation(
   file: File,
   mediaId: string,
@@ -149,6 +153,12 @@ async function probeAndPatchRotation(
   resolveAspectRatioFromMedia: (w?: number, h?: number) => { aspectRatio: Project['aspectRatio']; projectWidth: number; projectHeight: number },
   isFirstVideo: boolean,
   currentAspectRatio: Project['aspectRatio'],
+  probedMetaRef: React.MutableRefObject<Map<string, {
+    rotationDeg: 0 | 90 | 180 | 270;
+    displayWidth?: number;
+    displayHeight?: number;
+    orientation?: 'portrait' | 'landscape' | 'square';
+  }>>,
 ): Promise<void> {
   let rotationDeg: 0 | 90 | 180 | 270 = 0;
   try {
@@ -172,7 +182,11 @@ async function probeAndPatchRotation(
 
   console.log('[ViralCut][probe] rotation resolved', { mediaId, rotationDeg, displayWidth, displayHeight, orientation });
 
-  // Always patch MediaFile with definitive metadata
+  // ── Write to mutable ref FIRST (synchronous, no React flush lag) ──
+  // handleExport reads this map directly after awaiting pendingProbes.
+  probedMetaRef.current.set(mediaId, { rotationDeg, displayWidth, displayHeight, orientation });
+
+  // ── Then update React state for UI display ──
   setMedia((prev) =>
     prev.map((m) =>
       m.id === mediaId
