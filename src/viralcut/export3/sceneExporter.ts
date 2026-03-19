@@ -1,29 +1,16 @@
 // ============================================================
-// ViralCut Export3 – Scene Exporter (MediaBunny integration)
+// ViralCut Export3 – Scene Exporter (v7 — clean, trust browser)
 //
-// Frame-by-frame export using MediaBunny's CanvasSource and
-// AudioBufferSource. Completely offline and deterministic.
+// ORIENTATION RULE (definitive):
+//   Use ONLY video.videoWidth / video.videoHeight from VideoFrameCache.
+//   The browser already returns visually-correct dimensions.
+//   No rotationDeg. No FFmpeg. No metadata heuristics.
 //
-// Canvas orientation fix (v6 — definitive):
-//
-// Root cause of the 4K portrait bug:
-//   createImageBitmap() can return different results at probe time
-//   vs render time (browser may progressively decode large files).
-//   All previous heuristics were unreliable.
-//
-// DEFINITIVE STRATEGY — priority order:
-//
-//   1. MediaFile.encodedWidth/encodedHeight + rotationDeg
-//      (set by FFmpeg probe at import — most reliable source)
-//      If rotationDeg=90|270 → portrait (swap encoded dims)
-//      If rotationDeg=0|180  → landscape (use encoded dims as-is)
-//
-//   2. MediaFile.displayWidth/displayHeight
-//      (set after FFmpeg probe)
-//
-//   3. VideoFrameCache probe (last resort)
-//
-//   4. Project metadata (aspectRatio) — only if no video media
+// CANVAS SIZE:
+//   1. Read displayWidth/displayHeight from VideoFrameCache (browser-reported).
+//   2. Determine portrait/landscape from those values.
+//   3. Set canvas = { longSide × shortSide } in correct orientation.
+//   4. NEVER resize canvas after this point.
 // ============================================================
 
 import {
@@ -39,161 +26,120 @@ import { Project, MediaFile } from '../types';
 import { sanitizeProject } from '../utils/sanitize';
 import { CanvasRenderer } from './canvasRenderer';
 import { createTimelineAudioBuffer } from './createTimelineAudioBuffer';
-import { getExportDimensions, detectBestExportConfig } from './mediaBunnyUtils';
+import { detectBestExportConfig } from './mediaBunnyUtils';
 
 export interface SceneExportOptions {
-  resolution: '720p' | '1080p';
-  fps: 30 | 60;
+  resolution:   '720p' | '1080p';
+  fps:          30 | 60;
   projectName?: string;
 }
 
 export type ProgressCallback = (progress: number, label: string) => void;
 
-function log(...a: unknown[]) { console.log('[ViralCut Export3]', ...a); }
+function log(...a: unknown[]) { console.log('[ViralCut Export]', ...a); }
+
+/**
+ * Returns final canvas size based on video's VISUAL orientation.
+ * displayWidth/displayHeight come from video.videoWidth/videoHeight — already correct.
+ */
+function getCanvasSize(
+  displayWidth:  number,
+  displayHeight: number,
+  resolution:    '720p' | '1080p'
+): { width: number; height: number } {
+  const longSide  = resolution === '1080p' ? 1920 : 1280;
+  const shortSide = resolution === '1080p' ? 1080 : 720;
+
+  const isPortrait = displayHeight > displayWidth;
+  const isSquare   = Math.abs(displayWidth - displayHeight) / Math.max(displayWidth, displayHeight) < 0.05;
+
+  if (isSquare)    return { width: shortSide, height: shortSide };
+  if (isPortrait)  return { width: shortSide, height: longSide  };
+  return           { width: longSide,  height: shortSide };
+}
 
 export async function exportScene(
-  rawProject: Project,
-  media: MediaFile[],
-  opts: SceneExportOptions,
-  onProgress: ProgressCallback,
-  signal?: AbortSignal
+  rawProject:  Project,
+  media:       MediaFile[],
+  opts:        SceneExportOptions,
+  onProgress:  ProgressCallback,
+  signal?:     AbortSignal
 ): Promise<Blob> {
   const t0 = performance.now();
-  log('Export3 started', opts);
+  log('Export started', opts);
 
   // ── 1. Sanitize ─────────────────────────────────────────────
   onProgress(2, 'Sanitizando timeline…');
-  const project = sanitizeProject(rawProject);
+  const project       = sanitizeProject(rawProject);
   const totalDuration = project.duration;
   if (totalDuration <= 0) throw new Error('Timeline vazia. Adicione clipes antes de exportar.');
 
   const mediaMap = new Map(media.map((m) => [m.id, m]));
-  const FPS = opts.fps;
+  const FPS      = opts.fps;
 
   // ── 2. Find first video media ID ───────────────────────────
   const firstVideoTrack = project.tracks.find((t) => t.type === 'video' && !t.muted);
-  const firstItem = firstVideoTrack?.items[0];
-  const firstVideoMediaId = firstItem?.mediaId ?? null;
+  const firstVideoMediaId = firstVideoTrack?.items[0]?.mediaId ?? null;
 
-  // Initial rough estimate from project metadata
-  let { width, height } = getExportDimensions(project, opts.resolution);
-  log(`Initial canvas estimate: ${width}×${height} (will be corrected after media analysis)`);
-
-  // ── 3. Prepare canvas renderer ──────────────────────────────
+  // ── 3. Initial canvas (will be corrected in step 4) ────────
   onProgress(6, 'Inicializando renderer…');
-  const renderer = new CanvasRenderer({ width, height });
-  await renderer.prepare(
-    project,
-    mediaMap,
-    (msg) => onProgress(10, msg)
-  );
+  // Start with a reasonable default; VideoFrameCache will reveal true dims
+  const renderer = new CanvasRenderer({ width: 1280, height: 720 });
+
+  await renderer.prepare(project, mediaMap, (msg) => onProgress(10, msg));
 
   if (signal?.aborted) { renderer.dispose(); throw new Error('Exportação cancelada.'); }
 
-  // ── 4. Determine correct canvas orientation ──────────────────
-  // DEFINITIVE LOGIC: Use FFmpeg-probed metadata as primary source.
-  // This is set at import time and is the most reliable orientation signal.
-  onProgress(14, 'Verificando orientação do vídeo…');
+  // ── 4. Determine correct canvas size from video dimensions ──
+  // VideoFrameCache reports video.videoWidth/videoHeight from the HTMLVideoElement
+  // which the browser returns ALREADY rotation-corrected.
+  onProgress(14, 'Verificando dimensões do vídeo…');
+
+  let finalWidth  = 1280;
+  let finalHeight = 720;
 
   if (firstVideoMediaId) {
-    const is1080 = opts.resolution === '1080p';
-    const longSide  = is1080 ? 1920 : 1280;
-    const shortSide = is1080 ? 1080 : 720;
+    const meta = renderer.getVideoMeta(firstVideoMediaId);
+    const vw   = meta?.displayWidth  ?? 0;
+    const vh   = meta?.displayHeight ?? 0;
 
-    const mediaFileEntry = mediaMap.get(firstVideoMediaId);
-    log('MediaFile entry:', {
-      rotationDeg: mediaFileEntry?.rotationDeg,
-      encodedWidth: mediaFileEntry?.encodedWidth,
-      encodedHeight: mediaFileEntry?.encodedHeight,
-      displayWidth: mediaFileEntry?.displayWidth,
-      displayHeight: mediaFileEntry?.displayHeight,
-      orientation: mediaFileEntry?.orientation,
-    });
+    log('Video dimensions from browser:', { vw, vh, mediaId: firstVideoMediaId });
 
-    let isPortrait = false;
-    let orientationSource = 'unknown';
-
-    // ── Priority 1: encodedDims + rotationDeg (FFmpeg probe — most reliable) ──
-    const rotDeg = mediaFileEntry?.rotationDeg ?? 0;
-    const encW = mediaFileEntry?.encodedWidth ?? 0;
-    const encH = mediaFileEntry?.encodedHeight ?? 0;
-
-    if (encW > 0 && encH > 0) {
-      if (rotDeg === 90 || rotDeg === 270) {
-        // Rotation metadata says portrait — swap encoded dims
-        isPortrait = true;
-        orientationSource = `encodedDims+rotationDeg (encoded: ${encW}×${encH}, rotDeg: ${rotDeg})`;
-      } else if (rotDeg === 0 || rotDeg === 180) {
-        // No rotation — use encoded dims as-is
-        isPortrait = encH > encW;
-        orientationSource = `encodedDims+rotationDeg=0 (encoded: ${encW}×${encH})`;
-      }
+    if (vw > 0 && vh > 0) {
+      const size = getCanvasSize(vw, vh, opts.resolution);
+      finalWidth  = size.width;
+      finalHeight = size.height;
+      log(`Canvas: ${finalWidth}×${finalHeight} (${finalHeight > finalWidth ? 'portrait' : 'landscape'})`);
+    } else {
+      // Fallback: use project aspect ratio
+      const { aspectRatio } = project;
+      const is1080 = opts.resolution === '1080p';
+      if (aspectRatio === '9:16') { finalWidth = is1080 ? 1080 : 720; finalHeight = is1080 ? 1920 : 1280; }
+      else if (aspectRatio === '1:1') { finalWidth = finalHeight = is1080 ? 1080 : 720; }
+      else if (aspectRatio === '4:5') { finalWidth = is1080 ? 1080 : 720; finalHeight = is1080 ? 1350 : 900; }
+      else { finalWidth = is1080 ? 1920 : 1280; finalHeight = is1080 ? 1080 : 720; }
+      log(`Canvas (fallback from aspectRatio ${aspectRatio}): ${finalWidth}×${finalHeight}`);
     }
-
-    // ── Priority 2: displayWidth/displayHeight (set after FFmpeg probe) ──
-    if (orientationSource === 'unknown' || (encW === 0 && encH === 0)) {
-      const dispW = mediaFileEntry?.displayWidth ?? 0;
-      const dispH = mediaFileEntry?.displayHeight ?? 0;
-      if (dispW > 0 && dispH > 0) {
-        isPortrait = dispH > dispW;
-        orientationSource = `displayDims (${dispW}×${dispH})`;
-      }
-    }
-
-    // ── Priority 3: VideoFrameCache probe (last resort for video) ──
-    if (orientationSource === 'unknown') {
-      const probeMeta = renderer.getVideoMeta(firstVideoMediaId);
-      if (probeMeta && probeMeta.displayWidth > 0 && probeMeta.displayHeight > 0) {
-        isPortrait = probeMeta.displayHeight > probeMeta.displayWidth;
-        orientationSource = `frameProbe (${probeMeta.displayWidth}×${probeMeta.displayHeight})`;
-      }
-    }
-
-    // ── Priority 4: project.aspectRatio (set at import and patched by background probe) ──
-    // This is a strong signal because probeAndPatchRotation also updates the project
-    // aspect ratio after detecting rotation. If we still don't know, trust the project.
-    if (orientationSource === 'unknown') {
-      const ar = project.aspectRatio;
-      if (ar === '9:16' || ar === '4:5') {
-        isPortrait = true;
-        orientationSource = `projectAspectRatio (${ar})`;
-      } else if (ar === '16:9') {
-        isPortrait = false;
-        orientationSource = `projectAspectRatio (${ar})`;
-      } else if (ar === '1:1') {
-        isPortrait = false; // square — use landscape canvas (equal sides)
-        orientationSource = `projectAspectRatio (${ar} — square)`;
-      }
-    }
-
-    log(`Orientation decision: isPortrait=${isPortrait} via [${orientationSource}]`);
-
-    // For 1:1 square projects, use equal sides
-    const isSquare = project.aspectRatio === '1:1';
-    const correctedW = isSquare ? shortSide : (isPortrait ? shortSide : longSide);
-    const correctedH = isSquare ? shortSide : (isPortrait ? longSide  : shortSide);
-
-    log(`Canvas: ${width}×${height} → ${correctedW}×${correctedH}`);
-    renderer.resize(correctedW, correctedH);
-    width  = correctedW;
-    height = correctedH;
   }
 
-  log(`Final canvas: ${width}×${height} @ ${FPS}fps`);
+  renderer.resize(finalWidth, finalHeight);
+
+  log(`Final canvas: ${finalWidth}×${finalHeight} @ ${FPS}fps`);
+  log('orientation:', finalHeight > finalWidth ? 'portrait' : 'landscape');
+  log('duration:', totalDuration.toFixed(2), 's');
+  log('frames:', Math.ceil(totalDuration * FPS));
 
   // ── 5. Detect best codec/container ─────────────────────────
   onProgress(16, 'Detectando suporte de codec…');
-  const config = await detectBestExportConfig(width, height, FPS);
-  log('Export config:', config);
+  const config = await detectBestExportConfig(finalWidth, finalHeight, FPS);
+  log('Codec config:', config);
 
   if (signal?.aborted) { renderer.dispose(); throw new Error('Exportação cancelada.'); }
 
   // ── 6. Build offline audio buffer ───────────────────────────
   onProgress(20, 'Processando áudio…');
   const audioBuffer = await createTimelineAudioBuffer(
-    project,
-    mediaMap,
-    (msg) => onProgress(22, msg)
+    project, mediaMap, (msg) => onProgress(22, msg)
   );
   log(`Audio: ${audioBuffer ? `${audioBuffer.duration.toFixed(2)}s` : 'none'}`);
 
@@ -206,8 +152,8 @@ export async function exportScene(
     ? new Mp4OutputFormat()
     : new WebMOutputFormat();
 
-  const target = new BufferTarget();
-  const output = new Output({ format: outputFormat, target });
+  const target  = new BufferTarget();
+  const output  = new Output({ format: outputFormat, target });
 
   const videoSource = new CanvasSource(renderer.canvas, {
     codec:   config.videoCodec,
@@ -233,7 +179,7 @@ export async function exportScene(
     throw new Error('Exportação cancelada.');
   }
 
-  // ── 8. Add audio buffer (offline, instant) ──────────────────
+  // ── 8. Add audio (offline, instant) ─────────────────────────
   if (audioSource && audioBuffer) {
     onProgress(30, 'Adicionando áudio…');
     await audioSource.add(audioBuffer);
@@ -241,8 +187,8 @@ export async function exportScene(
     log('Audio added and closed');
   }
 
-  // ── 9. Frame-by-frame render loop ──────────────────────────
-  const totalFrames = Math.ceil(totalDuration * FPS);
+  // ── 9. Frame-by-frame render loop ───────────────────────────
+  const totalFrames  = Math.ceil(totalDuration * FPS);
   const frameDuration = 1 / FPS;
 
   log(`Rendering ${totalFrames} frames @ ${FPS}fps`);
@@ -285,7 +231,7 @@ export async function exportScene(
   renderer.dispose();
 
   const mimeType = config.container === 'mp4' ? 'video/mp4' : 'video/webm';
-  const blob = new Blob([arrayBuffer], { type: mimeType });
+  const blob     = new Blob([arrayBuffer], { type: mimeType });
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
   log(`Concluído em ${elapsed}s | ${(blob.size / 1024 / 1024).toFixed(2)}MB | ${totalFrames} frames`);
