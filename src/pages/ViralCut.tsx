@@ -302,6 +302,7 @@ const ViralCut = () => {
   // ── Ref to latest tracks for RAF/effect callbacks ─────────
   const tracksRef = useRef(project.tracks);
   useEffect(() => { tracksRef.current = project.tracks; }, [project.tracks]);
+  useEffect(() => { mediaRef.current = media; }, [media]);
 
   // ── Playback ticker ───────────────────────────────────────
   const tickRef = useRef<number | null>(null);
