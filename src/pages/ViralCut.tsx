@@ -303,8 +303,8 @@ const ViralCut = () => {
         capturedAspectRatio = p.aspectRatio;
 
         let orientationPatch: Partial<Project> = {};
-        const orientW = displayWidth ?? width;
-        const orientH = displayHeight ?? height;
+        const orientW = width;
+        const orientH = height;
         if (isFirstVideo && orientW && orientH) {
           const resolved = resolveAspectRatioFromMedia(orientW, orientH);
           orientationPatch = {
