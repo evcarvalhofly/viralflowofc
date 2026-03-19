@@ -138,6 +138,7 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
 
 // ── Background probe: refines rotationDeg after import ───────────────
 // Called AFTER the MediaFile is already added to state so the UI is responsive.
+// Returns a Promise so handleExport can await it before starting export.
 async function probeAndPatchRotation(
   file: File,
   mediaId: string,
@@ -148,17 +149,18 @@ async function probeAndPatchRotation(
   resolveAspectRatioFromMedia: (w?: number, h?: number) => { aspectRatio: Project['aspectRatio']; projectWidth: number; projectHeight: number },
   isFirstVideo: boolean,
   currentAspectRatio: Project['aspectRatio'],
-) {
+): Promise<void> {
   let rotationDeg: 0 | 90 | 180 | 270 = 0;
   try {
     rotationDeg = await probeVideoRotation(file);
   } catch (err) {
     console.warn('[ViralCut][probe] probeVideoRotation failed, keeping 0', err);
-    return;
+    // Even on failure, ensure display dims are set correctly from encoded dims
   }
 
-  if (rotationDeg === 0) return; // nothing changed
-
+  // IMPORTANT: Always compute display dims — even when rotationDeg=0.
+  // This ensures the MediaFile always has displayWidth/displayHeight set,
+  // which the export pipeline uses as a reliable orientation signal.
   const displayWidth = rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth;
   const displayHeight = rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight;
   const orientation: MediaFile['orientation'] =
@@ -170,7 +172,7 @@ async function probeAndPatchRotation(
 
   console.log('[ViralCut][probe] rotation resolved', { mediaId, rotationDeg, displayWidth, displayHeight, orientation });
 
-  // Patch MediaFile
+  // Always patch MediaFile with definitive metadata
   setMedia((prev) =>
     prev.map((m) =>
       m.id === mediaId
