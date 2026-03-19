@@ -448,12 +448,18 @@ const ViralCut = () => {
       }, { pushHistory: true });
 
       // ── Background probe: refine rotation metadata without blocking ──
+      // Track the promise so handleExport can await it before encoding
       if (type === 'video') {
-        probeAndPatchRotation(
+        const probePromise = probeAndPatchRotation(
           file, mf.id, encodedWidth, encodedHeight,
           setMedia, updateProject, resolveAspectRatioFromMedia,
           capturedIsFirstVideo, capturedAspectRatio,
-        );
+        )
+          .then(() => { console.log('[ViralCut][probe] finished', { mediaId: mf.id }); })
+          .catch((err) => { console.warn('[ViralCut][probe] failed', { mediaId: mf.id, err }); })
+          .finally(() => { pendingRotationProbesRef.current.delete(mf.id); });
+
+        pendingRotationProbesRef.current.set(mf.id, probePromise);
       }
     }
   }, [updateProject, resolveAspectRatioFromMedia]);
