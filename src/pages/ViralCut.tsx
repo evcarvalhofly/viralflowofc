@@ -461,6 +461,7 @@ const ViralCut = () => {
           file, mf.id, encodedWidth, encodedHeight,
           setMedia, updateProject, resolveAspectRatioFromMedia,
           capturedIsFirstVideo, capturedAspectRatio,
+          probedMetaRef,
         );
         pendingProbesRef.current.set(mf.id, probePromise);
         probePromise.finally(() => pendingProbesRef.current.delete(mf.id));
