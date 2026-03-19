@@ -805,6 +805,17 @@ const ViralCut = () => {
         <input ref={autoCutImportRef} type="file" accept="video/*" className="hidden"
           onChange={(e) => e.target.files && handleAutoCutImport(e.target.files)} />
         <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
+        {/* Transcode overlay */}
+        {transcodeStatus && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-sm gap-3 px-6">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center animate-pulse">
+              <Wand2 className="h-6 w-6 text-primary" />
+            </div>
+            <p className="text-sm font-semibold text-foreground text-center">Otimizando vídeo HD</p>
+            <p className="text-xs text-muted-foreground text-center">{transcodeStatus}</p>
+            <p className="text-[10px] text-muted-foreground/60 text-center">Isso pode levar alguns segundos…</p>
+          </div>
+        )}
       </div>
     );
   }
