@@ -554,50 +554,9 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
-      // ── Wait for all pending rotation probes before exporting ──
-      const pendingProbes = [...pendingProbesRef.current.values()];
-      if (pendingProbes.length > 0) {
-        setExportState({ status: 'preparing', progress: 2, label: 'Aguardando análise de rotação…' });
-        console.log(`[ViralCut][export] Waiting for ${pendingProbes.length} pending rotation probe(s)…`);
-        await Promise.allSettled(pendingProbes);
-        console.log('[ViralCut][export] All rotation probes complete.');
-      }
-
-      // ── Build freshMedia: start from mediaRef snapshot, then apply
-      // probedMetaRef overrides synchronously.
-      //
-      // WHY: After Promise.allSettled(pendingProbes), probeAndPatchRotation
-      // has already written final metadata to probedMetaRef.current.
-      // However React's setMedia() inside the probe is ASYNC — mediaRef.current
-      // may not yet reflect the patched rotationDeg values.
-      //
-      // Reading probedMetaRef directly guarantees we get the correct
-      // rotationDeg/displayWidth/displayHeight without any flush lag.
-      const freshMedia = mediaRef.current.map((m) => {
-        const patch = probedMetaRef.current.get(m.id);
-        if (!patch) return m;
-        return {
-          ...m,
-          rotationDeg: patch.rotationDeg,
-          displayWidth: patch.displayWidth,
-          displayHeight: patch.displayHeight,
-          orientation: patch.orientation,
-          width: patch.displayWidth ?? m.width,
-          height: patch.displayHeight ?? m.height,
-        };
-      });
-
-      console.log('[ViralCut][export] freshMedia rotation overrides applied:', freshMedia.map((m) => ({
-        id: m.id,
-        rotationDeg: m.rotationDeg,
-        displayWidth: m.displayWidth,
-        displayHeight: m.displayHeight,
-        orientation: m.orientation,
-      })));
-
       const blob = await exportProjectWithMediaBunny(
         project,
-        freshMedia,
+        mediaRef.current,
         { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
         (progress, label) => setExportState({ status: 'encoding', progress, label }),
         abortCtrl.signal
