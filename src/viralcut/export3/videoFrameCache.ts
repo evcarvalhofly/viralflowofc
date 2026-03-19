@@ -1,24 +1,16 @@
 // ============================================================
-// ViralCut Export3 – Video Frame Cache (v7 — orientation-free)
+// ViralCut Export3 – Video Frame Cache (v8 — HTMLVideoElement-based)
 //
-// Single source of truth: video.videoWidth / video.videoHeight
-// from the browser decoder — already display-correct.
-//
-// No rotation. No metadata. No FFmpeg.
+// Draws the browser-decoded <video> element directly onto canvas.
+// No createImageBitmap, no rotation, no metadata.
+// The browser already handles orientation correctly for display.
 // ============================================================
 
-const SEEK_EPSILON_SEC   = 1 / 120;   // ~8ms — skip seek if within this range
-const FRAME_REUSE_EPSILON = 1 / 60;   // ~16ms — reuse cached bitmap if within this range
-const SEEK_TIMEOUT_MS    = 8000;
-
-interface CachedFrame {
-  bitmap: ImageBitmap | null;
-  time: number;
-}
+const SEEK_EPSILON_SEC = 1 / 120; // ~8ms — skip seek if already there
+const SEEK_TIMEOUT_MS  = 8000;
 
 export class VideoFrameCache {
-  private videos     = new Map<string, HTMLVideoElement>();
-  private frameCache = new Map<string, CachedFrame>();
+  private videos = new Map<string, HTMLVideoElement>();
 
   async prepare(id: string, url: string): Promise<void> {
     if (this.videos.has(id)) return;
@@ -77,44 +69,19 @@ export class VideoFrameCache {
     });
   }
 
-  async getFrame(id: string, time: number): Promise<ImageBitmap | null> {
+  /** Seek to `time` and return the HTMLVideoElement for direct canvas drawing. */
+  async getVideoElement(id: string, time: number): Promise<HTMLVideoElement | null> {
     const el = this.videos.get(id);
     if (!el) return null;
-
-    // Reuse cached bitmap when time hasn't changed significantly
-    const prev = this.frameCache.get(id);
-    if (prev && Math.abs(prev.time - time) <= FRAME_REUSE_EPSILON) {
-      return prev.bitmap;
-    }
 
     const targetTime = Math.max(0, Math.min(time, Math.max(0, (el.duration || 9999) - 0.001)));
     await this.waitSeek(el, targetTime);
 
     if (el.videoWidth === 0 || el.videoHeight === 0) return null;
-
-    let bitmap: ImageBitmap | null = null;
-    try {
-      bitmap = await createImageBitmap(el);
-    } catch {
-      return null;
-    }
-
-    // Release old bitmap
-    const old = this.frameCache.get(id);
-    if (old?.bitmap) {
-      try { old.bitmap.close(); } catch { /* ignore */ }
-    }
-
-    this.frameCache.set(id, { bitmap, time: targetTime });
-    return bitmap;
+    return el;
   }
 
   dispose() {
-    this.frameCache.forEach(({ bitmap }) => {
-      try { bitmap?.close(); } catch { /* ignore */ }
-    });
-    this.frameCache.clear();
-
     this.videos.forEach((el) => {
       try { el.pause(); el.removeAttribute('src'); el.load(); } catch { /* ignore */ }
     });

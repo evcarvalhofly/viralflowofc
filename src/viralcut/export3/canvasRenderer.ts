@@ -1,8 +1,7 @@
 // ============================================================
-// ViralCut Export3 – Canvas Renderer (v6)
+// ViralCut Export3 – Canvas Renderer (v7)
 //
-// Orientation is decided BEFORE this class is instantiated.
-// This renderer only prepares media and draws frames.
+// Draws HTMLVideoElement directly — no ImageBitmap for video.
 // Audio tracks are NOT loaded into VideoFrameCache.
 // ============================================================
 
@@ -46,7 +45,6 @@ export class CanvasRenderer {
     mediaMap:   Map<string, MediaFile>,
     onProgress: (msg: string) => void
   ): Promise<void> {
-    // Store the mediaMap so renderFrame can pass it to the renderer
     this.mediaMap = mediaMap;
 
     const videoIds = new Set<string>();
@@ -56,7 +54,6 @@ export class CanvasRenderer {
       for (const item of track.items) {
         if (!item.mediaId) continue;
         if (track.type === 'video') {
-          // Only video tracks go into the frame cache — NOT audio
           videoIds.add(item.mediaId);
         } else if (track.type === 'image') {
           imageIds.add(item.mediaId);
@@ -89,8 +86,8 @@ export class CanvasRenderer {
   async renderFrame(project: Project, timeSec: number): Promise<void> {
     const { width, height } = this.canvas;
 
-    // Collect the active video frame
-    const videoFrames = new Map<string, ImageBitmap | null>();
+    // Collect the active video element for each active video track item
+    const videoFrames = new Map<string, HTMLVideoElement | null>();
 
     for (const track of project.tracks) {
       if (track.type !== 'video' || track.muted) continue;
@@ -98,8 +95,8 @@ export class CanvasRenderer {
         if (timeSec >= item.startTime && timeSec < item.endTime) {
           const playbackRate = item.videoDetails?.playbackRate ?? 1;
           const mediaTime    = (item.mediaStart ?? 0) + (timeSec - item.startTime) * playbackRate;
-          const frame        = await this.frameCache.getFrame(item.mediaId, mediaTime);
-          videoFrames.set(item.mediaId, frame);
+          const videoEl      = await this.frameCache.getVideoElement(item.mediaId, mediaTime);
+          videoFrames.set(item.mediaId, videoEl);
           break;
         }
       }
