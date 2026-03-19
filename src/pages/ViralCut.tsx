@@ -269,15 +269,13 @@ const ViralCut = () => {
       const url = URL.createObjectURL(file);
       // Fast metadata — no FFmpeg, never blocks the UI
       const meta = await getMediaMetadata(file);
-      const { duration, width, height, encodedWidth, encodedHeight, displayWidth, displayHeight, rotationDeg, orientation } = meta;
+      const { duration, width, height, orientation } = meta;
       const thumbnail = await generateThumbnail(file);
       const type: MediaFile['type'] = file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'image';
       const mf: MediaFile = {
         id: createId(), name: file.name, type, file, url, duration, thumbnail,
         width, height,
-        encodedWidth, encodedHeight,
-        displayWidth, displayHeight,
-        rotationDeg, orientation,
+        orientation,
       };
 
       // ── Add to state immediately so the editor opens right away ──
