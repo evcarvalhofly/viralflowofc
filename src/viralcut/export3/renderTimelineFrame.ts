@@ -1,19 +1,20 @@
 // ============================================================
-// ViralCut Export3 – Per-frame deterministic renderer (v12 — clean)
+// ViralCut Export3 – Per-frame deterministic renderer (v13)
 //
 // RULES:
-//   - The canvas is ALWAYS created with the correct final size.
-//   - Bitmaps from the browser are ALREADY display-correct.
-//   - NEVER apply rotation transforms.
+//   - Canvas is ALWAYS created with the correct final size.
 //   - Use contain-fit (letterbox) — no stretching ever.
+//   - Rotation is corrected ONLY at draw time when the ImageBitmap
+//     orientation disagrees with MediaFile.orientation (single source of truth).
 // ============================================================
 
-import { Project, TrackItem } from '../types';
+import { Project, MediaFile, TrackItem } from '../types';
 import { drawTextItemOnCanvas } from './textLayout';
 
 export interface FrameRenderAssets {
   videoFrames: Map<string, ImageBitmap | null>;
   images:      Map<string, ImageBitmap>;
+  mediaMap:    Map<string, MediaFile>;
 }
 
 export interface RenderFrameParams {
@@ -24,6 +25,8 @@ export interface RenderFrameParams {
   project:  Project;
   assets:   FrameRenderAssets;
 }
+
+// ── Helpers ────────────────────────────────────────────────
 
 function getActiveVideoItem(project: Project, timeSec: number): TrackItem | null {
   for (const track of project.tracks) {
@@ -50,44 +53,125 @@ function getOverlayItems(project: Project, timeSec: number) {
 }
 
 /**
- * Contain-fit: scale source uniformly to fit within dest, centered, no stretch.
- * Source can be any CanvasImageSource with natural width/height.
+ * Detects whether the ImageBitmap needs a 90° rotation to match the MediaFile's
+ * declared orientation (which was locked at import time).
+ *
+ * Some high-quality phone videos are decoded by the browser with swapped
+ * width/height even though the MediaFile orientation is correctly set,
+ * causing the frame to arrive "sideways".
+ */
+function detectFrameRotation(
+  media: MediaFile,
+  frameWidth: number,
+  frameHeight: number
+): 0 | 90 {
+  if (!media.width || !media.height) return 0;
+
+  const mediaIsPortrait = media.height > media.width;
+  const mediaIsLandscape = media.width > media.height;
+  const frameIsPortrait  = frameHeight > frameWidth;
+  const frameIsLandscape = frameWidth > frameHeight;
+
+  // Square cases — never rotate
+  if (!mediaIsPortrait && !mediaIsLandscape) return 0;
+  if (!frameIsPortrait && !frameIsLandscape) return 0;
+
+  // Mismatch → rotate 90°
+  return mediaIsPortrait !== frameIsPortrait ? 90 : 0;
+}
+
+/**
+ * Contain-fit draw: scales source to fill dest proportionally, centered.
+ * offsetX/offsetY are added AFTER centering (used when ctx is already translated).
  */
 function drawContain(
+  ctx:     CanvasRenderingContext2D,
+  source:  CanvasImageSource,
+  srcW:    number,
+  srcH:    number,
+  destW:   number,
+  destH:   number,
+  offsetX  = 0,
+  offsetY  = 0
+) {
+  if (!srcW || !srcH) return;
+  const scale = Math.min(destW / srcW, destH / srcH);
+  const dw    = srcW * scale;
+  const dh    = srcH * scale;
+  const dx    = (destW - dw) / 2 + offsetX;
+  const dy    = (destH - dh) / 2 + offsetY;
+  ctx.drawImage(source, 0, 0, srcW, srcH, dx, dy, dw, dh);
+}
+
+/** Log throttle — only log once per unique mediaId per session to avoid flooding. */
+const _loggedIds = new Set<string>();
+
+/**
+ * Draws a video frame applying:
+ *  1. Visual filters (brightness / contrast / saturation)
+ *  2. Flip (H/V)
+ *  3. Opacity
+ *  4. Rotation correction when frame orientation disagrees with MediaFile orientation
+ */
+function drawVideoFrameCorrected(
   ctx:      CanvasRenderingContext2D,
-  source:   CanvasImageSource,
-  srcW:     number,
-  srcH:     number,
-  destW:    number,
-  destH:    number,
+  frame:    ImageBitmap,
+  media:    MediaFile,
+  canvasW:  number,
+  canvasH:  number,
   flipH:    boolean,
   flipV:    boolean,
   opacity:  number,
   filters:  string
 ) {
-  if (!srcW || !srcH) return;
+  const rotation = detectFrameRotation(media, frame.width, frame.height);
 
-  const scale = Math.min(destW / srcW, destH / srcH);
-  const dw    = srcW * scale;
-  const dh    = srcH * scale;
-  const dx    = (destW - dw) / 2;
-  const dy    = (destH - dh) / 2;
+  if (!_loggedIds.has(media.id)) {
+    _loggedIds.add(media.id);
+    console.log('[FrameRotationCheck]', {
+      mediaId:        media.id,
+      mediaWidth:     media.width,
+      mediaHeight:    media.height,
+      frameWidth:     frame.width,
+      frameHeight:    frame.height,
+      appliedRotation: rotation,
+    });
+  }
 
   ctx.save();
   ctx.globalAlpha = opacity;
   if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters;
 
-  if (flipH || flipV) {
-    ctx.translate(flipH ? destW : 0, flipV ? destH : 0);
-    ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-  }
+  if (rotation === 90) {
+    // Translate to center, rotate, then contain-fit using swapped canvas dims
+    ctx.translate(canvasW / 2, canvasH / 2);
 
-  ctx.drawImage(source, 0, 0, srcW, srcH, flipH ? destW - dx - dw : dx, flipV ? destH - dy - dh : dy, dw, dh);
+    if (flipH || flipV) {
+      ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+    }
+
+    ctx.rotate(Math.PI / 2);
+
+    // After rotation, canvas width/height are swapped in the rotated space
+    const rotW = canvasH;
+    const rotH = canvasW;
+
+    drawContain(ctx, frame, frame.width, frame.height, rotW, rotH, -rotW / 2, -rotH / 2);
+  } else {
+    if (flipH || flipV) {
+      ctx.translate(flipH ? canvasW : 0, flipV ? canvasH : 0);
+      ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+    }
+
+    drawContain(ctx, frame, frame.width, frame.height, canvasW, canvasH);
+  }
 
   if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
   ctx.restore();
   ctx.globalAlpha = 1;
 }
+
+// ── Main export ────────────────────────────────────────────
 
 export function renderTimelineFrame({
   ctx,
@@ -105,18 +189,19 @@ export function renderTimelineFrame({
   const videoItem = getActiveVideoItem(project, timeSec);
   if (videoItem) {
     const frame = assets.videoFrames.get(videoItem.mediaId);
-    if (frame) {
+    const media = assets.mediaMap.get(videoItem.mediaId);
+
+    if (frame && media) {
       const vd      = videoItem.videoDetails;
       const filters: string[] = [];
       if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
       if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
       if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
 
-      drawContain(
+      drawVideoFrameCorrected(
         ctx,
         frame,
-        frame.width,
-        frame.height,
+        media,
         width,
         height,
         vd?.flipH   ?? false,
@@ -124,6 +209,9 @@ export function renderTimelineFrame({
         vd?.opacity ?? 1,
         filters.join(' ')
       );
+    } else if (frame) {
+      // Fallback: no MediaFile available — draw as-is (no rotation correction)
+      drawContain(ctx, frame, frame.width, frame.height, width, height);
     }
   }
 

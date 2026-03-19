@@ -1,8 +1,9 @@
 // ============================================================
-// ViralCut Export3 – Canvas Renderer (v5 — clean, no metadata)
+// ViralCut Export3 – Canvas Renderer (v6)
 //
 // Orientation is decided BEFORE this class is instantiated.
 // This renderer only prepares media and draws frames.
+// Audio tracks are NOT loaded into VideoFrameCache.
 // ============================================================
 
 import { Project, MediaFile } from '../types';
@@ -19,6 +20,7 @@ export class CanvasRenderer {
   private ctx:        CanvasRenderingContext2D;
   private frameCache: VideoFrameCache;
   private images    = new Map<string, ImageBitmap>();
+  private mediaMap  = new Map<string, MediaFile>();
 
   constructor(opts: CanvasRendererOptions) {
     this.canvas        = document.createElement('canvas');
@@ -37,20 +39,28 @@ export class CanvasRenderer {
   /**
    * Pre-load all media needed by the project.
    * Must be called before renderFrame().
+   * Audio tracks are intentionally excluded from VideoFrameCache.
    */
   async prepare(
     project:    Project,
     mediaMap:   Map<string, MediaFile>,
     onProgress: (msg: string) => void
   ): Promise<void> {
+    // Store the mediaMap so renderFrame can pass it to the renderer
+    this.mediaMap = mediaMap;
+
     const videoIds = new Set<string>();
     const imageIds = new Set<string>();
 
     for (const track of project.tracks) {
       for (const item of track.items) {
         if (!item.mediaId) continue;
-        if (track.type === 'video' || track.type === 'audio') videoIds.add(item.mediaId);
-        else if (track.type === 'image') imageIds.add(item.mediaId);
+        if (track.type === 'video') {
+          // Only video tracks go into the frame cache — NOT audio
+          videoIds.add(item.mediaId);
+        } else if (track.type === 'image') {
+          imageIds.add(item.mediaId);
+        }
       }
     }
 
@@ -98,7 +108,8 @@ export class CanvasRenderer {
 
     const assets: FrameRenderAssets = {
       videoFrames,
-      images: this.images,
+      images:   this.images,
+      mediaMap: this.mediaMap,
     };
 
     renderTimelineFrame({ ctx: this.ctx, timeSec, width, height, project, assets });
@@ -118,5 +129,6 @@ export class CanvasRenderer {
     this.frameCache.dispose();
     this.images.forEach((bmp) => { try { bmp.close(); } catch { /* ignore */ } });
     this.images.clear();
+    this.mediaMap.clear();
   }
 }
