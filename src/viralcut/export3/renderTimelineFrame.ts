@@ -1,27 +1,23 @@
 // ============================================================
-// ViralCut Export3 – Per-frame deterministic renderer (v9)
+// ViralCut Export3 – Per-frame deterministic renderer (v10)
 //
-// ROTATION STRATEGY (definitive — fixes 4K portrait bug):
+// ROTATION STRATEGY (definitive v10 — fixes high-quality portrait bug):
 //
-// The problem: createImageBitmap() can behave differently at probe
-// time vs render time, especially on Chrome mobile/desktop for 4K.
-// Probe may see encoded dims (3840×2160) but actual render frames
-// may come back already rotated (2160×3840). If we naively apply
-// 90° rotation based on probe metadata, we get double-rotation.
+// v9 tried to detect rotation by comparing live bitmap dims vs stored
+// encoded dims. This was unreliable because:
+//   - High-quality videos may return downscaled bitmaps during export
+//   - createImageBitmap() can return different sizes at different times
+//   - The comparison thresholds could fail for unusual resolutions
 //
-// FIX: At render time, compare the actual bitmap dimensions
-// against the stored encoded dims from meta to determine
-// whether the browser applied rotation to THIS specific bitmap.
-// This overrides the probe-time browserAutoRotates flag.
+// v10 DEFINITIVE STRATEGY:
+//   Use VideoFrameMeta.browserAutoRotates (set authoritatively during
+//   the multi-attempt probe in VideoFrameCache) to decide rotation.
 //
-// CASE A: bitmap is portrait (height > width) AND meta says
-//         video was encoded landscape (encodedWidth > encodedHeight):
-//         → Browser rotated the bitmap already → apply 0° rotation
+//   If browserAutoRotates=true              → bitmap is already portrait → draw as-is (0°)
+//   If browserAutoRotates=false, deg=90|270 → browser did NOT rotate    → apply 90° manually
+//   If browserAutoRotates=false, deg=0|180  → no rotation needed        → draw as-is (0°)
 //
-// CASE B: bitmap is landscape (width >= height) AND rotationDeg=90|270
-//         → Browser did NOT rotate → apply 90° to correct
-//
-// CASE C: no meta → fallback orientation comparison
+//   Fallback (no meta): compare bitmap aspect vs canvas aspect
 // ============================================================
 
 import { Project, TrackItem } from '../types';
@@ -68,39 +64,18 @@ function getOverlayItems(project: Project, timeSec: number) {
 }
 
 /**
- * Determines whether the browser has auto-rotated THIS specific bitmap
- * by comparing its actual dimensions against the stored encoded dimensions.
+ * Determines whether to apply a 90° manual rotation when drawing this frame.
  *
- * This is the definitive check — it runs on the actual bitmap being drawn,
- * not on a probe bitmap from earlier. This prevents the double-rotation bug
- * where the probe sees encoded dims but the export frame is already rotated.
- */
-function isBitmapAlreadyRotatedByBrowser(
-  frame: ImageBitmap,
-  meta: VideoFrameMeta
-): boolean {
-  const { encodedWidth, encodedHeight, rotationDeg } = meta;
-
-  // Only relevant for 90/270 degree rotations
-  if (rotationDeg !== 90 && rotationDeg !== 270) return false;
-
-  // The encoded video is landscape (width > height)
-  const tol = Math.max(4, Math.round(Math.max(encodedWidth, encodedHeight) * 0.015));
-
-  // If the bitmap dimensions match the SWAPPED (display) orientation,
-  // the browser already applied the rotation
-  const bitmapMatchesDisplayOrientation =
-    Math.abs(frame.width  - encodedHeight) <= tol &&
-    Math.abs(frame.height - encodedWidth)  <= tol;
-
-  return bitmapMatchesDisplayOrientation;
-}
-
-/**
- * Determines the rotation to apply to a bitmap before drawing it onto the canvas.
+ * v10: Uses VideoFrameMeta.browserAutoRotates as the PRIMARY source of truth.
+ * This field is set by a multi-attempt probe during VideoFrameCache.prepare()
+ * and is NOT affected by varying bitmap sizes at render time.
  *
- * Uses live bitmap dimensions compared to stored meta for authoritative detection.
- * This prevents double-rotation bugs where probe and render-time behavior differ.
+ * Decision table:
+ *   meta.browserAutoRotates=true              → 0  (browser already rotated)
+ *   meta.browserAutoRotates=false, deg=90|270 → 90 (must rotate manually)
+ *   meta.browserAutoRotates=false, deg=0|180  → 0  (no rotation needed)
+ *   no meta, bitmap portrait ≠ canvas portrait → 90 (orientation heuristic)
+ *   no meta, same orientation                  → 0
  */
 function resolveRotation(
   frame: ImageBitmap,
@@ -109,28 +84,22 @@ function resolveRotation(
   meta: VideoFrameMeta | null
 ): 0 | 90 {
   if (meta) {
-    const rDeg = meta.rotationDeg;
+    const { rotationDeg, browserAutoRotates } = meta;
 
-    if (rDeg === 90 || rDeg === 270) {
-      // Check if THIS bitmap was already rotated by the browser at render time
-      const alreadyRotated = isBitmapAlreadyRotatedByBrowser(frame, meta);
+    // Only 90/270 degree rotations require a 90° canvas transform
+    if (rotationDeg !== 90 && rotationDeg !== 270) return 0;
 
-      if (alreadyRotated) {
-        // Browser rotated the bitmap — it's already portrait, draw as-is
-        return 0;
-      } else {
-        // Browser did NOT rotate — bitmap is still in encoded (landscape) orientation
-        // We must rotate manually to achieve portrait on the canvas
-        return 90;
-      }
+    if (browserAutoRotates) {
+      // Browser already applied the rotation — bitmap is in display orientation
+      return 0;
+    } else {
+      // Browser did NOT rotate — bitmap is still in encoded (landscape) orientation
+      // We must rotate manually to correct it
+      return 90;
     }
-
-    // rotationDeg = 0 or 180: no 90° rotation needed
-    return 0;
   }
 
-  // ── Fallback: orientation-based heuristic ──────────────────
-  // Used when meta is unavailable (natively portrait videos, etc.)
+  // ── Fallback: orientation-based heuristic (no meta available) ──────────────
   const bitmapIsPortrait = frame.height > frame.width;
   const canvasIsPortrait = canvasH > canvasW;
   if (bitmapIsPortrait !== canvasIsPortrait) return 90;
@@ -138,9 +107,22 @@ function resolveRotation(
 }
 
 /**
- * Draws a video frame onto the canvas.
- * Uses live bitmap dimension analysis for rotation when meta is available.
- * Always uses contain-fit to prevent stretching.
+ * Draws a video frame onto the canvas with correct orientation.
+ *
+ * Uses contain-fit scaling (letterbox) to prevent stretching.
+ * Rotation is determined by resolveRotation() using authoritative metadata.
+ *
+ * Math explanation for 90° rotation case:
+ *   After ctx.rotate(90°), the coordinate system is transposed:
+ *     - x-axis now points DOWN in screen space
+ *     - y-axis now points LEFT in screen space
+ *
+ *   We want the final frame to occupy dw×dh in SCREEN space (portrait).
+ *   In ROTATED coordinate space, this means drawing:
+ *     width = dh  (the screen-height becomes the draw-width in rotated space)
+ *     height = dw (the screen-width becomes the draw-height in rotated space)
+ *
+ *   This correctly maps a landscape bitmap to fill a portrait canvas.
  */
 function drawVideoFrame(
   ctx: CanvasRenderingContext2D,
@@ -162,27 +144,30 @@ function drawVideoFrame(
   const rotation = resolveRotation(frame, canvasW, canvasH, meta);
   const isRotated = rotation === 90;
 
-  // After rotation, visual dimensions are the post-rotation view of the frame
-  // visW/visH represent how the frame appears visually after rotation
+  // visW/visH: the visual dimensions of the frame AFTER rotation is applied.
+  // For a landscape bitmap (fw=3840, fh=2160) with 90° rotation:
+  //   visW = fh = 2160  (the frame's height becomes the horizontal extent)
+  //   visH = fw = 3840  (the frame's width becomes the vertical extent)
   const visW = isRotated ? frame.height : frame.width;
   const visH = isRotated ? frame.width  : frame.height;
 
-  // Contain-fit: scale to fill canvas without stretching
+  // Contain-fit: scale uniformly so the entire frame fits within the canvas
   const scale = Math.min(canvasW / visW, canvasH / visH);
-  const dw = visW * scale;
-  const dh = visH * scale;
+  const dw = visW * scale;  // final display width on screen canvas
+  const dh = visH * scale;  // final display height on screen canvas
 
+  // Center the frame on the canvas
   ctx.translate(canvasW / 2, canvasH / 2);
-  if (rotation !== 0) ctx.rotate((rotation * Math.PI) / 180);
-  if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
 
-  // After 90° rotation, the canvas coordinate system is transposed.
-  // We draw using encoded (pre-rotation) dimensions scaled to dh×dw.
   if (isRotated) {
-    // In rotated space: horizontal axis = original vertical, vertical = -original horizontal
-    // The frame (encodedW × encodedH) = (landscape W × H) must fill dh × dw in rotated space
+    ctx.rotate(Math.PI / 2);
+    // Apply flips before drawing in rotated space
+    if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+    // Draw in rotated coordinate space: width=dh, height=dw
+    // This fills dw×dh (portrait) in screen space correctly
     ctx.drawImage(frame, -dh / 2, -dw / 2, dh, dw);
   } else {
+    if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
     ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
   }
 
