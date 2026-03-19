@@ -425,12 +425,15 @@ const ViralCut = () => {
       }, { pushHistory: true });
 
       // ── Background probe: refine rotation metadata without blocking ──
+      // The promise is stored so handleExport can await it before starting export.
       if (type === 'video') {
-        probeAndPatchRotation(
+        const probePromise = probeAndPatchRotation(
           file, mf.id, encodedWidth, encodedHeight,
           setMedia, updateProject, resolveAspectRatioFromMedia,
           capturedIsFirstVideo, capturedAspectRatio,
         );
+        pendingProbesRef.current.set(mf.id, probePromise);
+        probePromise.finally(() => pendingProbesRef.current.delete(mf.id));
       }
     }
   }, [updateProject, resolveAspectRatioFromMedia]);
