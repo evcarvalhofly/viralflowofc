@@ -1,13 +1,12 @@
 // ============================================================
-// ViralCut Export3 – Canvas Renderer (v4 — clean)
+// ViralCut Export3 – Canvas Renderer (v5 — clean, no metadata)
 //
-// Removed all rotationDeg / mediaFile references.
-// VideoFrameCache.prepare() now only needs (id, url).
-// getFrame() now only needs (id, time).
+// Orientation is decided BEFORE this class is instantiated.
+// This renderer only prepares media and draws frames.
 // ============================================================
 
 import { Project, MediaFile } from '../types';
-import { VideoFrameCache, VideoFrameMeta } from './videoFrameCache';
+import { VideoFrameCache } from './videoFrameCache';
 import { renderTimelineFrame, FrameRenderAssets } from './renderTimelineFrame';
 
 export interface CanvasRendererOptions {
@@ -20,33 +19,19 @@ export class CanvasRenderer {
   private ctx:        CanvasRenderingContext2D;
   private frameCache: VideoFrameCache;
   private images    = new Map<string, ImageBitmap>();
-  private videoMeta = new Map<string, VideoFrameMeta>();
 
   constructor(opts: CanvasRendererOptions) {
     this.canvas        = document.createElement('canvas');
     this.canvas.width  = opts.width;
     this.canvas.height = opts.height;
     this.ctx           = this.canvas.getContext('2d', { alpha: false })!;
-    this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(0, 0, opts.width, opts.height);
     this.frameCache    = new VideoFrameCache();
+    this._clear();
   }
 
-  /**
-   * Resize the canvas. Used by sceneExporter to set the final
-   * output dimensions after resolving orientation from video metadata.
-   */
-  resize(w: number, h: number): void {
-    this.canvas.width  = w;
-    this.canvas.height = h;
-    this.ctx = this.canvas.getContext('2d', { alpha: false })!;
+  private _clear() {
     this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(0, 0, w, h);
-  }
-
-  /** Returns probed VideoFrameMeta for a media ID (available after prepare()). */
-  getVideoMeta(mediaId: string): VideoFrameMeta | null {
-    return this.videoMeta.get(mediaId) ?? null;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   /**
@@ -78,10 +63,7 @@ export class CanvasRenderer {
       const mf = mediaMap.get(id);
       if (!mf?.url) continue;
       onProgress(`Carregando vídeo ${++loaded}/${total}…`);
-      // Only (id, url) — no rotation metadata needed
       await this.frameCache.prepare(id, mf.url);
-      const meta = this.frameCache.getMeta(id);
-      if (meta) this.videoMeta.set(id, meta);
     }
 
     for (const id of iArr) {
@@ -97,32 +79,26 @@ export class CanvasRenderer {
   async renderFrame(project: Project, timeSec: number): Promise<void> {
     const { width, height } = this.canvas;
 
-    let activeVideoMediaId: string | null = null;
-    let activeVideoTime = 0;
+    // Collect the active video frame
+    const videoFrames = new Map<string, ImageBitmap | null>();
 
     for (const track of project.tracks) {
       if (track.type !== 'video' || track.muted) continue;
       for (const item of track.items) {
         if (timeSec >= item.startTime && timeSec < item.endTime) {
-          activeVideoMediaId = item.mediaId;
           const playbackRate = item.videoDetails?.playbackRate ?? 1;
-          activeVideoTime    = (item.mediaStart ?? 0) + (timeSec - item.startTime) * playbackRate;
+          const mediaTime    = (item.mediaStart ?? 0) + (timeSec - item.startTime) * playbackRate;
+          const frame        = await this.frameCache.getFrame(item.mediaId, mediaTime);
+          videoFrames.set(item.mediaId, frame);
           break;
         }
       }
-      if (activeVideoMediaId) break;
-    }
-
-    const videoFrames = new Map<string, ImageBitmap | null>();
-    if (activeVideoMediaId !== null) {
-      const frame = await this.frameCache.getFrame(activeVideoMediaId, activeVideoTime);
-      videoFrames.set(activeVideoMediaId, frame);
+      if (videoFrames.size > 0) break;
     }
 
     const assets: FrameRenderAssets = {
       videoFrames,
-      videoMeta: this.videoMeta,
-      images:    this.images,
+      images: this.images,
     };
 
     renderTimelineFrame({ ctx: this.ctx, timeSec, width, height, project, assets });
@@ -142,6 +118,5 @@ export class CanvasRenderer {
     this.frameCache.dispose();
     this.images.forEach((bmp) => { try { bmp.close(); } catch { /* ignore */ } });
     this.images.clear();
-    this.videoMeta.clear();
   }
 }
