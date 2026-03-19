@@ -1,23 +1,11 @@
 // ============================================================
-// ViralCut Export3 – Per-frame deterministic renderer (v10)
+// ViralCut Export3 – Per-frame deterministic renderer (v11 — clean)
 //
-// ROTATION STRATEGY (definitive v10 — fixes high-quality portrait bug):
+// RULE: The canvas is ALWAYS the correct size for the output orientation.
+//       The bitmap from the browser is ALWAYS display-correct (already rotated).
+//       Therefore we NEVER apply any rotation transform here.
 //
-// v9 tried to detect rotation by comparing live bitmap dims vs stored
-// encoded dims. This was unreliable because:
-//   - High-quality videos may return downscaled bitmaps during export
-//   - createImageBitmap() can return different sizes at different times
-//   - The comparison thresholds could fail for unusual resolutions
-//
-// v10 DEFINITIVE STRATEGY:
-//   Use VideoFrameMeta.browserAutoRotates (set authoritatively during
-//   the multi-attempt probe in VideoFrameCache) to decide rotation.
-//
-//   If browserAutoRotates=true              → bitmap is already portrait → draw as-is (0°)
-//   If browserAutoRotates=false, deg=90|270 → browser did NOT rotate    → apply 90° manually
-//   If browserAutoRotates=false, deg=0|180  → no rotation needed        → draw as-is (0°)
-//
-//   Fallback (no meta): compare bitmap aspect vs canvas aspect
+// Drawing strategy: contain-fit (letterbox) — no stretching, ever.
 // ============================================================
 
 import { Project, TrackItem } from '../types';
@@ -26,17 +14,17 @@ import { VideoFrameMeta } from './videoFrameCache';
 
 export interface FrameRenderAssets {
   videoFrames: Map<string, ImageBitmap | null>;
-  videoMeta: Map<string, VideoFrameMeta>;
-  images: Map<string, ImageBitmap>;
+  videoMeta:   Map<string, VideoFrameMeta>;
+  images:      Map<string, ImageBitmap>;
 }
 
 export interface RenderFrameParams {
-  ctx: CanvasRenderingContext2D;
-  timeSec: number;
-  width: number;
-  height: number;
-  project: Project;
-  assets: FrameRenderAssets;
+  ctx:      CanvasRenderingContext2D;
+  timeSec:  number;
+  width:    number;
+  height:   number;
+  project:  Project;
+  assets:   FrameRenderAssets;
 }
 
 function getActiveVideoItem(project: Project, timeSec: number): TrackItem | null {
@@ -51,7 +39,7 @@ function getActiveVideoItem(project: Project, timeSec: number): TrackItem | null
 
 function getOverlayItems(project: Project, timeSec: number) {
   const imageItems: TrackItem[] = [];
-  const textItems: TrackItem[] = [];
+  const textItems:  TrackItem[] = [];
   for (const track of project.tracks) {
     if (track.muted) continue;
     for (const item of track.items) {
@@ -64,112 +52,43 @@ function getOverlayItems(project: Project, timeSec: number) {
 }
 
 /**
- * Determines whether to apply a 90° manual rotation when drawing this frame.
+ * Draw a bitmap onto the canvas using contain-fit (letterbox).
  *
- * v10: Uses VideoFrameMeta.browserAutoRotates as the PRIMARY source of truth.
- * This field is set by a multi-attempt probe during VideoFrameCache.prepare()
- * and is NOT affected by varying bitmap sizes at render time.
- *
- * Decision table:
- *   meta.browserAutoRotates=true              → 0  (browser already rotated)
- *   meta.browserAutoRotates=false, deg=90|270 → 90 (must rotate manually)
- *   meta.browserAutoRotates=false, deg=0|180  → 0  (no rotation needed)
- *   no meta, bitmap portrait ≠ canvas portrait → 90 (orientation heuristic)
- *   no meta, same orientation                  → 0
- */
-function resolveRotation(
-  frame: ImageBitmap,
-  canvasW: number,
-  canvasH: number,
-  meta: VideoFrameMeta | null
-): 0 | 90 {
-  if (meta) {
-    const { rotationDeg, browserAutoRotates } = meta;
-
-    // Only 90/270 degree rotations require a 90° canvas transform
-    if (rotationDeg !== 90 && rotationDeg !== 270) return 0;
-
-    if (browserAutoRotates) {
-      // Browser already applied the rotation — bitmap is in display orientation
-      return 0;
-    } else {
-      // Browser did NOT rotate — bitmap is still in encoded (landscape) orientation
-      // We must rotate manually to correct it
-      return 90;
-    }
-  }
-
-  // ── Fallback: orientation-based heuristic (no meta available) ──────────────
-  const bitmapIsPortrait = frame.height > frame.width;
-  const canvasIsPortrait = canvasH > canvasW;
-  if (bitmapIsPortrait !== canvasIsPortrait) return 90;
-  return 0;
-}
-
-/**
- * Draws a video frame onto the canvas with correct orientation.
- *
- * Uses contain-fit scaling (letterbox) to prevent stretching.
- * Rotation is determined by resolveRotation() using authoritative metadata.
- *
- * Math explanation for 90° rotation case:
- *   After ctx.rotate(90°), the coordinate system is transposed:
- *     - x-axis now points DOWN in screen space
- *     - y-axis now points LEFT in screen space
- *
- *   We want the final frame to occupy dw×dh in SCREEN space (portrait).
- *   In ROTATED coordinate space, this means drawing:
- *     width = dh  (the screen-height becomes the draw-width in rotated space)
- *     height = dw (the screen-width becomes the draw-height in rotated space)
- *
- *   This correctly maps a landscape bitmap to fill a portrait canvas.
+ * The browser's createImageBitmap() already returns the frame in display
+ * orientation — no rotation needed here. We simply scale the bitmap to
+ * fit inside the canvas while preserving its aspect ratio.
  */
 function drawVideoFrame(
-  ctx: CanvasRenderingContext2D,
-  frame: ImageBitmap,
-  canvasW: number,
-  canvasH: number,
-  meta: VideoFrameMeta | null,
-  flipH: boolean,
-  flipV: boolean,
-  opacity: number,
-  filters: string
+  ctx:      CanvasRenderingContext2D,
+  frame:    ImageBitmap,
+  canvasW:  number,
+  canvasH:  number,
+  flipH:    boolean,
+  flipV:    boolean,
+  opacity:  number,
+  filters:  string
 ) {
   if (!frame.width || !frame.height) return;
+
+  const fw = frame.width;
+  const fh = frame.height;
+
+  // Contain-fit: uniform scale so the entire frame is visible
+  const scale = Math.min(canvasW / fw, canvasH / fh);
+  const dw = fw * scale;
+  const dh = fh * scale;
+
+  // Debug log — first frame only (avoids spam)
+  // Uncomment if needed:
+  // console.log('[render] frame', fw, fh, '→ canvas', canvasW, canvasH, '→ draw', dw, dh);
 
   ctx.save();
   ctx.globalAlpha = opacity;
   if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters;
 
-  const rotation = resolveRotation(frame, canvasW, canvasH, meta);
-  const isRotated = rotation === 90;
-
-  // visW/visH: the visual dimensions of the frame AFTER rotation is applied.
-  // For a landscape bitmap (fw=3840, fh=2160) with 90° rotation:
-  //   visW = fh = 2160  (the frame's height becomes the horizontal extent)
-  //   visH = fw = 3840  (the frame's width becomes the vertical extent)
-  const visW = isRotated ? frame.height : frame.width;
-  const visH = isRotated ? frame.width  : frame.height;
-
-  // Contain-fit: scale uniformly so the entire frame fits within the canvas
-  const scale = Math.min(canvasW / visW, canvasH / visH);
-  const dw = visW * scale;  // final display width on screen canvas
-  const dh = visH * scale;  // final display height on screen canvas
-
-  // Center the frame on the canvas
   ctx.translate(canvasW / 2, canvasH / 2);
-
-  if (isRotated) {
-    ctx.rotate(Math.PI / 2);
-    // Apply flips before drawing in rotated space
-    if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-    // Draw in rotated coordinate space: width=dh, height=dw
-    // This fills dw×dh (portrait) in screen space correctly
-    ctx.drawImage(frame, -dh / 2, -dw / 2, dh, dw);
-  } else {
-    if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-    ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
-  }
+  if (flipH || flipV) ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+  ctx.drawImage(frame, -dw / 2, -dh / 2, dw, dh);
 
   if (filters) (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
   ctx.restore();
@@ -193,8 +112,7 @@ export function renderTimelineFrame({
   if (videoItem) {
     const frame = assets.videoFrames.get(videoItem.mediaId);
     if (frame) {
-      const vd = videoItem.videoDetails;
-      const meta = assets.videoMeta.get(videoItem.mediaId) ?? null;
+      const vd      = videoItem.videoDetails;
       const filters: string[] = [];
       if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
       if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
@@ -205,10 +123,9 @@ export function renderTimelineFrame({
         frame,
         width,
         height,
-        meta,
-        vd?.flipH ?? false,
-        vd?.flipV ?? false,
-        vd?.opacity ?? 1,
+        vd?.flipH    ?? false,
+        vd?.flipV    ?? false,
+        vd?.opacity  ?? 1,
         filters.join(' ')
       );
     }
@@ -221,9 +138,9 @@ export function renderTimelineFrame({
     const bmp = assets.images.get(imgItem.mediaId);
     if (!bmp) continue;
     const id = imgItem.imageDetails;
-    const ox = ((id?.posX ?? 50) / 100) * width;
-    const oy = ((id?.posY ?? 50) / 100) * height;
-    const dw = ((id?.width ?? 50) / 100) * width;
+    const ox = ((id?.posX   ?? 50) / 100) * width;
+    const oy = ((id?.posY   ?? 50) / 100) * height;
+    const dw = ((id?.width  ?? 50) / 100) * width;
     const dh = ((id?.height ?? 50) / 100) * height;
 
     ctx.save();

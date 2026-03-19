@@ -18,7 +18,7 @@ import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { exportProjectWithMediaBunny } from '@/viralcut/export3/exportProjectWithMediaBunny';
-import { probeVideoRotation } from '@/viralcut/utils/probeVideoRotation';
+
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers,
@@ -62,27 +62,24 @@ interface MediaMetadata {
   duration: number;
   width?: number;
   height?: number;
-  encodedWidth?: number;
-  encodedHeight?: number;
-  displayWidth?: number;
-  displayHeight?: number;
-  rotationDeg?: 0 | 90 | 180 | 270;
   orientation?: 'portrait' | 'landscape' | 'square';
 }
 
-// ── Fast metadata (no FFmpeg) — used for instant import ──────────────
+// ── Fast metadata — reads video.videoWidth/videoHeight directly ──────
+// The browser auto-applies container rotation, so these values are
+// already visually correct. No FFmpeg, no rotation metadata needed.
 async function getMediaMetadata(file: File): Promise<MediaMetadata> {
   if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
     return { duration: 0 };
   }
 
   const isVideo = file.type.startsWith('video/');
-  const objUrl = URL.createObjectURL(file);
-  const el = document.createElement(isVideo ? 'video' : 'audio') as HTMLVideoElement;
-  el.preload = 'metadata';
-  el.muted = true;
+  const objUrl  = URL.createObjectURL(file);
+  const el      = document.createElement(isVideo ? 'video' : 'audio') as HTMLVideoElement;
+  el.preload    = 'metadata';
+  el.muted      = true;
 
-  const loadedMeta = await new Promise<{ duration: number; encodedWidth?: number; encodedHeight?: number }>((resolve) => {
+  const result = await new Promise<MediaMetadata>((resolve) => {
     const timeout = setTimeout(() => {
       URL.revokeObjectURL(objUrl);
       resolve({ duration: 0 });
@@ -91,11 +88,17 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
     el.onloadedmetadata = () => {
       clearTimeout(timeout);
       URL.revokeObjectURL(objUrl);
-      resolve({
-        duration: sanitizeDuration(el.duration),
-        encodedWidth: (el as HTMLVideoElement).videoWidth > 0 ? (el as HTMLVideoElement).videoWidth : undefined,
-        encodedHeight: (el as HTMLVideoElement).videoHeight > 0 ? (el as HTMLVideoElement).videoHeight : undefined,
-      });
+      const duration = sanitizeDuration(el.duration);
+      if (!isVideo) { resolve({ duration }); return; }
+
+      // Use browser-reported dimensions — already rotation-corrected
+      const w = (el as HTMLVideoElement).videoWidth  || undefined;
+      const h = (el as HTMLVideoElement).videoHeight || undefined;
+      const orientation: MediaMetadata['orientation'] =
+        w && h ? (h > w ? 'portrait' : w > h ? 'landscape' : 'square') : undefined;
+
+      console.log('[ViralCut][import] video dimensions (browser):', w, 'x', h, '→', orientation);
+      resolve({ duration, width: w, height: h, orientation });
     };
 
     el.onerror = () => {
@@ -107,106 +110,7 @@ async function getMediaMetadata(file: File): Promise<MediaMetadata> {
     el.src = objUrl;
   });
 
-  const { duration, encodedWidth, encodedHeight } = loadedMeta;
-
-  if (!isVideo) return { duration };
-
-  // Safe fallback — rotationDeg resolved later in background via probeVideoRotation
-  const displayWidth = encodedWidth;
-  const displayHeight = encodedHeight;
-  const rotationDeg: 0 | 90 | 180 | 270 = 0;
-
-  const orientation: MediaMetadata['orientation'] =
-    displayWidth && displayHeight
-      ? displayHeight > displayWidth ? 'portrait'
-        : displayWidth > displayHeight ? 'landscape'
-        : 'square'
-      : undefined;
-
-  return {
-    duration,
-    width: displayWidth,
-    height: displayHeight,
-    encodedWidth,
-    encodedHeight,
-    displayWidth,
-    displayHeight,
-    rotationDeg,
-    orientation,
-  };
-}
-
-// ── Background probe: refines rotationDeg after import ───────────────
-// Called AFTER the MediaFile is already added to state so the UI is responsive.
-// Returns a Promise so handleExport can await it before starting export.
-//
-// KEY: probedMetaRef is written SYNCHRONOUSLY before setMedia() is called.
-// This ensures handleExport can read authoritative rotation data immediately
-// after Promise.allSettled(pendingProbes) — without waiting for React to flush.
-async function probeAndPatchRotation(
-  file: File,
-  mediaId: string,
-  encodedWidth: number | undefined,
-  encodedHeight: number | undefined,
-  setMedia: React.Dispatch<React.SetStateAction<MediaFile[]>>,
-  updateProject: (updater: (p: Project) => Project) => void,
-  resolveAspectRatioFromMedia: (w?: number, h?: number) => { aspectRatio: Project['aspectRatio']; projectWidth: number; projectHeight: number },
-  isFirstVideo: boolean,
-  currentAspectRatio: Project['aspectRatio'],
-  probedMetaRef: React.MutableRefObject<Map<string, {
-    rotationDeg: 0 | 90 | 180 | 270;
-    displayWidth?: number;
-    displayHeight?: number;
-    orientation?: 'portrait' | 'landscape' | 'square';
-  }>>,
-): Promise<void> {
-  let rotationDeg: 0 | 90 | 180 | 270 = 0;
-  try {
-    rotationDeg = await probeVideoRotation(file);
-  } catch (err) {
-    console.warn('[ViralCut][probe] probeVideoRotation failed, keeping 0', err);
-    // Even on failure, ensure display dims are set correctly from encoded dims
-  }
-
-  // IMPORTANT: Always compute display dims — even when rotationDeg=0.
-  // This ensures the MediaFile always has displayWidth/displayHeight set,
-  // which the export pipeline uses as a reliable orientation signal.
-  const displayWidth = rotationDeg === 90 || rotationDeg === 270 ? encodedHeight : encodedWidth;
-  const displayHeight = rotationDeg === 90 || rotationDeg === 270 ? encodedWidth : encodedHeight;
-  const orientation: MediaFile['orientation'] =
-    displayWidth && displayHeight
-      ? displayHeight > displayWidth ? 'portrait'
-        : displayWidth > displayHeight ? 'landscape'
-        : 'square'
-      : undefined;
-
-  console.log('[ViralCut][probe] rotation resolved', { mediaId, rotationDeg, displayWidth, displayHeight, orientation });
-
-  // ── Write to mutable ref FIRST (synchronous, no React flush lag) ──
-  // handleExport reads this map directly after awaiting pendingProbes.
-  probedMetaRef.current.set(mediaId, { rotationDeg, displayWidth, displayHeight, orientation });
-
-  // ── Then update React state for UI display ──
-  setMedia((prev) =>
-    prev.map((m) =>
-      m.id === mediaId
-        ? { ...m, rotationDeg, displayWidth, displayHeight, width: displayWidth, height: displayHeight, orientation }
-        : m
-    )
-  );
-
-  // Patch project orientation if this was the first video and it wasn't yet correct
-  if (isFirstVideo && displayWidth && displayHeight) {
-    const resolved = resolveAspectRatioFromMedia(displayWidth, displayHeight);
-    if (resolved.aspectRatio !== currentAspectRatio) {
-      updateProject((p) => ({
-        ...p,
-        aspectRatio: resolved.aspectRatio,
-        width: resolved.projectWidth,
-        height: resolved.projectHeight,
-      }));
-    }
-  }
+  return result;
 }
 
 function calcDuration(tracks: Track[]): number {
@@ -224,29 +128,9 @@ const ViralCut = () => {
   const autoCutImportRef = useRef<HTMLInputElement>(null);
   const splitAllRef = useRef<(() => void) | null>(null);
 
-  // ── Pending rotation probes ────────────────────────────────
-  // Stores in-flight probeAndPatchRotation promises keyed by mediaId.
-  // handleExport awaits ALL pending probes before starting export,
-  // ensuring rotationDeg is always set before orientation is resolved.
-  const pendingProbesRef = useRef<Map<string, Promise<void>>>(new Map());
-
-  // ── Probed metadata override map ──────────────────────────
-  // Written SYNCHRONOUSLY inside probeAndPatchRotation when the probe
-  // resolves. handleExport reads this map DIRECTLY after awaiting probes,
-  // bypassing the React state flush lag that caused the orientation race.
-  // Key: mediaId  Value: patched rotation/display metadata
-  const probedMetaRef = useRef<Map<string, {
-    rotationDeg: 0 | 90 | 180 | 270;
-    displayWidth?: number;
-    displayHeight?: number;
-    orientation?: 'portrait' | 'landscape' | 'square';
-  }>>(new Map());
-
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
   const [media, setMedia] = useState<MediaFile[]>([]);
-  // Ref kept in sync with media state — used as base for building freshMedia
-  // in handleExport (patched with probedMetaRef overrides to avoid state lag).
   const mediaRef = useRef<MediaFile[]>([]);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -385,15 +269,13 @@ const ViralCut = () => {
       const url = URL.createObjectURL(file);
       // Fast metadata — no FFmpeg, never blocks the UI
       const meta = await getMediaMetadata(file);
-      const { duration, width, height, encodedWidth, encodedHeight, displayWidth, displayHeight, rotationDeg, orientation } = meta;
+      const { duration, width, height, orientation } = meta;
       const thumbnail = await generateThumbnail(file);
       const type: MediaFile['type'] = file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'image';
       const mf: MediaFile = {
         id: createId(), name: file.name, type, file, url, duration, thumbnail,
         width, height,
-        encodedWidth, encodedHeight,
-        displayWidth, displayHeight,
-        rotationDeg, orientation,
+        orientation,
       };
 
       // ── Add to state immediately so the editor opens right away ──
@@ -421,8 +303,8 @@ const ViralCut = () => {
         capturedAspectRatio = p.aspectRatio;
 
         let orientationPatch: Partial<Project> = {};
-        const orientW = displayWidth ?? width;
-        const orientH = displayHeight ?? height;
+        const orientW = width;
+        const orientH = height;
         if (isFirstVideo && orientW && orientH) {
           const resolved = resolveAspectRatioFromMedia(orientW, orientH);
           orientationPatch = {
@@ -454,18 +336,8 @@ const ViralCut = () => {
         return { ...p, ...orientationPatch, tracks: newTracks };
       }, { pushHistory: true });
 
-      // ── Background probe: refine rotation metadata without blocking ──
-      // The promise is stored so handleExport can await it before starting export.
-      if (type === 'video') {
-        const probePromise = probeAndPatchRotation(
-          file, mf.id, encodedWidth, encodedHeight,
-          setMedia, updateProject, resolveAspectRatioFromMedia,
-          capturedIsFirstVideo, capturedAspectRatio,
-          probedMetaRef,
-        );
-        pendingProbesRef.current.set(mf.id, probePromise);
-        probePromise.finally(() => pendingProbesRef.current.delete(mf.id));
-      }
+      // No background probe needed — browser already returns
+      // display-corrected dimensions from video.videoWidth/videoHeight.
     }
   }, [updateProject, resolveAspectRatioFromMedia]);
 
@@ -682,50 +554,9 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
 
     try {
-      // ── Wait for all pending rotation probes before exporting ──
-      const pendingProbes = [...pendingProbesRef.current.values()];
-      if (pendingProbes.length > 0) {
-        setExportState({ status: 'preparing', progress: 2, label: 'Aguardando análise de rotação…' });
-        console.log(`[ViralCut][export] Waiting for ${pendingProbes.length} pending rotation probe(s)…`);
-        await Promise.allSettled(pendingProbes);
-        console.log('[ViralCut][export] All rotation probes complete.');
-      }
-
-      // ── Build freshMedia: start from mediaRef snapshot, then apply
-      // probedMetaRef overrides synchronously.
-      //
-      // WHY: After Promise.allSettled(pendingProbes), probeAndPatchRotation
-      // has already written final metadata to probedMetaRef.current.
-      // However React's setMedia() inside the probe is ASYNC — mediaRef.current
-      // may not yet reflect the patched rotationDeg values.
-      //
-      // Reading probedMetaRef directly guarantees we get the correct
-      // rotationDeg/displayWidth/displayHeight without any flush lag.
-      const freshMedia = mediaRef.current.map((m) => {
-        const patch = probedMetaRef.current.get(m.id);
-        if (!patch) return m;
-        return {
-          ...m,
-          rotationDeg: patch.rotationDeg,
-          displayWidth: patch.displayWidth,
-          displayHeight: patch.displayHeight,
-          orientation: patch.orientation,
-          width: patch.displayWidth ?? m.width,
-          height: patch.displayHeight ?? m.height,
-        };
-      });
-
-      console.log('[ViralCut][export] freshMedia rotation overrides applied:', freshMedia.map((m) => ({
-        id: m.id,
-        rotationDeg: m.rotationDeg,
-        displayWidth: m.displayWidth,
-        displayHeight: m.displayHeight,
-        orientation: m.orientation,
-      })));
-
       const blob = await exportProjectWithMediaBunny(
         project,
-        freshMedia,
+        mediaRef.current,
         { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
         (progress, label) => setExportState({ status: 'encoding', progress, label }),
         abortCtrl.signal
