@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: system_override || SYSTEM_PROMPT },
           ...messages,
         ],
         stream: true,
