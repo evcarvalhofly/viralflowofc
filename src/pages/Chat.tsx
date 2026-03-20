@@ -173,19 +173,33 @@ const Chat = () => {
 
       const data = await resp.json();
 
+      // Handle active plan restriction
+      if (resp.status === 409 && data.error === "active_plan_exists") {
+        const blockMsg: Msg = {
+          role: "assistant",
+          content: `⚠️ ${data.message}\n\nAcesse a aba **Planejamento** para ver seu plano atual e marcar os itens como concluídos!`,
+        };
+        setMessages(prev => [...prev, blockMsg]);
+        await supabase.from("chat_messages").insert({
+          user_id: user.id,
+          role: "assistant",
+          content: blockMsg.content,
+        });
+        return;
+      }
+
       if (!resp.ok || !data.success) {
         throw new Error(data.error || "Erro ao gerar plano");
       }
 
       toast({
-        title: "📋 Plano criado!",
-        description: `"${data.plan.title}" com ${data.plan.items_count} itens foi adicionado ao seu Planejamento.`,
+        title: "📋 Plano semanal criado!",
+        description: `"${data.plan.title}" com ${data.plan.items_count} vídeos foi adicionado ao seu Planejamento.`,
       });
 
-      // Add system message about the plan
       const planMsg: Msg = {
         role: "assistant",
-        content: `✅ Plano criado com sucesso!\n\n📋 **${data.plan.title}** com ${data.plan.items_count} tarefas foi adicionado ao seu Planejamento.\n\nAcesse a aba "Planejamento" para ver e gerenciar seu checklist!`,
+        content: `✅ Plano semanal criado com sucesso!\n\n📋 **${data.plan.title}** com ${data.plan.items_count} vídeos foi adicionado ao seu Planejamento.\n\nAcesse a aba "Planejamento" para ver e gerenciar sua semana de conteúdo!`,
       };
       setMessages(prev => [...prev, planMsg]);
       await supabase.from("chat_messages").insert({
