@@ -17,6 +17,8 @@ interface PreviewPanelProps {
   onTimeChange: (t: number) => void;
   onPlayPause: () => void;
   projectName: string;
+  projectWidth: number;
+  projectHeight: number;
   selectedItemId?: string | null;
   onSelectItem?: (id: string | null) => void;
   onUpdateItem?: (trackId: string, itemId: string, updates: Partial<TrackItem>) => void;
@@ -280,6 +282,8 @@ export function PreviewPanel({
   onTimeChange,
   onPlayPause,
   projectName,
+  projectWidth,
+  projectHeight,
   selectedItemId,
   onSelectItem,
   onUpdateItem,
@@ -711,7 +715,6 @@ export function PreviewPanel({
       {/* ── Canvas preview ── */}
       <div
         className="flex-1 flex items-center justify-center bg-black overflow-hidden relative"
-        ref={overlayContainerRef}
         onClick={() => onSelectItem?.(null)}
       >
         {/* Hidden video slots (double-buffer) */}
@@ -732,17 +735,31 @@ export function PreviewPanel({
           preload="auto"
         />
 
-        <canvas
-          ref={canvasRef}
-          width={canvasW}
-          height={canvasH}
+        <div
+          ref={overlayContainerRef}
           style={{
+            position: 'relative',
+            aspectRatio: `${projectWidth} / ${projectHeight}`,
             maxWidth: '100%',
             maxHeight: '100%',
-            objectFit: 'contain',
-            display: 'block',
+            overflow: 'hidden',
+            margin: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
-        />
+        >
+          <canvas
+            ref={canvasRef}
+            width={canvasW}
+            height={canvasH}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
 
         {/* Text overlays */}
         {activeTextItems.map((item) => {
@@ -878,6 +895,7 @@ export function PreviewPanel({
             </OverlayHandle>
           );
         })}
+        </div>
       </div>
 
       {/* ── Transport controls ── */}

@@ -733,6 +733,8 @@ const ViralCut = () => {
             onTimeChange={setCurrentTime}
             onPlayPause={() => setIsPlaying((p) => !p)}
             projectName={project.name}
+            projectWidth={project.width}
+            projectHeight={project.height}
             selectedItemId={selectedItemId}
             onSelectItem={handleItemSelect}
             onUpdateItem={handleUpdateItem}
@@ -904,6 +906,8 @@ const ViralCut = () => {
             onTimeChange={setCurrentTime}
             onPlayPause={() => setIsPlaying((p) => !p)}
             projectName={project.name}
+            projectWidth={project.width}
+            projectHeight={project.height}
             selectedItemId={selectedItemId}
             onSelectItem={handleItemSelect}
             onUpdateItem={handleUpdateItem}
