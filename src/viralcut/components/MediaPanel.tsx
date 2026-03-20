@@ -21,6 +21,7 @@ interface MediaPanelProps {
   onAddShape: (shape: 'rect' | 'circle' | 'triangle') => void;
   onAddTransition: (type: string) => void;
   defaultTab?: Tab;
+  isOverlayMode?: boolean;
 }
 
 function fmt(s: number) {
@@ -62,6 +63,7 @@ export function MediaPanel({
   onAddShape,
   onAddTransition,
   defaultTab = 'uploads',
+  isOverlayMode = false,
 }: MediaPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
@@ -160,25 +162,38 @@ export function MediaPanel({
                   </div>
                   {/* Actions */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {onAddOverlay && (m.type === 'video' || m.type === 'image') && (
+                    {isOverlayMode ? (
                       <button
-                        className="p-1 rounded hover:bg-emerald-500/20 text-emerald-500"
-                        title="Adicionar como Camada"
-                        onClick={(e) => { e.stopPropagation(); onAddOverlay(m.id); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 font-semibold"
+                        title="Adicionar em Sobreposição"
+                        onClick={(e) => { e.stopPropagation(); if (onAddOverlay) onAddOverlay(m.id); else onAddToTimeline(m.id); }}
                       >
                         <Layers className="h-3.5 w-3.5" />
+                        <span className="text-[10px]">Camada</span>
                       </button>
+                    ) : (
+                      <>
+                        {onAddOverlay && (m.type === 'video' || m.type === 'image') && (
+                          <button
+                            className="p-1 rounded hover:bg-emerald-500/20 text-emerald-500"
+                            title="Adicionar como Camada (Overlay)"
+                            onClick={(e) => { e.stopPropagation(); onAddOverlay(m.id); }}
+                          >
+                            <Layers className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          className="p-1 rounded hover:bg-primary/20 text-primary"
+                          title="Adicionar à timeline principal"
+                          onClick={(e) => { e.stopPropagation(); onAddToTimeline(m.id); }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </>
                     )}
                     <button
-                      className="p-1 rounded hover:bg-primary/20 text-primary"
-                      title="Adicionar à timeline principal"
-                      onClick={(e) => { e.stopPropagation(); onAddToTimeline(m.id); }}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                    <button
                       className="p-1 rounded hover:bg-destructive/20 text-destructive"
-                      title="Remover"
+                      title="Excluir do projeto"
                       onClick={(e) => { e.stopPropagation(); onDelete(m.id); }}
                     >
                       <Trash2 className="h-3 w-3" />

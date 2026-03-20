@@ -5,7 +5,7 @@
 // Quick-split button: cuts ALL items across tracks at playhead
 // ============================================================
 import { useRef, useState, useCallback } from 'react';
-import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors } from 'lucide-react';
+import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors, Plus } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +33,7 @@ interface TimelineProps {
   onTrackToggleMute: (trackId: string) => void;
   onTrackToggleLock: (trackId: string) => void;
   onDropMedia: (trackId: string, mediaId: string, startTime: number) => void;
+  onOpenMediaPanel?: () => void;
   onSplitAllAtPlayhead?: () => void;
   onDeleteSelected?: () => void;
 }
@@ -97,6 +98,7 @@ export function Timeline({
   onTrackToggleMute,
   onTrackToggleLock,
   onDropMedia,
+  onOpenMediaPanel,
   onSplitAllAtPlayhead,
   onDeleteSelected,
 }: TimelineProps) {
@@ -364,20 +366,28 @@ export function Timeline({
         onClick={handleRulerClick}
       >
         {/* Label column spacer — fixed width, never scrolls */}
-        <div className="w-[160px] shrink-0 bg-card/80 border-r border-border flex items-center justify-center gap-1 px-2 z-20">
+        <div className="w-[160px] shrink-0 bg-card/80 border-r border-border flex items-center justify-center gap-1.5 px-2 z-20">
+          {/* Add Media strictly to timeline */}
+          <button
+            title="Adicionar mídia na Timeline Principal"
+            onClick={(e) => { e.stopPropagation(); onOpenMediaPanel?.(); }}
+            className="flex items-center justify-center h-6 w-6 rounded-md bg-emerald-500/20 border border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/30 transition-all shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
           {/* Quick-split-all button */}
           <button
             title={`Cortar todas as camadas no playhead${splitableCount > 0 ? ` (${splitableCount} itens)` : ''}`}
             disabled={splitableCount === 0}
             onClick={(e) => { e.stopPropagation(); onSplitAllAtPlayhead?.(); }}
             className={cn(
-              'flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all border',
+              'flex items-center gap-1 px-2 py-0.5 h-6 rounded-md text-[11px] font-bold transition-all border shadow-sm',
               splitableCount > 0
-                ? 'bg-primary/15 border-primary/40 text-primary hover:bg-primary/25 cursor-pointer'
+                ? 'bg-primary border-primary text-white hover:bg-primary/90 cursor-pointer'
                 : 'bg-muted/40 border-border/30 text-muted-foreground/40 cursor-not-allowed'
             )}
           >
-            <Scissors className="h-3 w-3" />
+            <Scissors className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Cortar</span>
           </button>
           {/* Quick-delete selected item */}
@@ -386,13 +396,13 @@ export function Timeline({
             disabled={!selectedItemId}
             onClick={(e) => { e.stopPropagation(); onDeleteSelected?.(); }}
             className={cn(
-              'flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all border',
+              'flex items-center justify-center h-6 w-8 rounded-md text-[10px] font-bold transition-all border shadow-sm',
               selectedItemId
-                ? 'bg-destructive/15 border-destructive/40 text-destructive hover:bg-destructive/25 cursor-pointer'
+                ? 'bg-destructive border-destructive text-white hover:bg-destructive/90 cursor-pointer'
                 : 'bg-muted/40 border-border/30 text-muted-foreground/40 cursor-not-allowed'
             )}
           >
-            <Trash2 className="h-3 w-3" />
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
 

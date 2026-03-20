@@ -119,7 +119,7 @@ function calcDuration(tracks: Track[]): number {
   return max;
 }
 
-type MobileTab = 'editar' | 'audio' | 'texto' | 'camada';
+type MobileTab = 'editar' | 'audio' | 'texto' | 'camada' | 'midia';
 
 const ViralCut = () => {
   const isMobile = useIsMobile();
@@ -806,6 +806,7 @@ const ViralCut = () => {
               onTrackToggleMute={handleToggleMute}
               onTrackToggleLock={handleToggleLock}
               onDropMedia={handleDropMedia}
+              onOpenMediaPanel={() => { setMobileTab('midia'); setShowMobilePanel(true); setShowAutoCut(false); }}
               onSplitAllAtPlayhead={handleSplitAllAtPlayhead}
               onDeleteSelected={() => {
                 if (selectedItemId) {
@@ -842,6 +843,10 @@ const ViralCut = () => {
                     onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
                     onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} defaultTab="text" />
                 ) : mobileTab === 'camada' ? (
+                  <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImport}
+                    onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
+                    onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} isOverlayMode={true} defaultTab="uploads" />
+                ) : mobileTab === 'midia' ? (
                   <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImport}
                     onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
                     onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} defaultTab="uploads" />
@@ -997,6 +1002,7 @@ const ViralCut = () => {
             onTrackToggleMute={handleToggleMute}
             onTrackToggleLock={handleToggleLock}
             onDropMedia={handleDropMedia}
+            onOpenMediaPanel={() => setShowMedia(true)}
             onSplitAllAtPlayhead={handleSplitAllAtPlayhead}
             onDeleteSelected={() => {
               if (selectedItemId) {
