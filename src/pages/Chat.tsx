@@ -3,21 +3,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Loader2, Bot, User, Sparkles, ClipboardList, Trash2 } from "lucide-react";
+import { Send, Loader2, Bot, User, Sparkles, ClipboardList, Trash2, Brain, ChevronDown, ChevronUp, Pencil, Check, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Msg = { role: "user" | "assistant"; content: string };
+type AiMemory = { niche: string | null; platform: string | null } | null;
 
 const FUNCTIONS_URL = "https://dzgotqyikomtapcgdgff.supabase.co/functions/v1";
 const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6Z290cXlpa29tdGFwY2dkZ2ZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNzUxNDMsImV4cCI6MjA4Njc1MTE0M30.cTBDE0bCC6j4j2Pw0QRac220oqgQkAcYbMaJ3zyrmbY";
 
 async function streamChat({
   messages,
+  userMemory,
   onDelta,
   onDone,
 }: {
   messages: Msg[];
+  userMemory: AiMemory;
   onDelta: (text: string) => void;
   onDone: () => void;
 }) {
@@ -27,7 +31,7 @@ async function streamChat({
       "Content-Type": "application/json",
       Authorization: `Bearer ${ANON_KEY}`,
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, userMemory }),
   });
 
   if (!resp.ok || !resp.body) {
@@ -83,6 +87,92 @@ async function streamChat({
   onDone();
 }
 
+// ── Memory Editor Component ──────────────────────────────────────
+const MemoryPanel = ({
+  memory,
+  onUpdate,
+  onClear,
+}: {
+  memory: AiMemory;
+  onUpdate: (niche: string, platform: string) => void;
+  onClear: () => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [editNiche, setEditNiche] = useState(memory?.niche ?? "");
+  const [editPlatform, setEditPlatform] = useState(memory?.platform ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setEditNiche(memory?.niche ?? "");
+    setEditPlatform(memory?.platform ?? "");
+  }, [memory]);
+
+  const save = async () => {
+    setSaving(true);
+    await onUpdate(editNiche, editPlatform);
+    setSaving(false);
+    setOpen(false);
+  };
+
+  if (!memory?.niche && !memory?.platform) return null;
+
+  return (
+    <div className="border-b border-border bg-muted/30">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span className="flex items-center gap-1.5">
+          <Brain className="h-3.5 w-3.5 text-primary" />
+          <span className="font-medium text-foreground">Memória da IA</span>
+          <span className="text-muted-foreground">· {memory.niche}{memory.platform ? ` · ${memory.platform}` : ""}</span>
+        </span>
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+
+      {open && (
+        <div className="px-4 pb-3 space-y-2">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="text-xs text-muted-foreground mb-1 block">Nicho</label>
+              <Input
+                value={editNiche}
+                onChange={e => setEditNiche(e.target.value)}
+                placeholder="Ex: Fitness, Culinária..."
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-muted-foreground mb-1 block">Plataforma</label>
+              <Input
+                value={editPlatform}
+                onChange={e => setEditPlatform(e.target.value)}
+                placeholder="Ex: Instagram, YouTube..."
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClear}
+              className="text-xs text-destructive hover:text-destructive h-7 px-2"
+            >
+              <X className="h-3 w-3 mr-1" />
+              Apagar memória
+            </Button>
+            <Button size="sm" onClick={save} disabled={saving} className="h-7 px-3 text-xs">
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Check className="h-3 w-3 mr-1" />Salvar</>}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Main Chat Component ──────────────────────────────────────────
 const Chat = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -92,25 +182,42 @@ const Chat = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [aiMemory, setAiMemory] = useState<AiMemory>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const aiMemoryRef = useRef<AiMemory>(null);
 
-  const GREETING_KEY = `vf_greeted_${user?.id}`;
+  // Keep ref in sync so callbacks always have fresh memory
+  useEffect(() => { aiMemoryRef.current = aiMemory; }, [aiMemory]);
 
+  // Load history + memory
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data } = await supabase
-        .from("chat_messages")
-        .select("role, content")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(100);
+      const [histRes, memRes] = await Promise.all([
+        supabase
+          .from("chat_messages")
+          .select("role, content")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true })
+          .limit(100),
+        supabase
+          .from("user_ai_memory")
+          .select("niche, platform")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+      ]);
 
-      const history = data ? data.map(m => ({ role: m.role as "user" | "assistant", content: m.content })) : [];
+      const memory: AiMemory = memRes.data ? { niche: memRes.data.niche, platform: memRes.data.platform } : null;
+      setAiMemory(memory);
+      aiMemoryRef.current = memory;
 
-      if (history.length === 0 && !sessionStorage.getItem(GREETING_KEY)) {
-        // Send an invisible trigger so the AI opens with the right question
-        sessionStorage.setItem(GREETING_KEY, "1");
+      const history = histRes.data
+        ? histRes.data.map(m => ({ role: m.role as "user" | "assistant", content: m.content }))
+        : [];
+
+      const greetingKey = `vf_greeted_${user.id}`;
+      if (history.length === 0 && !sessionStorage.getItem(greetingKey)) {
+        sessionStorage.setItem(greetingKey, "1");
         setLoadingHistory(false);
         setIsLoading(true);
         let assistantSoFar = "";
@@ -127,6 +234,7 @@ const Chat = () => {
         try {
           await streamChat({
             messages: [{ role: "user", content: "oi" }],
+            userMemory: memory,
             onDelta: upsertAssistant,
             onDone: async () => {
               setIsLoading(false);
@@ -180,6 +288,7 @@ const Chat = () => {
     try {
       await streamChat({
         messages: [...messages, userMsg],
+        userMemory: aiMemoryRef.current,
         onDelta: upsertAssistant,
         onDone: async () => {
           setIsLoading(false);
@@ -214,7 +323,6 @@ const Chat = () => {
 
       const data = await resp.json();
 
-      // Handle active plan restriction
       if (resp.status === 409 && data.error === "active_plan_exists") {
         const blockMsg: Msg = {
           role: "assistant",
@@ -233,6 +341,14 @@ const Chat = () => {
         throw new Error(data.error || "Erro ao gerar plano");
       }
 
+      // Refresh memory after plan generation (AI may have extracted niche/platform)
+      const { data: memData } = await supabase
+        .from("user_ai_memory")
+        .select("niche, platform")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (memData) setAiMemory({ niche: memData.niche, platform: memData.platform });
+
       toast({
         title: "📋 Plano semanal criado!",
         description: `"${data.plan.title}" com ${data.plan.items_count} vídeos foi adicionado ao seu Planejamento.`,
@@ -249,7 +365,6 @@ const Chat = () => {
         content: planMsg.content,
       });
 
-      // Redirect to planning after a short delay
       setTimeout(() => navigate("/planning"), 1500);
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
@@ -264,8 +379,25 @@ const Chat = () => {
     setMessages([]);
     sessionStorage.removeItem(`vf_greeted_${user.id}`);
     toast({ title: "Chat limpo", description: "Conversa reiniciada com sucesso!" });
-    // Re-trigger greeting
     window.location.reload();
+  };
+
+  const updateMemory = async (niche: string, platform: string) => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("user_ai_memory")
+      .upsert({ user_id: user.id, niche: niche || null, platform: platform || null }, { onConflict: "user_id" })
+      .select("niche, platform")
+      .single();
+    if (data) setAiMemory({ niche: data.niche, platform: data.platform });
+    toast({ title: "Memória atualizada!", description: "A IA usará esses dados nas próximas conversas." });
+  };
+
+  const clearMemory = async () => {
+    if (!user) return;
+    await supabase.from("user_ai_memory").delete().eq("user_id", user.id);
+    setAiMemory(null);
+    toast({ title: "Memória apagada", description: "A IA perguntará seu nicho na próxima conversa." });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -287,7 +419,7 @@ const Chat = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen">
-      {/* Header */}
+      {/* Header actions */}
       {messages.length > 0 && (
         <div className="flex justify-end p-2 border-b border-border">
           <Button variant="ghost" size="sm" onClick={clearChat} className="text-muted-foreground hover:text-destructive">
@@ -296,6 +428,10 @@ const Chat = () => {
           </Button>
         </div>
       )}
+
+      {/* Memory panel */}
+      <MemoryPanel memory={aiMemory} onUpdate={updateMemory} onClear={clearMemory} />
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
