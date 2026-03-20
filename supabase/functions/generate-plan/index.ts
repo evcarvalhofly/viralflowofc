@@ -32,6 +32,43 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // ── Rule: only 1 active plan at a time ──
+    // Check if there are any incomplete items in existing plans
+    const { data: incompletePlans, error: checkError } = await supabase
+      .from('plan_items')
+      .select('id, plan_id')
+      .eq('user_id', user_id)
+      .eq('completed', false)
+      .limit(1);
+
+    if (checkError) {
+      console.error('Check active plan error:', checkError);
+    }
+
+    if (incompletePlans && incompletePlans.length > 0) {
+      return new Response(
+        JSON.stringify({
+          error: 'active_plan_exists',
+          message: 'Você ainda tem um plano em andamento! Conclua todos os itens do checklist antes de criar um novo planejamento. 💪',
+        }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ── Fetch all previous video titles to avoid repetition ──
+    const { data: previousItems } = await supabase
+      .from('plan_items')
+      .select('title')
+      .eq('user_id', user_id)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    const previousTitles = previousItems?.map((i: { title: string }) => i.title) ?? [];
+
+    const avoidRepetitionInstruction = previousTitles.length > 0
+      ? `\n\nIMPORTANTE - NUNCA repita ideias já geradas anteriormente. Estes títulos JÁ FORAM usados e NÃO podem ser reutilizados nem adaptados:\n${previousTitles.map((t: string) => `- ${t}`).join('\n')}\n\nGere ideias completamente novas e diferentes das acima.`
+      : '';
+
     // Call OpenAI with tool calling to extract structured plan
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -44,17 +81,19 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você é o ViralFlow AI. Com base na conversa, gere uma LISTA DE CONTEÚDOS VIRAIS prontos para criar.
+            content: `Você é o ViralFlow AI. Com base na conversa, gere um PLANO SEMANAL de vídeos virais prontos para criar.
 
-IMPORTANTE: NÃO gere tarefas genéricas como "definir tema", "escrever roteiro", "editar vídeo", "criar miniatura", "postar nas redes", "analisar estatísticas". Isso NÃO é um plano de tarefas.
+IMPORTANTE: O plano é SEMANAL. Gere exatamente o número de vídeos que o usuário disse que quer produzir por semana. NÃO gere mais nem menos.
 
-Cada item do plano deve ser UM CONTEÚDO ESPECÍFICO pronto para ser criado, no formato:
-- Título: um título viral e chamativo para o vídeo/post
-- Descrição: descreva exatamente o que gravar/criar, incluindo: gancho inicial (primeiros 3 segundos), o que mostrar no vídeo, CTA (call to action), e gatilhos mentais a usar (curiosidade, urgência, polêmica, identificação, etc.)
+NÃO gere tarefas genéricas como "definir tema", "escrever roteiro", "editar vídeo", "criar miniatura", "postar nas redes", "analisar estatísticas". Isso NÃO é um plano de vídeos.
 
-Exemplo de item BOM: "🔥 5 manobras que todo motociclista deveria saber | Gancho: 'A número 3 quase me matou...' | Mostrar cada manobra com cortes rápidos e música épica | CTA: 'Salva pra não esquecer' | Gatilhos: curiosidade, medo"
+Cada item do plano deve ser UM VÍDEO ESPECÍFICO pronto para ser criado, no formato:
+- Título: um título viral e chamativo para o vídeo
+- Descrição: descreva exatamente o que gravar, incluindo: gancho inicial (primeiros 3 segundos), o que mostrar no vídeo, CTA (call to action), e gatilhos mentais a usar (curiosidade, urgência, polêmica, identificação, etc.)
 
-Exemplo de item RUIM: "Definir temas para vídeos" ou "Escrever roteiro" ou "Editar vídeo"
+Exemplo BOM: "🔥 5 manobras que todo motociclista deveria saber | Gancho: 'A número 3 quase me matou...' | Mostrar cada manobra com cortes rápidos e música épica | CTA: 'Salva pra não esquecer' | Gatilhos: curiosidade, medo"
+
+Exemplo RUIM: "Definir temas" ou "Escrever roteiro" ou "Editar vídeo"${avoidRepetitionInstruction}
 
 SEMPRE use a ferramenta create_plan para retornar o plano.`
           },
@@ -65,19 +104,19 @@ SEMPRE use a ferramenta create_plan para retornar o plano.`
             type: 'function',
             function: {
               name: 'create_plan',
-              description: 'Create a structured content creation plan with checklist items',
+              description: 'Create a structured weekly content plan with video ideas',
               parameters: {
                 type: 'object',
                 properties: {
-                  title: { type: 'string', description: 'Plan title (e.g. "Plano de Conteúdo Fitness - Dia 1")' },
-                  description: { type: 'string', description: 'Brief description of the plan' },
+                  title: { type: 'string', description: 'Plan title (e.g. "Semana de Conteúdo - Fitness")' },
+                  description: { type: 'string', description: 'Brief description of the weekly plan' },
                   items: {
                     type: 'array',
                     items: {
                       type: 'object',
                       properties: {
-                        title: { type: 'string', description: 'Checklist item title' },
-                        description: { type: 'string', description: 'Optional details' },
+                        title: { type: 'string', description: 'Video title (viral and engaging)' },
+                        description: { type: 'string', description: 'Full video description: hook, visual guide, CTA, mental triggers' },
                       },
                       required: ['title'],
                       additionalProperties: false,
@@ -138,7 +177,7 @@ SEMPRE use a ferramenta create_plan para retornar o plano.`
 
     // Insert checklist items
     if (plan.items?.length > 0) {
-      const items = plan.items.map((item: any, i: number) => ({
+      const items = plan.items.map((item: { title: string; description?: string }, i: number) => ({
         plan_id: planData.id,
         user_id,
         title: item.title,
