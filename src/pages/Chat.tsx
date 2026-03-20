@@ -262,7 +262,10 @@ const Chat = () => {
     if (!user) return;
     await supabase.from("chat_messages").delete().eq("user_id", user.id);
     setMessages([]);
+    sessionStorage.removeItem(`vf_greeted_${user.id}`);
     toast({ title: "Chat limpo", description: "Conversa reiniciada com sucesso!" });
+    // Re-trigger greeting
+    window.location.reload();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
