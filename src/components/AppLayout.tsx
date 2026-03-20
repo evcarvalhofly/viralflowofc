@@ -142,8 +142,8 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
       {/* Main */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Mobile header */}
-        <header className="md:hidden flex items-center justify-between h-14 px-4 border-b border-border bg-card/50 backdrop-blur-sm shrink-0 z-30">
+        {/* Mobile header - sticky so it always stays at top */}
+        <header className="md:hidden sticky top-0 flex items-center justify-between h-14 px-4 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 z-30">
           <button onClick={() => setMobileOpen(true)}>
             <Menu className="h-6 w-6" />
           </button>
@@ -154,7 +154,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           <div className="w-6" />
         </header>
 
-        <main className="flex-1 min-h-0 overflow-hidden">
+        <main className="flex-1 min-h-0 overflow-y-auto">
           {children}
         </main>
       </div>

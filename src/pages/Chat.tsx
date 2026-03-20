@@ -199,7 +199,7 @@ const Chat = () => {
 
       const planMsg: Msg = {
         role: "assistant",
-        content: `✅ Plano semanal criado com sucesso!\n\n📋 **${data.plan.title}** com ${data.plan.items_count} vídeos foi adicionado ao seu Planejamento.\n\nAcesse a aba "Planejamento" para ver e gerenciar sua semana de conteúdo!`,
+        content: `✅ Plano semanal criado com sucesso!\n\n📋 **${data.plan.title}** com ${data.plan.items_count} vídeos foi adicionado ao seu Planejamento.\n\nRedirecionando para o Planejamento...`,
       };
       setMessages(prev => [...prev, planMsg]);
       await supabase.from("chat_messages").insert({
@@ -207,6 +207,9 @@ const Chat = () => {
         role: "assistant",
         content: planMsg.content,
       });
+
+      // Redirect to planning after a short delay
+      setTimeout(() => navigate("/planning"), 1500);
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     } finally {
