@@ -16,6 +16,7 @@ interface MediaPanelProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onAddToTimeline: (id: string) => void;
+  onAddOverlay?: (id: string) => void;
   onAddText: (preset: Partial<typeof DEFAULT_TEXT_DETAILS>) => void;
   onAddShape: (shape: 'rect' | 'circle' | 'triangle') => void;
   onAddTransition: (type: string) => void;
@@ -56,6 +57,7 @@ export function MediaPanel({
   onSelect,
   onDelete,
   onAddToTimeline,
+  onAddOverlay,
   onAddText,
   onAddShape,
   onAddTransition,
@@ -158,9 +160,18 @@ export function MediaPanel({
                   </div>
                   {/* Actions */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {onAddOverlay && (m.type === 'video' || m.type === 'image') && (
+                      <button
+                        className="p-1 rounded hover:bg-emerald-500/20 text-emerald-500"
+                        title="Adicionar como Camada"
+                        onClick={(e) => { e.stopPropagation(); onAddOverlay(m.id); }}
+                      >
+                        <Layers className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <button
                       className="p-1 rounded hover:bg-primary/20 text-primary"
-                      title="Adicionar à timeline"
+                      title="Adicionar à timeline principal"
                       onClick={(e) => { e.stopPropagation(); onAddToTimeline(m.id); }}
                     >
                       <Plus className="h-3.5 w-3.5" />

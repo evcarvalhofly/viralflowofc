@@ -58,6 +58,11 @@ export interface VideoDetails {
   brightness: number;
   contrast: number;
   saturation: number;
+  // Overlay properties
+  posX?: number;
+  posY?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface AudioDetails {
@@ -153,6 +158,10 @@ export const DEFAULT_VIDEO_DETAILS: VideoDetails = {
   brightness: 1,
   contrast: 1,
   saturation: 1,
+  posX: 50,
+  posY: 50,
+  width: 50,
+  height: 50,
 };
 
 export const DEFAULT_AUDIO_DETAILS: AudioDetails = {

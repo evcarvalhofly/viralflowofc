@@ -65,10 +65,11 @@ interface OverlayHandleProps {
 function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenProperties, onUpdate, children }: OverlayHandleProps) {
   const td = item.textDetails;
   const imgd = item.imageDetails;
+  const vd = item.videoDetails;
 
-  const posX = td?.posX ?? imgd?.posX ?? 50;
-  const posY = td?.posY ?? imgd?.posY ?? 50;
-  const width = td?.width ?? imgd?.width ?? 50;
+  const posX = td?.posX ?? imgd?.posX ?? vd?.posX ?? 50;
+  const posY = td?.posY ?? imgd?.posY ?? vd?.posY ?? 50;
+  const width = td?.width ?? imgd?.width ?? vd?.width ?? 50;
 
   const lastTapRef = useRef<number>(0);
 
@@ -96,6 +97,7 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
       const newPosY = Math.max(0, Math.min(100, origPosY + dy));
       if (td) onUpdate({ textDetails: { ...td, posX: newPosX, posY: newPosY } });
       else if (imgd) onUpdate({ imageDetails: { ...imgd, posX: newPosX, posY: newPosY } });
+      else if (vd) onUpdate({ videoDetails: { ...vd, posX: newPosX, posY: newPosY } });
     };
 
     const onUp = () => {
@@ -135,6 +137,9 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
       } else if (imgd) {
         const newW = Math.max(5, Math.min(100, origWidth * ratio));
         onUpdate({ imageDetails: { ...imgd, width: newW } });
+      } else if (vd) {
+        const newW = Math.max(5, Math.min(100, origWidth * ratio));
+        onUpdate({ videoDetails: { ...vd, width: newW } });
       }
     };
 
@@ -163,6 +168,7 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
       const newW = Math.max(5, Math.min(100, origWidth + dx));
       if (td) onUpdate({ textDetails: { ...td, width: newW } });
       else if (imgd) onUpdate({ imageDetails: { ...imgd, width: newW } });
+      else if (vd) onUpdate({ videoDetails: { ...vd, width: newW } });
     };
 
     const onUp = () => {
@@ -304,25 +310,36 @@ export function PreviewPanel({
     activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current, []);
 
   // ── Derived active items ───────────────────────────────────
+  const activeVideoTracks = tracks.filter((t) => t.type === 'video' && !t.muted);
+  const baseVideoTrack = activeVideoTracks.length > 0 ? activeVideoTracks[0] : null;
+  const overlayVideoTracks = activeVideoTracks.length > 1 ? activeVideoTracks.slice(1) : [];
+
   const activeVideoItem = (() => {
-    for (const track of tracks) {
-      if (track.type !== 'video' || track.muted) continue;
-      for (const item of track.items) {
-        if (currentTime >= item.startTime && currentTime < item.endTime) {
-          return { item, mediaFile: media.find((m) => m.id === item.mediaId) };
-        }
+    if (!baseVideoTrack) return null;
+    for (const item of baseVideoTrack.items) {
+      if (currentTime >= item.startTime && currentTime < item.endTime) {
+        return { item, mediaFile: media.find((m) => m.id === item.mediaId) };
       }
     }
     return null;
   })();
 
-  // Next video item (for background preloading)
+  const activeVideoOverlays = (() => {
+    const overlays: { item: TrackItem; trackId: string; mediaFile?: MediaFile }[] = [];
+    for (const track of overlayVideoTracks) {
+      for (const item of track.items) {
+        if (currentTime >= item.startTime && currentTime < item.endTime) {
+          overlays.push({ item, trackId: track.id, mediaFile: media.find((m) => m.id === item.mediaId) });
+        }
+      }
+    }
+    return overlays;
+  })();
+
+  // Next video item (for background preloading of base video ONLY)
   const nextVideoItem = (() => {
-    if (!activeVideoItem) return null;
-    const all = tracks
-      .filter((t) => t.type === 'video' && !t.muted)
-      .flatMap((t) => t.items)
-      .sort((a, b) => a.startTime - b.startTime);
+    if (!activeVideoItem || !baseVideoTrack) return null;
+    const all = baseVideoTrack.items.sort((a, b) => a.startTime - b.startTime);
     const idx = all.findIndex((i) => i.id === activeVideoItem.item.id);
     if (idx < 0 || idx >= all.length - 1) return null;
     const next = all[idx + 1];
@@ -803,6 +820,58 @@ export function PreviewPanel({
                   borderWidth: imgd.borderWidth,
                   borderStyle: imgd.borderWidth > 0 ? 'solid' : 'none',
                   borderColor: imgd.borderColor,
+                  pointerEvents: 'none',
+                }}
+              />
+            </OverlayHandle>
+          );
+        })}
+
+        {/* Video overlays */}
+        {activeVideoOverlays.map(({ item, trackId, mediaFile }) => {
+          if (!mediaFile) return null;
+          const vd = item.videoDetails;
+          if (!vd) return null;
+          const playbackRate = vd.playbackRate ?? 1;
+          const mediaTime = (item.mediaStart ?? 0) + (currentTime - item.startTime) * playbackRate;
+          return (
+            <OverlayHandle
+              key={item.id}
+              item={item}
+              trackId={trackId}
+              containerRef={overlayContainerRef}
+              isSelected={selectedItemId === item.id}
+              onSelect={() => onSelectItem?.(item.id)}
+              onOpenProperties={() => onOpenProperties?.(item.id)}
+              onUpdate={(updates) => onUpdateItem?.(trackId, item.id, updates)}
+            >
+              {/* Utilize dynamic video element that syncs with current time */}
+              <video
+                src={mediaFile.url}
+                crossOrigin="anonymous"
+                ref={(el) => {
+                  if (el) {
+                    el.playbackRate = playbackRate;
+                    el.volume = Math.min(1, vd.volume ?? 1) * (muted ? 0 : volume);
+                    el.muted = muted;
+                    if (Math.abs(el.currentTime - mediaTime) > 0.15) {
+                      el.currentTime = mediaTime;
+                    }
+                    if (isPlaying && el.paused) el.play().catch(() => {});
+                    else if (!isPlaying && !el.paused) el.pause();
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  display: 'block',
+                  opacity: vd.opacity,
+                  transform: buildTransform(vd.flipH, vd.flipV),
+                  filter: buildFilter(vd.brightness, vd.contrast, vd.saturation),
+                  borderRadius: vd.borderRadius,
+                  borderWidth: vd.borderWidth,
+                  borderColor: vd.borderColor,
+                  borderStyle: vd.borderWidth > 0 ? 'solid' : 'none',
+                  boxShadow: vd.boxShadow?.blur > 0 ? `${vd.boxShadow.x}px ${vd.boxShadow.y}px ${vd.boxShadow.blur}px ${vd.boxShadow.color}` : 'none',
                   pointerEvents: 'none',
                 }}
               />

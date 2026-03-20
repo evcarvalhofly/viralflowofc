@@ -28,11 +28,11 @@ export interface RenderFrameParams {
 // ── Helpers ────────────────────────────────────────────────
 
 function getActiveVideoItem(project: Project, timeSec: number): TrackItem | null {
-  for (const track of project.tracks) {
-    if (track.type !== 'video' || track.muted) continue;
-    for (const item of track.items) {
-      if (timeSec >= item.startTime && timeSec < item.endTime) return item;
-    }
+  const videoTracks = project.tracks.filter(t => t.type === 'video' && !t.muted);
+  const baseTrack = videoTracks.length > 0 ? videoTracks[0] : null;
+  if (!baseTrack) return null;
+  for (const item of baseTrack.items) {
+    if (timeSec >= item.startTime && timeSec < item.endTime) return item;
   }
   return null;
 }
@@ -40,6 +40,11 @@ function getActiveVideoItem(project: Project, timeSec: number): TrackItem | null
 function getOverlayItems(project: Project, timeSec: number) {
   const imageItems: TrackItem[] = [];
   const textItems:  TrackItem[] = [];
+  const videoOverlays: TrackItem[] = [];
+
+  const videoTracks = project.tracks.filter(t => t.type === 'video' && !t.muted);
+  const overlayTracks = videoTracks.length > 1 ? videoTracks.slice(1) : [];
+
   for (const track of project.tracks) {
     if (track.muted) continue;
     for (const item of track.items) {
@@ -48,7 +53,14 @@ function getOverlayItems(project: Project, timeSec: number) {
       else if (track.type === 'text') textItems.push(item);
     }
   }
-  return { imageItems, textItems };
+
+  for (const track of overlayTracks) {
+    for (const item of track.items) {
+      if (timeSec >= item.startTime && timeSec < item.endTime) videoOverlays.push(item);
+    }
+  }
+
+  return { imageItems, textItems, videoOverlays };
 }
 
 /**
@@ -91,7 +103,7 @@ export function renderTimelineFrame({
   // ── Active video frame ─────────────────────────────────────
   const videoItem = getActiveVideoItem(project, timeSec);
   if (videoItem) {
-    const videoEl = assets.videoFrames.get(videoItem.mediaId);
+    const videoEl = assets.videoFrames.get(videoItem.id);
 
     if (videoEl) {
       const vd = videoItem.videoDetails;
@@ -132,17 +144,20 @@ export function renderTimelineFrame({
     }
   }
 
-  const { imageItems, textItems } = getOverlayItems(project, timeSec);
+  const { imageItems, textItems, videoOverlays } = getOverlayItems(project, timeSec);
 
   // ── Image overlays ─────────────────────────────────────────
   for (const imgItem of imageItems) {
     const bmp = assets.images.get(imgItem.mediaId);
     if (!bmp) continue;
     const id = imgItem.imageDetails;
+    const srcW = bmp.width;
+    const srcH = bmp.height;
+    
     const ox = ((id?.posX   ?? 50) / 100) * width;
     const oy = ((id?.posY   ?? 50) / 100) * height;
     const dw = ((id?.width  ?? 50) / 100) * width;
-    const dh = ((id?.height ?? 50) / 100) * height;
+    const dh = dw * (srcH / srcW);
 
     ctx.save();
     ctx.globalAlpha = id?.opacity ?? 1;
@@ -151,6 +166,45 @@ export function renderTimelineFrame({
       ctx.scale(id.flipH ? -1 : 1, id.flipV ? -1 : 1);
     }
     ctx.drawImage(bmp, ox - dw / 2, oy - dh / 2, dw, dh);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Video overlays ─────────────────────────────────────────
+  for (const vidItem of videoOverlays) {
+    const videoEl = assets.videoFrames.get(vidItem.id);
+    if (!videoEl) continue;
+    
+    const vd = vidItem.videoDetails;
+    const srcW = videoEl.videoWidth || width;
+    const srcH = videoEl.videoHeight || height;
+
+    const ox = ((vd?.posX   ?? 50) / 100) * width;
+    const oy = ((vd?.posY   ?? 50) / 100) * height;
+    const dw = ((vd?.width  ?? 50) / 100) * width;
+    const dh = dw * (srcH / srcW);
+
+    ctx.save();
+    ctx.globalAlpha = vd?.opacity ?? 1;
+    
+    const filters: string[] = [];
+    if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
+    if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
+    if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
+    if (filters.length) {
+      (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters.join(' ');
+    }
+
+    if (vd?.flipH || vd?.flipV) {
+      ctx.translate(vd.flipH ? ox * 2 : 0, vd.flipV ? oy * 2 : 0);
+      ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+    }
+    
+    ctx.drawImage(videoEl, ox - dw / 2, oy - dh / 2, dw, dh);
+    
+    if (filters.length) {
+      (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
+    }
     ctx.restore();
     ctx.globalAlpha = 1;
   }

@@ -389,6 +389,39 @@ const ViralCut = () => {
     }, { pushHistory: true });
   }, [media, updateProject]);
 
+  const handleAddOverlay = useCallback((mediaId: string) => {
+    const mf = media.find((m) => m.id === mediaId);
+    if (!mf) return;
+
+    updateProject((p) => {
+      const targetType: Track['type'] = mf.type === 'audio' ? 'audio' : mf.type === 'image' ? 'image' : 'video';
+      
+      const videoTracks = p.tracks.filter(t => t.type === 'video');
+      if (targetType === 'video' && videoTracks.length >= 3) {
+        alert("Máximo de 2 camadas extras de vídeo atingido para manter a performance de exportação.");
+        return p; 
+      }
+
+      const dur = mf.duration > 0 ? mf.duration : 5;
+      const newTrack: Track = { id: createId(), type: targetType, items: [], locked: false, muted: false };
+      
+      const item: TrackItem = {
+        id: createId(), mediaId, trackId: newTrack.id,
+        startTime: currentTime, endTime: currentTime + dur,
+        mediaStart: 0, mediaEnd: dur,
+        name: mf.name.replace(/\.[^.]+$/, '') + ' (Camada)', type: targetType,
+        videoDetails: targetType === 'video' ? { ...DEFAULT_VIDEO_DETAILS, posX: 50, posY: 50, width: 33, height: 33 } : undefined,
+        audioDetails: targetType === 'audio' ? { ...DEFAULT_AUDIO_DETAILS } : undefined,
+        imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS, posX: 50, posY: 50, width: 33, height: 33 } : undefined,
+      };
+
+      newTrack.items.push(item);
+      return { ...p, tracks: [...p.tracks, newTrack] };
+    }, { pushHistory: true });
+
+    if (isMobile) setShowMobilePanel(false);
+  }, [media, updateProject, currentTime, isMobile]);
+
   const handleDropMedia = useCallback((trackId: string, mediaId: string, startTime: number) => {
     const mf = media.find((m) => m.id === mediaId);
     if (!mf) return;
@@ -783,11 +816,11 @@ const ViralCut = () => {
                 ) : mobileTab === 'texto' ? (
                   <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImport}
                     onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
-                    onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} defaultTab="text" />
+                    onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} defaultTab="text" />
                 ) : mobileTab === 'camada' ? (
                   <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImport}
                     onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
-                    onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} defaultTab="uploads" />
+                    onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} defaultTab="uploads" />
                 ) : mobileTab === 'editar' && selectedItem ? (
                   <PropertiesPanel selectedItem={selectedItem} selectedTrackId={selectedTrackId} media={media}
                     onDelete={handleItemDelete} onSplit={handleItemSplit} onUpdateItem={handleUpdateItem} currentTime={currentTime} />
@@ -856,7 +889,7 @@ const ViralCut = () => {
             ) : (
               <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImport}
                 onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
-                onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} />
+                onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} />
             )}
           </div>
         )}

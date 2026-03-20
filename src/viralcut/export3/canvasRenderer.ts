@@ -96,11 +96,10 @@ export class CanvasRenderer {
           const playbackRate = item.videoDetails?.playbackRate ?? 1;
           const mediaTime    = (item.mediaStart ?? 0) + (timeSec - item.startTime) * playbackRate;
           const videoEl      = await this.frameCache.getVideoElement(item.mediaId, mediaTime);
-          videoFrames.set(item.mediaId, videoEl);
+          videoFrames.set(item.id, videoEl); // Use item.id to support duplicate media inputs
           break;
         }
       }
-      if (videoFrames.size > 0) break;
     }
 
     const assets: FrameRenderAssets = {

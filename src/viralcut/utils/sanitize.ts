@@ -31,15 +31,20 @@ function sanitizeItem(item: TrackItem): TrackItem | null {
   };
 }
 
-/** Sanitize all tracks – filter bad items, sort, clamp */
+/** Sanitize all tracks – filter bad items, sort tracks by type, clamp */
 export function sanitizeTracks(tracks: Track[]): Track[] {
-  return tracks.map((track) => ({
+  const sanitized = tracks.map((track) => ({
     ...track,
     items: track.items
       .map(sanitizeItem)
       .filter((i): i is TrackItem => i !== null)
       .sort((a, b) => a.startTime - b.startTime),
   }));
+
+  const typeWeight: Record<string, number> = { 'video': 1, 'image': 2, 'text': 3, 'audio': 4 };
+
+  // Stable sort to maintain relative order (e.g. base video remains the first video track)
+  return sanitized.sort((a, b) => typeWeight[a.type] - typeWeight[b.type]);
 }
 
 /** Full project sanitizer */
