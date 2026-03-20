@@ -94,6 +94,8 @@ const Chat = () => {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const GREETING_KEY = `vf_greeted_${user?.id}`;
+
   useEffect(() => {
     if (!user) return;
     const load = async () => {
@@ -103,8 +105,47 @@ const Chat = () => {
         .eq("user_id", user.id)
         .order("created_at", { ascending: true })
         .limit(100);
-      if (data) setMessages(data.map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
-      setLoadingHistory(false);
+
+      const history = data ? data.map(m => ({ role: m.role as "user" | "assistant", content: m.content })) : [];
+
+      if (history.length === 0 && !sessionStorage.getItem(GREETING_KEY)) {
+        // Send an invisible trigger so the AI opens with the right question
+        sessionStorage.setItem(GREETING_KEY, "1");
+        setLoadingHistory(false);
+        setIsLoading(true);
+        let assistantSoFar = "";
+        const upsertAssistant = (chunk: string) => {
+          assistantSoFar += chunk;
+          setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant") {
+              return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+            }
+            return [...prev, { role: "assistant", content: assistantSoFar }];
+          });
+        };
+        try {
+          await streamChat({
+            messages: [{ role: "user", content: "oi" }],
+            onDelta: upsertAssistant,
+            onDone: async () => {
+              setIsLoading(false);
+              if (assistantSoFar) {
+                await supabase.from("chat_messages").insert({
+                  user_id: user.id,
+                  role: "assistant",
+                  content: assistantSoFar,
+                });
+              }
+            },
+          });
+        } catch {
+          setIsLoading(false);
+        }
+      } else {
+        setMessages(history);
+        setLoadingHistory(false);
+      }
     };
     load();
   }, [user]);
