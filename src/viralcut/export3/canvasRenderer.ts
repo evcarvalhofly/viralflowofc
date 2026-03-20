@@ -18,6 +18,7 @@ export class CanvasRenderer {
   readonly canvas: HTMLCanvasElement;
   private ctx:        CanvasRenderingContext2D;
   private frameCache: VideoFrameCache;
+  private activeBitmaps: ImageBitmap[] = [];
   private images    = new Map<string, ImageBitmap>();
   private mediaMap  = new Map<string, MediaFile>();
 
@@ -86,8 +87,14 @@ export class CanvasRenderer {
   async renderFrame(project: Project, timeSec: number): Promise<void> {
     const { width, height } = this.canvas;
 
+    // Clear bitmaps from the previous frame to free GPU memory
+    for (const bmp of this.activeBitmaps) {
+      bmp.close();
+    }
+    this.activeBitmaps = [];
+
     // Collect the active video element for each active video track item
-    const videoFrames = new Map<string, HTMLVideoElement | null>();
+    const videoFrames = new Map<string, HTMLVideoElement | ImageBitmap | null>();
 
     for (const track of project.tracks) {
       if (track.type !== 'video' || track.muted) continue;
@@ -96,7 +103,13 @@ export class CanvasRenderer {
           const playbackRate = item.videoDetails?.playbackRate ?? 1;
           const mediaTime    = (item.mediaStart ?? 0) + (timeSec - item.startTime) * playbackRate;
           const videoEl      = await this.frameCache.getVideoElement(item.mediaId, mediaTime);
-          videoFrames.set(item.id, videoEl); // Use item.id to support duplicate media inputs
+          if (videoEl) {
+             const bmp = await createImageBitmap(videoEl);
+             this.activeBitmaps.push(bmp);
+             videoFrames.set(item.id, bmp);
+          } else {
+             videoFrames.set(item.id, null);
+          }
           break;
         }
       }
@@ -122,6 +135,8 @@ export class CanvasRenderer {
   }
 
   dispose() {
+    for (const bmp of this.activeBitmaps) bmp.close();
+    this.activeBitmaps = [];
     this.frameCache.dispose();
     this.images.forEach((bmp) => { try { bmp.close(); } catch { /* ignore */ } });
     this.images.clear();
