@@ -172,13 +172,23 @@ SEMPRE use a ferramenta create_plan para retornar o plano. Gere o número de con
 
     // Insert checklist items
     if (plan.items?.length > 0) {
-      const items = plan.items.map((item: any, i: number) => ({
-        plan_id: planData.id,
-        user_id,
-        title: item.title,
-        description: item.description || null,
-        sort_order: i,
-      }));
+      const items = plan.items.map((item: any, i: number) => {
+        // Build a rich description from structured fields
+        const parts: string[] = [];
+        if (item.hook) parts.push(`🎣 Gancho: ${item.hook}`);
+        if (item.visual_guide) parts.push(`🎬 Orientação Visual: ${item.visual_guide}`);
+        if (item.cta) parts.push(`📣 CTA: ${item.cta}`);
+        if (item.mental_triggers) parts.push(`🧠 Gatilhos: ${item.mental_triggers}`);
+        const description = parts.length > 0 ? parts.join('\n\n') : (item.description || null);
+
+        return {
+          plan_id: planData.id,
+          user_id,
+          title: item.title,
+          description,
+          sort_order: i,
+        };
+      });
 
       const { error: itemsError } = await supabase.from('plan_items').insert(items);
       if (itemsError) console.error('Items insert error:', itemsError);
