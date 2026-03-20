@@ -27,6 +27,7 @@ interface ViralResult {
 const GameOver = () => {
   const { toast } = useToast();
   const [text, setText] = useState("");
+  const [interimText, setInterimText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ViralResult | null>(null);
@@ -46,24 +47,30 @@ const GameOver = () => {
 
         recognition.onresult = (event: any) => {
           let finalTranscript = "";
+          let currentInterim = "";
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
               finalTranscript += transcript + " ";
+            } else {
+              currentInterim += transcript;
             }
           }
           if (finalTranscript) {
             setText((prev) => prev + (prev.endsWith(" ") || prev.length === 0 ? "" : " ") + finalTranscript);
           }
+          setInterimText(currentInterim);
         };
 
         recognition.onerror = (event: any) => {
           console.error("Speech recognition error", event.error);
           setIsRecording(false);
+          setInterimText("");
         };
 
         recognition.onend = () => {
           setIsRecording(false);
+          setInterimText("");
         };
 
         recognitionRef.current = recognition;
@@ -209,9 +216,10 @@ const GameOver = () => {
             <div className="relative">
               <Textarea
                 placeholder="Exemplo: Fui na padaria comprar pão e encontrei um fisiculturista comprando 10kg de frango..."
-                value={text}
+                value={text + (interimText ? (text.length > 0 && !text.endsWith(" ") ? " " : "") + interimText : "")}
                 onChange={(e) => setText(e.target.value)}
                 disabled={loading}
+                readOnly={isRecording}
                 className={cn(
                   "min-h-[160px] resize-none text-base p-4 pr-16 bg-muted/30 focus-visible:ring-primary/50",
                   isRecording && "border-primary/60 ring-1 ring-primary/30"

@@ -215,45 +215,8 @@ const Chat = () => {
         ? histRes.data.map(m => ({ role: m.role as "user" | "assistant", content: m.content }))
         : [];
 
-      const greetingKey = `vf_greeted_${user.id}`;
-      if (history.length === 0 && !sessionStorage.getItem(greetingKey)) {
-        sessionStorage.setItem(greetingKey, "1");
-        setLoadingHistory(false);
-        setIsLoading(true);
-        let assistantSoFar = "";
-        const upsertAssistant = (chunk: string) => {
-          assistantSoFar += chunk;
-          setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (last?.role === "assistant") {
-              return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
-            }
-            return [...prev, { role: "assistant", content: assistantSoFar }];
-          });
-        };
-        try {
-          await streamChat({
-            messages: [{ role: "user", content: "oi" }],
-            userMemory: memory,
-            onDelta: upsertAssistant,
-            onDone: async () => {
-              setIsLoading(false);
-              if (assistantSoFar) {
-                await supabase.from("chat_messages").insert({
-                  user_id: user.id,
-                  role: "assistant",
-                  content: assistantSoFar,
-                });
-              }
-            },
-          });
-        } catch {
-          setIsLoading(false);
-        }
-      } else {
-        setMessages(history);
-        setLoadingHistory(false);
-      }
+      setMessages(history);
+      setLoadingHistory(false);
     };
     load();
   }, [user]);
@@ -261,6 +224,42 @@ const Chat = () => {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const startChat = async () => {
+    if (!user || isLoading) return;
+    setIsLoading(true);
+    let assistantSoFar = "";
+    
+    const upsertAssistant = (chunk: string) => {
+      assistantSoFar += chunk;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant") {
+          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+        }
+        return [...prev, { role: "assistant", content: assistantSoFar }];
+      });
+    };
+    try {
+      await streamChat({
+        messages: [{ role: "user", content: "oi" }],
+        userMemory: aiMemoryRef.current,
+        onDelta: upsertAssistant,
+        onDone: async () => {
+          setIsLoading(false);
+          if (assistantSoFar) {
+            await supabase.from("chat_messages").insert({
+              user_id: user.id,
+              role: "assistant",
+              content: assistantSoFar,
+            });
+          }
+        },
+      });
+    } catch {
+      setIsLoading(false);
+    }
+  };
 
   const send = async () => {
     if (!input.trim() || !user || isLoading) return;
@@ -377,9 +376,7 @@ const Chat = () => {
     if (!user) return;
     await supabase.from("chat_messages").delete().eq("user_id", user.id);
     setMessages([]);
-    sessionStorage.removeItem(`vf_greeted_${user.id}`);
-    toast({ title: "Chat limpo", description: "Conversa reiniciada com sucesso!" });
-    window.location.reload();
+    toast({ title: "Chat limpo", description: "Conversa apagada com sucesso!" });
   };
 
   const updateMemory = async (niche: string, platform: string) => {
@@ -434,14 +431,17 @@ const Chat = () => {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center space-y-4 text-muted-foreground">
+        {messages.length === 0 && !isLoading && (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-5 text-muted-foreground animate-in fade-in duration-500">
             <Sparkles className="h-12 w-12 text-primary/40" />
             <div>
-              <h2 className="text-xl font-bold font-display text-foreground mb-1">ViralFlow IA</h2>
-              <p className="text-sm max-w-md">
-                Me conte sobre seu nicho e objetivos como criador. Com base na nossa conversa, vou gerar um plano de criação personalizado! 🚀
+              <h2 className="text-xl font-bold font-display text-foreground mb-2">ViralFlow IA</h2>
+              <p className="text-sm max-w-md mb-6 leading-relaxed">
+                Me conte sobre seu nicho e principais objetivos como criador. Com base na nossa conversa, vou gerar um plano de conteúdo milimetricamente pensado para você! 🚀
               </p>
+              <Button onClick={startChat} className="gradient-viral text-white font-bold px-8 shadow-lg hover:scale-105 transition-transform">
+                Começar o Planejamento
+              </Button>
             </div>
           </div>
         )}
