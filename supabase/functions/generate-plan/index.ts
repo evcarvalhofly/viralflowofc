@@ -80,25 +80,33 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você é o ViralFlow AI. Com base na conversa, gere um PLANO SEMANAL de vídeos virais prontos para criar.
+            content: `Você é o ViralFlow AI, especialista em criar vídeos virais no Brasil. Com base na conversa, gere um PLANO SEMANAL de vídeos altamente detalhados e prontos para gravar.
 
-IMPORTANTE: O plano é SEMANAL. Gere exatamente o número de vídeos que o usuário disse que quer produzir por semana. NÃO gere mais nem menos.
+REGRA NÚMERO 1: O plano é SEMANAL. Gere EXATAMENTE o número de vídeos que o usuário pediu por semana. Nem mais, nem menos.
 
-NÃO gere tarefas genéricas como "definir tema", "escrever roteiro", "editar vídeo", "criar miniatura", "postar nas redes", "analisar estatísticas". Isso NÃO é um plano de vídeos.
+PROIBIDO gerar tarefas genéricas como: "definir tema", "escrever roteiro", "editar vídeo", "criar miniatura", "postar nas redes", "analisar estatísticas". Isso NÃO é um plano de vídeos.
 
-Cada item do plano deve ser UM VÍDEO ESPECÍFICO pronto para ser criado, no formato:
-- Título: um título viral e chamativo para o vídeo
-- Descrição: descreva exatamente o que gravar, incluindo: gancho inicial (primeiros 3 segundos), o que mostrar no vídeo, CTA (call to action), e gatilhos mentais a usar (curiosidade, urgência, polêmica, identificação, etc.)
+CADA item do plano deve ser UM VÍDEO ESPECÍFICO e completo, com:
 
-Exemplo BOM: "🔥 5 manobras que todo motociclista deveria saber | Gancho: 'A número 3 quase me matou...' | Mostrar cada manobra com cortes rápidos e música épica | CTA: 'Salva pra não esquecer' | Gatilhos: curiosidade, medo"
+1. TÍTULO: Título viral, chamativo, com emoji, que gere curiosidade imediata
+2. DESCRIÇÃO COMPLETA contendo obrigatoriamente:
+   - 🎣 GANCHO (primeiros 3 segundos): A frase ou cena de abertura que prende o espectador imediatamente. Ex: "Você sabia que 90% das pessoas fazem isso ERRADO?"
+   - 🎬 ROTEIRO VISUAL: O que mostrar, como filmar, quais cenas incluir, ritmo de cortes, trilha sonora sugerida
+   - 📢 CTA (Call to Action): O que pedir ao espectador no final. Ex: "Salva esse vídeo pra não esquecer!", "Comenta aqui qual você usa!"
+   - 🧠 GATILHOS MENTAIS: Liste os gatilhos usados (curiosidade, urgência, medo, polêmica, identificação, autoridade, prova social, escassez, etc.)
 
-Exemplo RUIM: "Definir temas" ou "Escrever roteiro" ou "Editar vídeo"${avoidRepetitionInstruction}
+EXEMPLOS DE DESCRIÇÃO BEM FEITA:
+"🎣 Gancho: 'Esse erro vai destruir seu motor...' (mostrar close do motor com defeito) | 🎬 Visual: Comparação antes/depois, cortes rápidos, música de suspense, legendas grandes na tela | 📢 CTA: 'Salva esse vídeo pra mostrar pro mecânico!' | 🧠 Gatilhos: medo, urgência, curiosidade, autoridade"
 
-TAMBÉM extraia do contexto da conversa:
+"🎣 Gancho: Começa com resultado final (bolo pronto e lindo), depois faz: 'Olha como eu fiz em 10 minutos!' | 🎬 Visual: Time-lapse da receita, ingredientes em cima da bancada, close nos detalhes, luz natural boa | 📢 CTA: 'Salva a receita e manda pra quem precisa ver isso!' | 🧠 Gatilhos: admiração, facilidade, identificação, prova social"
+
+${avoidRepetitionInstruction}
+
+TAMBÉM extraia do contexto:
 - O nicho/tema principal do criador
 - A plataforma escolhida (YouTube, Instagram, TikTok, etc.)
 
-SEMPRE use a ferramenta create_plan para retornar o plano.`
+SEMPRE use a ferramenta create_plan para retornar o plano. NUNCA retorne texto puro.`
           },
           ...messages,
         ],
@@ -115,15 +123,15 @@ SEMPRE use a ferramenta create_plan para retornar o plano.`
                   description: { type: 'string', description: 'Brief description of the weekly plan' },
                   niche: { type: 'string', description: 'The creator niche/theme extracted from the conversation' },
                   platform: { type: 'string', description: 'The chosen platform (YouTube, Instagram, TikTok, etc.)' },
-                  items: {
+                   items: {
                     type: 'array',
                     items: {
                       type: 'object',
                       properties: {
-                        title: { type: 'string', description: 'Video title (viral and engaging)' },
-                        description: { type: 'string', description: 'Full video description: hook, visual guide, CTA, mental triggers' },
+                        title: { type: 'string', description: 'Título viral do vídeo com emoji' },
+                        description: { type: 'string', description: 'Descrição COMPLETA obrigatória: 🎣 GANCHO (primeiros 3s) + 🎬 ROTEIRO VISUAL (o que mostrar, como filmar, cortes, trilha) + 📢 CTA (call to action para o espectador) + 🧠 GATILHOS MENTAIS (curiosidade, urgência, medo, polêmica, identificação, etc.)' },
                       },
-                      required: ['title'],
+                      required: ['title', 'description'],
                       additionalProperties: false,
                     },
                   },
