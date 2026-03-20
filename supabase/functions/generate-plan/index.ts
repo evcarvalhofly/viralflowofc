@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages, user_id } = await req.json();
+    const { messages, user_id, accounts_context } = await req.json();
 
     if (!user_id) {
       return new Response(
@@ -32,6 +32,33 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Check if user has any incomplete plans
+    const { data: existingPlans } = await supabase
+      .from('daily_plans')
+      .select('id')
+      .eq('user_id', user_id);
+
+    if (existingPlans && existingPlans.length > 0) {
+      const planIds = existingPlans.map((p: any) => p.id);
+      const { data: incompleteItems } = await supabase
+        .from('plan_items')
+        .select('id')
+        .in('plan_id', planIds)
+        .eq('completed', false)
+        .limit(1);
+
+      if (incompleteItems && incompleteItems.length > 0) {
+        return new Response(
+          JSON.stringify({ error: 'PLAN_INCOMPLETE', message: 'Conclua o seu planejamento atual para criar outro 📋' }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    const accountsContext = accounts_context
+      ? `\n\nDados das contas do criador:\n${JSON.stringify(accounts_context, null, 2)}`
+      : '';
+
     // Call OpenAI with tool calling to extract structured plan
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -44,17 +71,15 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você é o ViralFlow AI. Com base na conversa, gere uma LISTA DE CONTEÚDOS VIRAIS prontos para criar.
+            content: `Você é o ViralFlow AI. Com base na conversa e nos dados das contas conectadas, gere uma LISTA DE CONTEÚDOS VIRAIS prontos para criar.${accountsContext}
 
 IMPORTANTE: NÃO gere tarefas genéricas como "definir tema", "escrever roteiro", "editar vídeo", "criar miniatura", "postar nas redes", "analisar estatísticas". Isso NÃO é um plano de tarefas.
 
-Cada item do plano deve ser UM CONTEÚDO ESPECÍFICO pronto para ser criado, no formato:
+Cada item do plano deve ser UM CONTEÚDO ESPECÍFICO pronto para ser criado, adaptado às plataformas e métricas do criador, no formato:
 - Título: um título viral e chamativo para o vídeo/post
 - Descrição: descreva exatamente o que gravar/criar, incluindo: gancho inicial (primeiros 3 segundos), o que mostrar no vídeo, CTA (call to action), e gatilhos mentais a usar (curiosidade, urgência, polêmica, identificação, etc.)
 
-Exemplo de item BOM: "🔥 5 manobras que todo motociclista deveria saber | Gancho: 'A número 3 quase me matou...' | Mostrar cada manobra com cortes rápidos e música épica | CTA: 'Salva pra não esquecer' | Gatilhos: curiosidade, medo"
-
-Exemplo de item RUIM: "Definir temas para vídeos" ou "Escrever roteiro" ou "Editar vídeo"
+Inspire-se nos vídeos mais bem-sucedidos do criador (se disponíveis nos dados) para criar conteúdos no mesmo estilo, mas com temas novos e frescos.
 
 SEMPRE use a ferramenta create_plan para retornar o plano.`
           },
