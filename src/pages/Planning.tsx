@@ -264,7 +264,7 @@ const Planning = () => {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6 overflow-y-auto h-full pb-10">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
