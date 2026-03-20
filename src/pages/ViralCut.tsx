@@ -543,7 +543,29 @@ const ViralCut = () => {
   const handleApplyAutoCuts = useCallback((regions: SilenceRegion[]) => {
     updateProject((p) => {
       const newTracks = applySilenceCuts(p.tracks, regions);
-      return { ...p, tracks: newTracks };
+      
+      // 1. Pré-sanitizar para remover clipes minúsculos (ex: margens menores que 0.08s que causam gaps)
+      const cleanTracks = sanitizeTracks(newTracks);
+      
+      // 2. Encontrar o menor startTime entre todas as trilhas para verificar se o início ficou vazio
+      let minStart = Infinity;
+      for (const t of cleanTracks) {
+        if (t.items.length > 0) {
+          if (t.items[0].startTime < minStart) minStart = t.items[0].startTime;
+        }
+      }
+      
+      // 3. Se houver um gap fantasma no começo da timeline (minStart > 0), puxa TUDO pra esquerda (Snap to 0:00)
+      if (minStart > 0 && minStart !== Infinity) {
+        for (const t of cleanTracks) {
+          for (const item of t.items) {
+            item.startTime = Math.max(0, item.startTime - minStart);
+            item.endTime = Math.max(0, item.endTime - minStart);
+          }
+        }
+      }
+
+      return { ...p, tracks: cleanTracks };
     }, { pushHistory: true });
     setShowAutoCut(false);
     if (isMobile) setShowMobilePanel(false);
