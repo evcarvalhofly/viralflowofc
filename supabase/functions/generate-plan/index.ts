@@ -123,15 +123,15 @@ SEMPRE use a ferramenta create_plan para retornar o plano. NUNCA retorne texto p
                   description: { type: 'string', description: 'Brief description of the weekly plan' },
                   niche: { type: 'string', description: 'The creator niche/theme extracted from the conversation' },
                   platform: { type: 'string', description: 'The chosen platform (YouTube, Instagram, TikTok, etc.)' },
-                  items: {
+                   items: {
                     type: 'array',
                     items: {
                       type: 'object',
                       properties: {
-                        title: { type: 'string', description: 'Video title (viral and engaging)' },
-                        description: { type: 'string', description: 'Full video description: hook, visual guide, CTA, mental triggers' },
+                        title: { type: 'string', description: 'Título viral do vídeo com emoji' },
+                        description: { type: 'string', description: 'Descrição COMPLETA obrigatória: 🎣 GANCHO (primeiros 3s) + 🎬 ROTEIRO VISUAL (o que mostrar, como filmar, cortes, trilha) + 📢 CTA (call to action para o espectador) + 🧠 GATILHOS MENTAIS (curiosidade, urgência, medo, polêmica, identificação, etc.)' },
                       },
-                      required: ['title'],
+                      required: ['title', 'description'],
                       additionalProperties: false,
                     },
                   },
