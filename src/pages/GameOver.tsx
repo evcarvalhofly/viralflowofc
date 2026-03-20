@@ -1,425 +1,286 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Zap, ExternalLink, Loader2, Eye, ThumbsUp,
-  MessageCircle, Clock, Calendar, Brain, Map,
-  Anchor, Flame, BarChart2, HelpCircle, Copy,
-  FileText, Play, AlertCircle, CheckCircle2,
-  ChevronRight, Sparkles,
+  Zap, Loader2, Mic, MicOff, Copy,
+  Sparkles, CheckCircle2, Type
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-// ─── Types ────────────────────────────────────────────────────
-interface VideoInfo {
-  id: string; title: string; channel: string; thumbnail: string;
-  views: string; likes: string; comments: string; publishedAt: string;
-  duration: string; url: string;
-}
-interface MapItem { inicio: string; fim: string; nome: string; descricao: string; }
-interface StructureItem { numero: number; nome: string; explicacao: string; }
-interface PsychoItem { gatilho: string; explicacao: string; }
-interface ScriptItem { cena: number; nome: string; texto: string; }
-interface Analysis {
-  resumo: string;
-  mapa_viralizacao: MapItem[];
-  gancho: { tipo: string; descricao: string };
-  psicologia: PsychoItem[];
-  estrutura: StructureItem[];
-  por_que_viralizou: string;
-  como_copiar: { recriar_formato: string; adaptar_nicho: string; conteudo_venda: string; conteudo_educacional: string; };
-  roteiro: ScriptItem[];
+// Web Speech API Types
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
 }
 
-// ─── Section Wrapper ──────────────────────────────────────────
-const Section = ({
-  icon, title, badge, color = "primary", children
-}: {
-  icon: React.ReactNode; title: string; badge?: string;
-  color?: string; children: React.ReactNode;
-}) => (
-  <Card className="overflow-hidden border-border/50">
-    <div className={`h-1 bg-gradient-to-r ${
-      color === "primary" ? "from-primary to-primary/50" :
-      color === "pink"    ? "from-pink-500 to-pink-400/50" :
-      color === "purple"  ? "from-purple-500 to-purple-400/50" :
-      color === "amber"   ? "from-amber-500 to-amber-400/50" :
-      color === "green"   ? "from-green-500 to-green-400/50" :
-      color === "blue"    ? "from-blue-500 to-blue-400/50" :
-      color === "red"     ? "from-red-500 to-red-400/50" :
-      color === "teal"    ? "from-teal-500 to-teal-400/50" :
-      color === "orange"  ? "from-orange-500 to-orange-400/50" :
-      "from-primary to-primary/50"
-    }`} />
-    <CardContent className="p-5 space-y-4">
-      <div className="flex items-center gap-2">
-        <span className="text-primary">{icon}</span>
-        <h2 className="font-bold font-display text-base">{title}</h2>
-        {badge && <Badge variant="secondary" className="text-xs ml-auto">{badge}</Badge>}
-      </div>
-      {children}
-    </CardContent>
-  </Card>
-);
+interface ViralResult {
+  titulo: string;
+  descricao: string;
+  copy: string;
+}
 
-// ─── Skeleton Loader ──────────────────────────────────────────
-const AnalysisSkeleton = () => (
-  <div className="space-y-4">
-    {Array.from({ length: 5 }).map((_, i) => (
-      <Card key={i} className="overflow-hidden">
-        <div className="h-1 bg-muted animate-pulse" />
-        <CardContent className="p-5 space-y-3">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-3/4" />
-        </CardContent>
-      </Card>
-    ))}
-  </div>
-);
-
-// ─── Main Component ───────────────────────────────────────────
 const GameOver = () => {
   const { toast } = useToast();
-  const [url, setUrl] = useState("");
+  const [text, setText] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [video, setVideo] = useState<VideoInfo | null>(null);
-  const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [hasTranscript, setHasTranscript] = useState(false);
-  const [activeVersion, setActiveVersion] = useState<string | null>(null);
-  const [versionText, setVersionText] = useState("");
-  const [loadingVersion, setLoadingVersion] = useState(false);
+  const [result, setResult] = useState<ViralResult | null>(null);
+  const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
 
-  const handleAnalyze = async () => {
-    if (!url.trim()) return;
+  const recognitionRef = useRef<any>(null);
+
+  // Initialize Speech Recognition
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "pt-BR";
+
+        recognition.onresult = (event: any) => {
+          let finalTranscript = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript + " ";
+            }
+          }
+          if (finalTranscript) {
+            setText((prev) => prev + (prev.endsWith(" ") || prev.length === 0 ? "" : " ") + finalTranscript);
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsRecording(false);
+        };
+
+        recognition.onend = () => {
+          setIsRecording(false);
+        };
+
+        recognitionRef.current = recognition;
+      }
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  const toggleRecording = () => {
+    if (!recognitionRef.current) {
+      toast({
+        title: "Microfone não suportado",
+        description: "Seu navegador não suporta digitação por voz. Use o Chrome ou Safari no celular.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        recognitionRef.current.start();
+        setIsRecording(true);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!text.trim()) {
+      toast({
+        title: "Descrição vazia",
+        description: "Digite ou fale o que acontece no vídeo.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setLoading(true);
-    setVideo(null);
-    setAnalysis(null);
-    setActiveVersion(null);
-    setVersionText("");
+    setResult(null);
+    setCopiedStates({});
+
+    if (isRecording && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    }
 
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-viral-video", {
-        body: { videoUrl: url.trim() },
+      const { data, error } = await supabase.functions.invoke("viral-copy-generator", {
+        body: { text: text.trim() },
       });
+      
       if (error) throw new Error(error.message);
-      if (!data.success) throw new Error(data.error || "Erro ao analisar vídeo.");
-      setVideo(data.video);
-      setAnalysis(data.analysis);
-      setHasTranscript(data.hasTranscript);
+      if (!data.success) throw new Error(data.error || "Erro ao gerar copy viral.");
+      
+      setResult(data.data);
     } catch (err: any) {
-      toast({ title: "Erro ao analisar", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao gerar", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVersionButton = async (type: string) => {
-    if (!analysis || !video) return;
-    setActiveVersion(type);
-    setVersionText("");
-    setLoadingVersion(true);
-
-    const labels: Record<string, string> = {
-      tiktok: "TikTok (15-30s, legendas chamativas, corte rápido)",
-      reels: "Instagram Reels (15-30s, estética visual forte)",
-      vendas: "Conteúdo de Vendas (CTA direto, benefícios claros)",
-      storytelling: "Storytelling (narrativa pessoal, emoção, jornada)",
-      outro_nicho: "Adaptação para outro nicho completamente diferente",
-    };
-
+  const copyToClipboard = async (content: string, key: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-viral-video", {
-        body: {
-          videoUrl: video.url,
-          generateVersion: true,
-          versionType: labels[type],
-          videoTitle: video.title,
-          resumo: analysis.resumo,
-          gancho: `${analysis.gancho.tipo} — ${analysis.gancho.descricao}`,
-          porQueViralizou: analysis.por_que_viralizou,
-        },
+      await navigator.clipboard.writeText(content);
+      setCopiedStates((prev) => ({ ...prev, [key]: true }));
+      toast({
+        title: "Copiado! ✨",
+        description: "Texto copiado para a área de transferência.",
       });
-      if (error) throw new Error(error.message);
-      if (!data.success) throw new Error(data.error || "Erro ao gerar versão.");
-      setVersionText(data.versionText || "");
-    } catch (err: any) {
-      toast({ title: "Erro ao gerar versão", description: err.message, variant: "destructive" });
-    } finally {
-      setLoadingVersion(false);
+      setTimeout(() => {
+        setCopiedStates((prev) => ({ ...prev, [key]: false }));
+      }, 2000);
+    } catch (err) {
+      toast({ title: "Erro ao copiar", variant: "destructive" });
     }
   };
 
-  const mapColors = ["bg-red-500", "bg-orange-500", "bg-amber-500", "bg-yellow-500", "bg-green-500", "bg-teal-500", "bg-blue-500"];
+  const ResultCard = ({ title, content, icon: Icon, objKey }: { title: string; content: string; icon: any; objKey: string }) => (
+    <Card className="overflow-hidden border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-primary/50 relative group">
+      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-primary to-primary/30" />
+      <CardContent className="p-5 pl-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-primary">
+            <Icon className="h-5 w-5" />
+            <h3 className="font-bold text-base text-foreground">{title}</h3>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 group-hover:bg-primary/10 transition-colors"
+            onClick={() => copyToClipboard(content, objKey)}
+          >
+            {copiedStates[objKey] ? (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            ) : (
+              <><Copy className="h-4 w-4 mr-1.5" /> Copiar</>
+            )}
+          </Button>
+        </div>
+        <p className="text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen overflow-y-auto">
-      <div className="p-4 md:p-6 max-w-4xl mx-auto w-full space-y-6 pb-10">
+      <div className="p-4 md:p-6 max-w-3xl mx-auto w-full space-y-6 pb-10">
 
         {/* Header */}
-        <div className="space-y-1">
-          <h1 className="text-2xl md:text-3xl font-bold font-display flex items-center gap-2">
-            <Zap className="h-7 w-7 text-primary" />
-            GameOver 🔥
+        <div className="space-y-3 text-center md:text-left mt-4 md:mt-8">
+          <div className="inline-flex items-center justify-center p-3 bg-primary/10 rounded-2xl mb-2">
+            <Zap className="h-8 w-8 text-primary" />
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold font-display">
+            GameOver
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Cole o link de um vídeo viral e descubra exatamente por que ele viralizou — engenharia reversa completa.
+          <p className="text-base text-muted-foreground w-full max-w-lg mx-auto md:mx-0">
+            Aposente seus dedos. Fale o que acontece no vídeo e nós geramos as descrições mais virais do mercado pra você em segundos.
           </p>
         </div>
 
-        {/* Input */}
-        <Card className="border-primary/30">
-          <CardContent className="p-5 space-y-3">
-            <label className="text-sm font-medium">Cole o link do vídeo do YouTube</label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="https://youtube.com/shorts/... ou https://youtu.be/..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !loading && handleAnalyze()}
-                className="flex-1"
-                disabled={loading}
-              />
-              <Button
-                onClick={handleAnalyze}
-                disabled={loading || !url.trim()}
-                className="gradient-viral shrink-0"
-              >
-                {loading ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" />Analisando…</>
-                ) : (
-                  <><Zap className="h-4 w-4" />Analisar</>
-                )}
-              </Button>
+        {/* Input Card */}
+        <Card className="border-primary/20 shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 gradient-viral" />
+          <CardContent className="p-6 space-y-4 pt-8">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-semibold flex items-center gap-2">
+                <Type className="h-4 w-4 text-primary" />
+                Descreva a cena e o contexto do vídeo
+              </label>
             </div>
-            {loading && (
-              <p className="text-xs text-muted-foreground animate-pulse">
-                Buscando dados do vídeo e gerando análise viral completa…
-              </p>
-            )}
+            
+            <div className="relative">
+              <Textarea
+                placeholder="Exemplo: Fui na padaria comprar pão e encontrei um fisiculturista comprando 10kg de frango..."
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                disabled={loading}
+                className={cn(
+                  "min-h-[160px] resize-none text-base p-4 pr-16 bg-muted/30 focus-visible:ring-primary/50",
+                  isRecording && "border-primary/60 ring-1 ring-primary/30"
+                )}
+              />
+              <div className="absolute bottom-3 right-3 flex flex-col items-center">
+                <button
+                  onClick={toggleRecording}
+                  type="button"
+                  disabled={loading}
+                  className={cn(
+                    "p-3 rounded-full transition-all duration-300 shadow-md",
+                    isRecording 
+                      ? "bg-red-500 hover:bg-red-600 text-white animate-pulse shadow-red-500/40" 
+                      : "bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105"
+                  )}
+                  title={isRecording ? "Parar gravação" : "Clique para falar"}
+                >
+                  {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleGenerate}
+              disabled={loading || !text.trim()}
+              className="w-full gradient-viral text-white font-bold h-12 text-base shadow-lg hover:opacity-90 transition-opacity mt-4"
+            >
+              {loading ? (
+                <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Gerando Magia Viral…</>
+              ) : (
+                <><Sparkles className="h-5 w-5 mr-2" /> Gerar Copy Viral</>
+              )}
+            </Button>
           </CardContent>
         </Card>
 
-        {/* Loading skeleton */}
-        {loading && <AnalysisSkeleton />}
-
         {/* Results */}
-        {video && analysis && (
-          <div className="space-y-4">
-
-            {/* Transcript notice */}
-            {!hasTranscript && (
-              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                Transcrição não disponível para este vídeo — análise baseada em título e descrição.
-              </div>
-            )}
-            {hasTranscript && (
-              <div className="flex items-center gap-2 text-xs text-green-600 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                Transcrição extraída com sucesso — análise baseada no conteúdo completo do vídeo.
-              </div>
-            )}
-
-            {/* SEÇÃO 1 — Dados do vídeo */}
-            <Section icon={<Play className="h-5 w-5" />} title="Dados do Vídeo" color="primary">
-              <div className="flex gap-4">
-                <a href={video.url} target="_blank" rel="noopener noreferrer" className="shrink-0 group">
-                  <div className="relative w-36 aspect-video rounded-lg overflow-hidden bg-muted">
-                    <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                      <ExternalLink className="h-5 w-5 text-white" />
-                    </div>
-                  </div>
-                </a>
-                <div className="flex-1 space-y-2 min-w-0">
-                  <a href={video.url} target="_blank" rel="noopener noreferrer">
-                    <h3 className="font-semibold text-sm line-clamp-2 hover:text-primary transition-colors">{video.title}</h3>
-                  </a>
-                  <p className="text-xs text-muted-foreground">{video.channel}</p>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="flex items-center gap-1 text-muted-foreground"><Eye className="h-3 w-3" />{video.views}</span>
-                    <span className="flex items-center gap-1 text-muted-foreground"><ThumbsUp className="h-3 w-3" />{video.likes}</span>
-                    <span className="flex items-center gap-1 text-muted-foreground"><MessageCircle className="h-3 w-3" />{video.comments}</span>
-                    <span className="flex items-center gap-1 text-muted-foreground"><Clock className="h-3 w-3" />{video.duration}</span>
-                    <span className="flex items-center gap-1 text-muted-foreground"><Calendar className="h-3 w-3" />{video.publishedAt}</span>
-                  </div>
-                </div>
-              </div>
-            </Section>
-
-            {/* SEÇÃO 2 — Resumo */}
-            <Section icon={<FileText className="h-5 w-5" />} title="Resumo do Vídeo" color="blue">
-              <p className="text-sm leading-relaxed">{analysis.resumo}</p>
-            </Section>
-
-            {/* SEÇÃO 3 — Mapa de Viralização */}
-            <Section icon={<Map className="h-5 w-5" />} title="Mapa de Viralização" badge={`${analysis.mapa_viralizacao.length} partes`} color="pink">
-              {/* Timeline visual */}
-              <div className="flex rounded-full overflow-hidden h-3 mb-4">
-                {analysis.mapa_viralizacao.map((item, i) => (
-                  <div
-                    key={i}
-                    className={`${mapColors[i % mapColors.length]} flex-1 first:rounded-l-full last:rounded-r-full`}
-                    title={item.nome}
-                  />
-                ))}
-              </div>
-              <div className="space-y-2">
-                {analysis.mapa_viralizacao.map((item, i) => (
-                  <div key={i} className="flex gap-3 text-sm">
-                    <div className="flex items-start gap-2 shrink-0">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${mapColors[i % mapColors.length]}`} />
-                      <span className="text-xs text-muted-foreground w-16 shrink-0">{item.inicio}–{item.fim}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-xs">{item.nome}</span>
-                      <p className="text-xs text-muted-foreground mt-0.5">{item.descricao}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* SEÇÃO 4 — Gancho */}
-            <Section icon={<Anchor className="h-5 w-5" />} title="Gancho Usado" color="amber">
-              <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-sm px-3">
-                {analysis.gancho.tipo}
-              </Badge>
-              <p className="text-sm leading-relaxed">{analysis.gancho.descricao}</p>
-            </Section>
-
-            {/* SEÇÃO 5 — Psicologia */}
-            <Section icon={<Brain className="h-5 w-5" />} title="Psicologia do Vídeo" color="purple">
-              <div className="space-y-3">
-                {analysis.psicologia.map((item, i) => (
-                  <div key={i} className="flex gap-3">
-                    <Badge variant="outline" className="shrink-0 h-fit text-xs">{item.gatilho}</Badge>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{item.explicacao}</p>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* SEÇÃO 6 — Estrutura */}
-            <Section icon={<BarChart2 className="h-5 w-5" />} title="Estrutura do Conteúdo" color="teal">
-              <div className="space-y-2">
-                {analysis.estrutura.map((item) => (
-                  <div key={item.numero} className="flex gap-3 text-sm">
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                      {item.numero}
-                    </div>
-                    <div>
-                      <span className="font-semibold text-xs">{item.nome}</span>
-                      <p className="text-xs text-muted-foreground mt-0.5">{item.explicacao}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* SEÇÃO 7 — Por que viralizou */}
-            <Section icon={<Flame className="h-5 w-5" />} title="Por Que Esse Vídeo Viralizou" color="red">
-              <p className="text-sm leading-relaxed">{analysis.por_que_viralizou}</p>
-            </Section>
-
-            {/* SEÇÃO 8 — Como Copiar */}
-            <Section icon={<Copy className="h-5 w-5" />} title="Como Copiar Essa Ideia" color="green">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {[
-                  { label: "Recriar o formato", text: analysis.como_copiar.recriar_formato, color: "text-green-600" },
-                  { label: "Adaptar para outro nicho", text: analysis.como_copiar.adaptar_nicho, color: "text-blue-600" },
-                  { label: "Conteúdo de venda", text: analysis.como_copiar.conteudo_venda, color: "text-amber-600" },
-                  { label: "Conteúdo educacional", text: analysis.como_copiar.conteudo_educacional, color: "text-purple-600" },
-                ].map((item) => (
-                  <div key={item.label} className="bg-muted/40 rounded-lg p-3 space-y-1">
-                    <span className={`text-xs font-semibold ${item.color}`}>{item.label}</span>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{item.text}</p>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* SEÇÃO 9 — Roteiro Inspirado */}
-            <Section icon={<Sparkles className="h-5 w-5" />} title="Roteiro Inspirado" color="orange">
-              <div className="space-y-2">
-                {analysis.roteiro.map((item) => (
-                  <div key={item.cena} className="flex gap-3 bg-muted/30 rounded-lg p-3">
-                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-orange-500/10 text-orange-600 text-xs font-bold shrink-0">
-                      {item.cena}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <ChevronRight className="h-3 w-3 text-orange-500" />
-                        <span className="text-xs font-semibold text-orange-600">{item.nome}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{item.texto}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* SEÇÃO 10 — Botões de Ação */}
-            <Card className="border-border/50">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <HelpCircle className="h-5 w-5 text-primary" />
-                  <h2 className="font-bold font-display text-base">Criar Versão Para…</h2>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: "tiktok", label: "TikTok", icon: "🎵" },
-                    { key: "reels", label: "Reels", icon: "📱" },
-                    { key: "vendas", label: "Vendas", icon: "💰" },
-                    { key: "storytelling", label: "Storytelling", icon: "📖" },
-                    { key: "outro_nicho", label: "Outro Nicho", icon: "🎯" },
-                  ].map(({ key, label, icon }) => (
-                    <Button
-                      key={key}
-                      variant={activeVersion === key ? "default" : "outline"}
-                      size="sm"
-                      className={activeVersion === key ? "gradient-viral" : ""}
-                      onClick={() => handleVersionButton(key)}
-                      disabled={loadingVersion}
-                    >
-                      {icon} {label}
-                    </Button>
-                  ))}
-                </div>
-
-                {(loadingVersion || versionText) && (
-                  <div className="bg-muted/40 rounded-lg p-4">
-                    {loadingVersion ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Gerando versão adaptada…
-                      </div>
-                    ) : (
-                      <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap">
-                        {versionText}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
+        {result && (
+          <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500 pt-4">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-500" /> Resultados Prontinhos
+            </h2>
+            
+            <div className="grid gap-4">
+              <ResultCard 
+                title="Título Viral"
+                content={result.titulo}
+                icon={Zap} 
+                objKey="titulo" 
+              />
+              
+              <ResultCard 
+                title="Descrição Estratégica"
+                content={result.descricao}
+                icon={Type} 
+                objKey="descricao" 
+              />
+              
+              <ResultCard 
+                title="Copy Focada em Comentários"
+                content={result.copy}
+                icon={Sparkles} 
+                objKey="copy" 
+              />
+            </div>
           </div>
         )}
 
-        {/* Empty state */}
-        {!loading && !video && (
-          <div className="text-center py-16 space-y-3 text-muted-foreground">
-            <Zap className="h-14 w-14 mx-auto opacity-20" />
-            <p className="text-sm">Cole o link de um vídeo viral para descobrir o segredo da viralização</p>
-            <p className="text-xs opacity-60">Suporte para YouTube Shorts e vídeos regulares</p>
-          </div>
-        )}
       </div>
     </div>
   );
