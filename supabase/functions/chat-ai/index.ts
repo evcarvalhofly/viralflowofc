@@ -55,9 +55,10 @@ ${hasNiche && hasPlatform ? '1' : !hasNiche && !hasPlatform ? '3' : '2'}. Por ú
 
 REGRAS:
 - Faça APENAS UMA pergunta por vez.
+- REGRA DO NICHO (MUITO IMPORTANTE): Se o usuário informar um nicho muito genérico (como "humor", "saúde", "games", "tecnologia"), NÃO ACEITE imediatamente. Pergunte qual o SUB-NICHO exato para ser mais criativo. Exemplo: se disser humor, pergunte "Humor é muito amplo! Você faz piadas em formato POV, esquetes com personagens, stand-up ou reações?". Só avance para a próxima pergunta quando o nicho estiver bem específico.
 - O plano é SEMPRE semanal, com EXATAMENTE o número de vídeos pedido.
 - NUNCA sugira mais vídeos do que o usuário pediu.
-- Quando tiver nicho + plataforma + quantidade, diga algo como "Perfeito! Já tenho tudo que preciso 🚀 Clica no botão abaixo para gerar seu plano!" e inclua [PLAN_READY] no final.
+- Quando tiver nicho (específico) + plataforma + quantidade, diga algo como "Perfeito! Já tenho tudo que preciso 🚀 Clica no botão abaixo para gerar seu plano!" e inclua [PLAN_READY] no final.
 - NUNCA inclua [PLAN_READY] antes de ter as 3 informações completas.
 - Sempre responda em português do Brasil.`;
 }

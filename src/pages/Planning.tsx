@@ -400,14 +400,16 @@ const Planning = () => {
                       {plan.items.map((item) => (
                         <div
                           key={item.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                          className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
                             item.completed ? "bg-primary/5 border-primary/20" : "border-border"
                           }`}
                         >
-                          <Checkbox checked={item.completed} onCheckedChange={() => toggleItem(item)} />
+                          <div className="pt-1">
+                            <Checkbox checked={item.completed} onCheckedChange={() => toggleItem(item)} />
+                          </div>
 
                           {editingId === item.id ? (
-                            <div className="flex-1 flex gap-2">
+                            <div className="flex-1 flex gap-2 pt-1">
                               <Input
                                 value={editText}
                                 onChange={e => setEditText(e.target.value)}
@@ -420,15 +422,24 @@ const Planning = () => {
                             </div>
                           ) : (
                             <>
-                              <span className={`flex-1 text-sm ${item.completed ? "line-through text-muted-foreground" : ""}`}>
-                                {item.title}
-                              </span>
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => startEditItem(item)}>
-                                <Edit2 className="h-3 w-3" />
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => deleteItem(item.id)}>
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                              <div className="flex-1 flex flex-col gap-1">
+                                <span className={`text-sm font-semibold ${item.completed ? "line-through text-muted-foreground" : ""}`}>
+                                  {item.title}
+                                </span>
+                                {item.description && (
+                                  <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">
+                                    {item.description}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-1 pt-0.5">
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => startEditItem(item)}>
+                                  <Edit2 className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive shrink-0" onClick={() => deleteItem(item.id)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </>
                           )}
                         </div>

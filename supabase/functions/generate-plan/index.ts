@@ -86,19 +86,20 @@ REGRA NÚMERO 1: O plano é SEMANAL. Gere EXATAMENTE o número de vídeos que o 
 
 PROIBIDO gerar tarefas genéricas como: "definir tema", "escrever roteiro", "editar vídeo", "criar miniatura", "postar nas redes", "analisar estatísticas". Isso NÃO é um plano de vídeos.
 
-CADA item do plano deve ser UM VÍDEO ESPECÍFICO e completo, com:
+CADA item do plano deve ser UM VÍDEO ESPECÍFICO e completo, seguindo este padrão EXATO (com os emojis e tópicos listados):
 
-1. TÍTULO: Título viral, chamativo, com emoji, que gere curiosidade imediata
-2. DESCRIÇÃO COMPLETA contendo obrigatoriamente:
-   - 🎣 GANCHO (primeiros 3 segundos): A frase ou cena de abertura que prende o espectador imediatamente. Ex: "Você sabia que 90% das pessoas fazem isso ERRADO?"
-   - 🎬 ROTEIRO VISUAL: O que mostrar, como filmar, quais cenas incluir, ritmo de cortes, trilha sonora sugerida
-   - 📢 CTA (Call to Action): O que pedir ao espectador no final. Ex: "Salva esse vídeo pra não esquecer!", "Comenta aqui qual você usa!"
-   - 🧠 GATILHOS MENTAIS: Liste os gatilhos usados (curiosidade, urgência, medo, polêmica, identificação, autoridade, prova social, escassez, etc.)
+1. TÍTULO: 📌 Título — Um título viral e chamativo para o vídeo/post.
+2. DESCRIÇÃO: Deve conter os seguintes 4 tópicos exatamente com estes emojis e nomes:
+   🎬 Gancho inicial — O que dizer/mostrar nos primeiros 3 segundos para prender a atenção.
+   🎥 Orientação visual — O que mostrar no vídeo: cenas, cortes, ritmo, música.
+   📣 CTA (Call to Action) — A ação que o espectador deve tomar.
+   🧠 Gatilhos mentais — Técnicas psicológicas usadas no conteúdo (Curiosidade, Urgência, Medo, Identificação, Polêmica, etc).
 
-EXEMPLOS DE DESCRIÇÃO BEM FEITA:
-"🎣 Gancho: 'Esse erro vai destruir seu motor...' (mostrar close do motor com defeito) | 🎬 Visual: Comparação antes/depois, cortes rápidos, música de suspense, legendas grandes na tela | 📢 CTA: 'Salva esse vídeo pra mostrar pro mecânico!' | 🧠 Gatilhos: medo, urgência, curiosidade, autoridade"
-
-"🎣 Gancho: Começa com resultado final (bolo pronto e lindo), depois faz: 'Olha como eu fiz em 10 minutos!' | 🎬 Visual: Time-lapse da receita, ingredientes em cima da bancada, close nos detalhes, luz natural boa | 📢 CTA: 'Salva a receita e manda pra quem precisa ver isso!' | 🧠 Gatilhos: admiração, facilidade, identificação, prova social"
+EXEMPLO DE DESCRIÇÃO BEM FEITA:
+"🎬 Gancho inicial: 'A número 3 quase me matou...'
+🎥 Orientação visual: Mostrar cada manobra com cortes rápidos e música épica.
+📣 CTA: 'Salva pra não esquecer e comenta a sua favorita!'
+🧠 Gatilhos mentais: Curiosidade, Medo, Identificação"
 
 ${avoidRepetitionInstruction}
 
@@ -128,8 +129,8 @@ SEMPRE use a ferramenta create_plan para retornar o plano. NUNCA retorne texto p
                     items: {
                       type: 'object',
                       properties: {
-                        title: { type: 'string', description: 'Título viral do vídeo com emoji' },
-                        description: { type: 'string', description: 'Descrição COMPLETA obrigatória: 🎣 GANCHO (primeiros 3s) + 🎬 ROTEIRO VISUAL (o que mostrar, como filmar, cortes, trilha) + 📢 CTA (call to action para o espectador) + 🧠 GATILHOS MENTAIS (curiosidade, urgência, medo, polêmica, identificação, etc.)' },
+                        title: { type: 'string', description: '📌 Título — Um título viral e chamativo para o vídeo/post.' },
+                        description: { type: 'string', description: 'Descrição do vídeo contendo os quatro tópicos obrigatórios: 🎬 Gancho inicial, 🎥 Orientação visual, 📣 CTA (Call to Action) e 🧠 Gatilhos mentais.' },
                       },
                       required: ['title', 'description'],
                       additionalProperties: false,
