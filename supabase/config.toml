@@ -17,7 +17,3 @@ verify_jwt = false
 
 [functions.transcribe-audio]
 verify_jwt = false
-
-[functions.analyze-accounts]
-verify_jwt = false
-

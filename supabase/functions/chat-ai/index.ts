@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages, system_override } = await req.json();
+    const { messages } = await req.json();
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
     if (!OPENAI_API_KEY) {
@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: system_override || SYSTEM_PROMPT },
+          { role: 'system', content: SYSTEM_PROMPT },
           ...messages,
         ],
         stream: true,

@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages, user_id, accounts_context } = await req.json();
+    const { messages, user_id } = await req.json();
 
     if (!user_id) {
       return new Response(
@@ -32,33 +32,6 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Check if user has any incomplete plans
-    const { data: existingPlans } = await supabase
-      .from('daily_plans')
-      .select('id')
-      .eq('user_id', user_id);
-
-    if (existingPlans && existingPlans.length > 0) {
-      const planIds = existingPlans.map((p: any) => p.id);
-      const { data: incompleteItems } = await supabase
-        .from('plan_items')
-        .select('id')
-        .in('plan_id', planIds)
-        .eq('completed', false)
-        .limit(1);
-
-      if (incompleteItems && incompleteItems.length > 0) {
-        return new Response(
-          JSON.stringify({ error: 'PLAN_INCOMPLETE', message: 'Conclua o seu planejamento atual para criar outro 📋' }),
-          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
-    const accountsContext = accounts_context
-      ? `\n\nDados das contas do criador:\n${JSON.stringify(accounts_context, null, 2)}`
-      : '';
-
     // Call OpenAI with tool calling to extract structured plan
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -71,22 +44,19 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você é o ViralFlow AI. Com base na conversa e nos dados das contas conectadas, gere uma LISTA DE CONTEÚDOS VIRAIS prontos para criar.${accountsContext}
+            content: `Você é o ViralFlow AI. Com base na conversa, gere uma LISTA DE CONTEÚDOS VIRAIS prontos para criar.
 
 IMPORTANTE: NÃO gere tarefas genéricas como "definir tema", "escrever roteiro", "editar vídeo", "criar miniatura", "postar nas redes", "analisar estatísticas". Isso NÃO é um plano de tarefas.
 
-Cada item do plano deve ser UM CONTEÚDO ESPECÍFICO e detalhado pronto para ser criado, adaptado às plataformas e métricas do criador.
+Cada item do plano deve ser UM CONTEÚDO ESPECÍFICO pronto para ser criado, no formato:
+- Título: um título viral e chamativo para o vídeo/post
+- Descrição: descreva exatamente o que gravar/criar, incluindo: gancho inicial (primeiros 3 segundos), o que mostrar no vídeo, CTA (call to action), e gatilhos mentais a usar (curiosidade, urgência, polêmica, identificação, etc.)
 
-Para cada item, preencha OBRIGATORIAMENTE todos os campos:
-- title: título viral e chamativo do vídeo/post (ex: "5 erros que todo iniciante comete no treino")
-- hook: gancho dos primeiros 3 segundos — o que dizer/mostrar para prender a atenção imediatamente (ex: "Você tá perdendo tempo na academia sem saber disso...")
-- visual_guide: orientação visual detalhada — o que gravar, como filmar, ritmo das cenas, transições, música sugerida
-- cta: call to action específico no final do vídeo (ex: "Salva esse vídeo pra não esquecer e me segue pra mais dicas assim")
-- mental_triggers: lista dos gatilhos mentais usados (ex: "curiosidade, urgência, identificação, polêmica")
+Exemplo de item BOM: "🔥 5 manobras que todo motociclista deveria saber | Gancho: 'A número 3 quase me matou...' | Mostrar cada manobra com cortes rápidos e música épica | CTA: 'Salva pra não esquecer' | Gatilhos: curiosidade, medo"
 
-Inspire-se nos vídeos mais bem-sucedidos do criador (se disponíveis nos dados) para criar conteúdos no mesmo estilo, mas com temas novos e frescos.
+Exemplo de item RUIM: "Definir temas para vídeos" ou "Escrever roteiro" ou "Editar vídeo"
 
-SEMPRE use a ferramenta create_plan para retornar o plano. Gere o número de conteúdos que o usuário pediu.`
+SEMPRE use a ferramenta create_plan para retornar o plano.`
           },
           ...messages,
         ],
@@ -95,25 +65,21 @@ SEMPRE use a ferramenta create_plan para retornar o plano. Gere o número de con
             type: 'function',
             function: {
               name: 'create_plan',
-              description: 'Create a structured content creation plan with detailed viral content items',
+              description: 'Create a structured content creation plan with checklist items',
               parameters: {
                 type: 'object',
                 properties: {
-                  title: { type: 'string', description: 'Plan title (e.g. "Plano de Conteúdo Fitness - 5 Vídeos")' },
-                  description: { type: 'string', description: 'Brief description of the plan strategy' },
+                  title: { type: 'string', description: 'Plan title (e.g. "Plano de Conteúdo Fitness - Dia 1")' },
+                  description: { type: 'string', description: 'Brief description of the plan' },
                   items: {
                     type: 'array',
-                    description: 'List of viral content pieces to create',
                     items: {
                       type: 'object',
                       properties: {
-                        title: { type: 'string', description: 'Viral and catchy title for the video/post' },
-                        hook: { type: 'string', description: 'Exact hook for the first 3 seconds to grab attention immediately' },
-                        visual_guide: { type: 'string', description: 'Detailed visual guide: what to film, how to film it, scene rhythm, transitions, suggested music' },
-                        cta: { type: 'string', description: 'Specific call to action at the end of the video' },
-                        mental_triggers: { type: 'string', description: 'Mental triggers used (e.g. curiosity, urgency, controversy, identification)' },
+                        title: { type: 'string', description: 'Checklist item title' },
+                        description: { type: 'string', description: 'Optional details' },
                       },
-                      required: ['title', 'hook', 'visual_guide', 'cta', 'mental_triggers'],
+                      required: ['title'],
                       additionalProperties: false,
                     },
                   },
@@ -172,23 +138,13 @@ SEMPRE use a ferramenta create_plan para retornar o plano. Gere o número de con
 
     // Insert checklist items
     if (plan.items?.length > 0) {
-      const items = plan.items.map((item: any, i: number) => {
-        // Build a rich description from structured fields
-        const parts: string[] = [];
-        if (item.hook) parts.push(`🎣 Gancho: ${item.hook}`);
-        if (item.visual_guide) parts.push(`🎬 Orientação Visual: ${item.visual_guide}`);
-        if (item.cta) parts.push(`📣 CTA: ${item.cta}`);
-        if (item.mental_triggers) parts.push(`🧠 Gatilhos: ${item.mental_triggers}`);
-        const description = parts.length > 0 ? parts.join('\n\n') : (item.description || null);
-
-        return {
-          plan_id: planData.id,
-          user_id,
-          title: item.title,
-          description,
-          sort_order: i,
-        };
-      });
+      const items = plan.items.map((item: any, i: number) => ({
+        plan_id: planData.id,
+        user_id,
+        title: item.title,
+        description: item.description || null,
+        sort_order: i,
+      }));
 
       const { error: itemsError } = await supabase.from('plan_items').insert(items);
       if (itemsError) console.error('Items insert error:', itemsError);
