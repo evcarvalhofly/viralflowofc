@@ -3,7 +3,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const SYSTEM_PROMPT = `Você é o ViralFlow AI, especialista em criação de conteúdo digital no Brasil.
+function buildSystemPrompt(memory: { niche?: string; platform?: string } | null): string {
+  const hasNiche = memory?.niche;
+  const hasPlatform = memory?.platform;
+  const hasFullMemory = hasNiche && hasPlatform;
+
+  if (hasFullMemory) {
+    return `Você é o ViralFlow AI, especialista em criação de conteúdo digital no Brasil.
+
+MEMÓRIA DO USUÁRIO (já coletada anteriormente):
+- Nicho: ${memory.niche}
+- Plataforma: ${memory.platform}
+
+NÃO pergunte sobre nicho ou plataforma novamente. O usuário já forneceu esses dados.
+
+SEU ÚNICO OBJETIVO AGORA:
+Perguntar quantos vídeos o usuário quer produzir ESSA semana (de 1 a 7) e então sinalizar que está pronto para gerar o plano.
+
+REGRAS:
+- Respostas CURTAS (1-3 frases), direto ao ponto.
+- Use emojis com moderação.
+- NUNCA gere o plano dentro do chat. Apenas colete a quantidade semanal e sinalize [PLAN_READY].
+- Assim que o usuário informar a quantidade de vídeos, diga algo como "Perfeito! Já tenho tudo que preciso 🚀 Clica no botão abaixo para gerar seu plano!" e inclua [PLAN_READY] no final.
+- NUNCA inclua [PLAN_READY] antes de saber a quantidade de vídeos essa semana.
+- Sempre responda em português do Brasil.`;
+  }
+
+  return `Você é o ViralFlow AI, especialista em criação de conteúdo digital no Brasil.
 
 Seu ÚNICO objetivo é coletar 3 informações do usuário e gerar um plano semanal de vídeos personalizado.
 
@@ -16,16 +42,16 @@ COMPORTAMENTO:
 MEMÓRIA DO CONTEXTO (CRÍTICO):
 Antes de responder QUALQUER mensagem, revise TODAS as mensagens anteriores.
 Extraia o que já foi dito:
-- Nicho/tema
-- Plataforma (YouTube, Instagram, TikTok, outro)
+- Nicho/tema${hasNiche ? ` (JÁ SALVO: ${memory.niche} — NÃO pergunte novamente)` : ''}
+- Plataforma (YouTube, Instagram, TikTok, outro)${hasPlatform ? ` (JÁ SALVO: ${memory.platform} — NÃO pergunte novamente)` : ''}
 - Quantos vídeos por semana
 
 NÃO repita perguntas já respondidas. Se já tem tudo, confirme e inclua [PLAN_READY].
 
 FLUXO OBRIGATÓRIO (na ordem, uma pergunta por vez):
-1. PRIMEIRO: Pergunte sobre o nicho/tema. Ex: "Que tipo de conteúdo você quer criar? Me conta seu nicho! 🎯"
-2. SEGUNDO: Após saber o nicho, pergunte a plataforma: YouTube (vídeos longos ou Shorts), Instagram (Reels) ou TikTok.
-3. TERCEIRO: Após saber a plataforma, pergunte quantos vídeos por semana (1 a 7).
+${hasNiche ? '✅ Nicho: JÁ COLETADO' : '1. PRIMEIRO: Pergunte sobre o nicho/tema. Ex: "Que tipo de conteúdo você quer criar? Me conta seu nicho! 🎯"'}
+${hasPlatform ? '✅ Plataforma: JÁ COLETADA' : `${hasNiche ? '1' : '2'}. Pergunte a plataforma: YouTube (vídeos longos ou Shorts), Instagram (Reels) ou TikTok.`}
+${hasNiche && hasPlatform ? '1' : !hasNiche && !hasPlatform ? '3' : '2'}. Por último: quantos vídeos por semana (1 a 7).
 
 REGRAS:
 - Faça APENAS UMA pergunta por vez.
@@ -34,6 +60,7 @@ REGRAS:
 - Quando tiver nicho + plataforma + quantidade, diga algo como "Perfeito! Já tenho tudo que preciso 🚀 Clica no botão abaixo para gerar seu plano!" e inclua [PLAN_READY] no final.
 - NUNCA inclua [PLAN_READY] antes de ter as 3 informações completas.
 - Sempre responda em português do Brasil.`;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -41,7 +68,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages, userMemory } = await req.json();
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
     if (!OPENAI_API_KEY) {
@@ -50,6 +77,8 @@ Deno.serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const systemPrompt = buildSystemPrompt(userMemory);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -60,7 +89,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           ...messages,
         ],
         stream: true,

@@ -33,7 +33,6 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // ── Rule: only 1 active plan at a time ──
-    // Check if there are any incomplete items in existing plans
     const { data: incompletePlans, error: checkError } = await supabase
       .from('plan_items')
       .select('id, plan_id')
@@ -61,7 +60,7 @@ Deno.serve(async (req) => {
       .select('title')
       .eq('user_id', user_id)
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(200);
 
     const previousTitles = previousItems?.map((i: { title: string }) => i.title) ?? [];
 
@@ -95,6 +94,10 @@ Exemplo BOM: "🔥 5 manobras que todo motociclista deveria saber | Gancho: 'A n
 
 Exemplo RUIM: "Definir temas" ou "Escrever roteiro" ou "Editar vídeo"${avoidRepetitionInstruction}
 
+TAMBÉM extraia do contexto da conversa:
+- O nicho/tema principal do criador
+- A plataforma escolhida (YouTube, Instagram, TikTok, etc.)
+
 SEMPRE use a ferramenta create_plan para retornar o plano.`
           },
           ...messages,
@@ -110,6 +113,8 @@ SEMPRE use a ferramenta create_plan para retornar o plano.`
                 properties: {
                   title: { type: 'string', description: 'Plan title (e.g. "Semana de Conteúdo - Fitness")' },
                   description: { type: 'string', description: 'Brief description of the weekly plan' },
+                  niche: { type: 'string', description: 'The creator niche/theme extracted from the conversation' },
+                  platform: { type: 'string', description: 'The chosen platform (YouTube, Instagram, TikTok, etc.)' },
                   items: {
                     type: 'array',
                     items: {
@@ -154,6 +159,21 @@ SEMPRE use a ferramenta create_plan para retornar o plano.`
 
     const plan = JSON.parse(toolCall.function.arguments);
     const today = new Date().toISOString().split('T')[0];
+
+    // ── Save / update user AI memory (niche + platform) ──
+    if (plan.niche || plan.platform) {
+      const { error: memError } = await supabase
+        .from('user_ai_memory')
+        .upsert(
+          {
+            user_id,
+            ...(plan.niche ? { niche: plan.niche } : {}),
+            ...(plan.platform ? { platform: plan.platform } : {}),
+          },
+          { onConflict: 'user_id' }
+        );
+      if (memError) console.error('Memory upsert error:', memError);
+    }
 
     // Insert the plan
     const { data: planData, error: planError } = await supabase
