@@ -154,7 +154,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           <div className="w-6" />
         </header>
 
-        <main className="flex-1 min-h-0 overflow-hidden">
+        <main className="flex-1 min-h-0 overflow-y-auto">
           {children}
         </main>
       </div>
