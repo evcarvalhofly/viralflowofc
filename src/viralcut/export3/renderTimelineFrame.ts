@@ -11,7 +11,7 @@ import { Project, MediaFile, TrackItem } from '../types';
 import { drawTextItemOnCanvas } from './textLayout';
 
 export interface FrameRenderAssets {
-  videoFrames: Map<string, HTMLVideoElement | ImageBitmap | null>;
+  videoFrames: Map<string, HTMLVideoElement | null>;
   images:      Map<string, ImageBitmap>;
   mediaMap:    Map<string, MediaFile>;
 }
@@ -112,8 +112,8 @@ export function renderTimelineFrame({
       if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
       if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
 
-      const srcW = ('videoWidth' in videoEl ? videoEl.videoWidth : videoEl.width) || width;
-      const srcH = ('videoHeight' in videoEl ? videoEl.videoHeight : videoEl.height) || height;
+      const srcW = videoEl.videoWidth  || width;
+      const srcH = videoEl.videoHeight || height;
 
       console.log('[DrawVideoElement]', {
         mediaId:     videoItem.mediaId,
@@ -176,8 +176,8 @@ export function renderTimelineFrame({
     if (!videoEl) continue;
     
     const vd = vidItem.videoDetails;
-    const srcW = ('videoWidth' in videoEl ? videoEl.videoWidth : videoEl.width) || width;
-    const srcH = ('videoHeight' in videoEl ? videoEl.videoHeight : videoEl.height) || height;
+    const srcW = videoEl.videoWidth || width;
+    const srcH = videoEl.videoHeight || height;
 
     const ox = ((vd?.posX   ?? 50) / 100) * width;
     const oy = ((vd?.posY   ?? 50) / 100) * height;
