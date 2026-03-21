@@ -48,91 +48,73 @@ const EmptyLot = ({ x, y }: { x: number, y: number }) => (
 );
 
 const ShoppingMall = () => (
-  <div className="absolute pointer-events-auto z-10 hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
-       style={{ left: 0, top: 0, width: CELL_SIZE * 3, height: CELL_SIZE * 3, transform: 'translate(-50%, -50%)' }}>
-    {/* Fundo de Grama GIGANTE MASCÁRA AS RUAS E POSTES POR BAIXO DO SHOPPING (-1 a +1) */}
-    <div className="absolute rounded-full shadow-lg" style={{ inset: '8px', backgroundColor: '#7cb342' }} />
-    
-    {/* Rotatória gigante de 3 Quarteirões */}
-    <div className="absolute inset-0 flex items-center justify-center">
-       {/* Ring Road Asfalto */}
-       <div className="rounded-full flex items-center justify-center shadow-2xl" style={{ width: '85%', height: '85%', borderWidth: '35px', borderColor: '#94a3b8', borderStyle: 'solid' }}>
-          {/* Internal Park */}
-          <div className="w-full h-full rounded-full shadow-inner relative overflow-hidden" style={{ backgroundColor: '#8bc34a' }}>
-             {/* Central Lake */}
-             <div className="absolute inset-0 m-auto rounded-full shadow-inner" style={{ width: '80px', height: '80px', backgroundColor: 'rgba(96, 165, 250, 0.9)', borderWidth: '8px', borderColor: '#cbd5e1', borderStyle: 'solid' }} />
-          </div>
-       </div>
-    </div>
-    {/* Prédio do Shopping (Isométrico Gigante Reduzido) */}
-    <div className="absolute inset-0 flex items-center justify-center drop-shadow-2xl" style={{ marginTop: '-40px' }}>
-      <svg width="300" height="300" viewBox="0 0 300 300" className="overflow-visible">
+  <div style={{ width: CELL_SIZE * 3, height: CELL_SIZE * 3, position: 'absolute', left: 0, top: 0, transform: 'translate(-50%, -50%)', pointerEvents: 'auto', cursor: 'pointer', zIndex: 5 }} className="hover:scale-[1.02] transition-transform duration-500">
+    {/* Shopping por cima (somente ele sem rotatoria, escalado pra 240px) */}
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+      <svg width="240" height="240" viewBox="0 0 160 160" className="overflow-visible">
          {/* Base do shopping */}
-         <Block cx={150} cy={180} rx={120} ry={60} h={50} top="#f1f5f9" left="#cbd5e1" right="#94a3b8" />
-         <Block cx={150} cy={110} rx={90} ry={45} h={60} top="#e2e8f0" left="#94a3b8" right="#64748b" />
+         <Block cx={80} cy={95} rx={65} ry={32} h={30} top="#f1f5f9" left="#cbd5e1" right="#94a3b8" />
+         <Block cx={80} cy={60} rx={48} ry={24} h={35} top="#e2e8f0" left="#94a3b8" right="#64748b" />
          {/* Vidros */}
-         <polygon points="150,110 210,140 210,190 150,160" fill="#38bdf8" opacity="0.6" />
-         <polygon points="60,155 150,200 150,250 60,205" fill="#38bdf8" opacity="0.4" />
+         <polygon points="80,60 115,77 115,105 80,88" fill="#38bdf8" opacity="0.6" />
+         <polygon points="32,84 80,108 80,136 32,112" fill="#38bdf8" opacity="0.4" />
          {/* Holograma */}
-         <polygon points="150,80 170,90 150,100 130,90" fill="#facc15" className="animate-pulse" />
-         <text x="150" y="65" fontSize="26" fill="#fbbf24" textAnchor="middle" fontWeight="bold" style={{ textShadow: '0px 0px 10px #fef08a' }}>SHOPPING</text>
-         <text x="150" y="78" fontSize="11" fill="#fff" textAnchor="middle" fontWeight="bold" opacity="0.9">DO CRIADOR</text>
+         <polygon points="80,45 88,50 80,55 72,50" fill="#facc15" className="animate-pulse" />
+         <text x="80" y="38" fontSize="14" fill="#fbbf24" textAnchor="middle" fontWeight="bold" style={{ textShadow: '0px 0px 5px #fef08a' }}>SHOPPING</text>
+         <text x="80" y="46" fontSize="6" fill="#fff" textAnchor="middle" fontWeight="bold" opacity="0.9">DO CRIADOR</text>
       </svg>
     </div>
   </div>
 );
 
-const Car = ({ x, y, dx, color, delay, isPerson }: any) => {
-  const bgColors: any = { red: '#ef4444', blue: '#3b82f6', slate: '#334155', yellow: '#facc15', neutral: '#17262b' };
-  const animDur = isPerson ? '90s' : '30s'; // Pessoas andam mais devagar na calçada
+const Car = ({ x, y, dx, color, delay }: any) => {
+  const bgColors: any = { red: '#ef4444', blue: '#3b82f6', slate: '#334155', yellow: '#facc15', neutral: '#17262b', green: '#22c55e', orange: '#f97316' };
   
   return (
-    <div className="absolute pointer-events-none drop-shadow-md opacity-90" 
-         style={{ zIndex: 10, left: x, top: y, animation: `${dx ? 'driveX' : 'driveY'} ${animDur} linear infinite`, animationDelay: delay }}>
-      <div className="shadow-sm" style={{ 
+    <div className="absolute pointer-events-none opacity-90" 
+         style={{ zIndex: 1, left: x, top: y, animation: `${dx ? 'driveX' : 'driveY'} 18s linear infinite`, animationDelay: delay }}>
+      <div className="rounded-[3px]" style={{ 
           backgroundColor: bgColors[color] || '#1e293b', 
-          width: isPerson ? '10px' : (dx ? '20px' : '10px'), 
-          height: isPerson ? '10px' : (dx ? '10px' : '20px'), 
-          borderRadius: isPerson ? '50%' : '3px' 
+          width: dx ? '22px' : '11px', 
+          height: dx ? '11px' : '22px' 
       }} />
     </div>
   );
 };
 
 const TrafficLayer = () => {
-  const entities = React.useMemo(() => Array.from({length: 60}).map((_, i) => {
+  const entities = React.useMemo(() => Array.from({length: 30}).map((_, i) => {
     const isX = Math.random() > 0.5;
-    const isPerson = Math.random() > 0.4; // 60% chance de ser pessoa caminhando
     const cellLine = (Math.floor(Math.random() * 40 - 20)) * CELL_SIZE - CELL_SIZE/2;
     const start = -6000 + Math.random() * 4000;
     
-    // Carros rodam no centro da rua (offset pequeno). Pessoas andam na borda (calçada = offset maior)
-    const offset = isPerson ? (Math.random() > 0.5 ? 20 : -20) : (Math.random() > 0.5 ? 5 : -5);
+    // Carros rodam no centro da rua (apenas offset de carro)
+    const offset = Math.random() > 0.5 ? 5 : -5;
     
-    // Impedir que carros cruzem exatamente por dentro do raio do shopping center isolando coordenadas
+    // Impedir que carros cruzem exatamente por dentro do raio do shopping center
     if (Math.abs(cellLine) < CELL_SIZE * 3) return { id: i, x: -10000, y: -10000, color: 'neutral', dx: false }; // kill
 
     const cx = isX ? start : cellLine + offset;
     const cy = isX ? cellLine + offset : start;
-    const colors = ['red', 'blue', 'slate', 'yellow', 'neutral'];
-    return { id: i, x: cx, y: cy, dx: isX, color: colors[Math.floor(Math.random()*5)], delay: `-${Math.random()*90}s`, isPerson };
+    const colors = ['red', 'blue', 'slate', 'yellow', 'neutral', 'green', 'orange'];
+    return { id: i, x: cx, y: cy, dx: isX, color: colors[Math.floor(Math.random()*7)], delay: `-${Math.random()*90}s` };
   }), []);
   return <>{entities.map(e => <Car key={e.id} {...e} />)}</>;
 };
 
 const LightPole = ({ x, y }: { x: number, y: number }) => (
   <div 
-    className="absolute pointer-events-none z-20"
+    className="absolute pointer-events-none z-0"
     style={{
       left: x * CELL_SIZE,
       top: y * CELL_SIZE,
     }}
   >
-    <svg width="24" height="50" viewBox="0 0 24 50" className="absolute -translate-x-1/2 -translate-y-[90%] drop-shadow-md">
+    <svg width="24" height="50" viewBox="0 0 24 50" className="absolute -translate-x-1/2 -translate-y-[90%]">
       <rect x="10" y="45" width="4" height="5" fill="#334155" />
       <rect x="11" y="10" width="2" height="35" fill="#64748b" />
       <rect x="12" y="10" width="8" height="3" fill="#334155" />
-      <circle cx="20" cy="12" r="4" fill="#fef08a" className="drop-shadow-[0_0_8px_#facc15]" />
+      <circle cx="20" cy="12" r="4" fill="#fef08a" />
     </svg>
   </div>
 );
@@ -209,11 +191,11 @@ const IsometricBuilding = ({ nivel, isOnline }: { nivel: number, isOnline: boole
 
   return (
     <div className={`relative flex flex-col items-center justify-end ${glow} hover:scale-110 transition-transform duration-300 origin-bottom`}>
-      <svg width={dims.w} height={dims.h} viewBox={viewBox} className="overflow-visible drop-shadow-xl">
+      <svg width={dims.w} height={dims.h} viewBox={viewBox} className="overflow-visible">
         {svgContent}
       </svg>
       {isOnline && (
-        <div className="absolute -top-3 w-2 h-2 bg-green-500 rounded-full border border-black animate-bounce shadow-[0_0_5px_#22c55e]" />
+        <div className="absolute -top-3 w-2 h-2 bg-green-500 rounded-full border border-black animate-bounce" />
       )}
     </div>
   );
@@ -233,8 +215,8 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
   useEffect(() => {
     if (containerRef.current) {
       setViewport({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight });
-      // Centraliza O ShoppingMall que está em 0,0 para estritamente o meio do ecrã!
-      setPan({ x: containerRef.current.clientWidth / 2, y: containerRef.current.clientHeight / 2 });
+      // Origem real é (0,0) já garantida pelo css left-1/2 top-1/2
+      setPan({ x: 0, y: 0 });
     }
     const handleResize = () => {
       if (containerRef.current) {
@@ -291,9 +273,9 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
   const mappedProfiles = profiles.map(p => {
     let nx = p.pos_x;
     let ny = p.pos_y;
-    // Empurra pro lado de fora do centro absoluto 0,0 abrindo o buraco -1, 0, 1
-    if (nx >= 0) nx += 1; else nx -= 1;
-    if (ny >= 0) ny += 1; else ny -= 1;
+    // Empurra pro lado de fora do centro absoluto 0,0 com buffer de segurança (empurrar >= 2) garantindo zona vazia
+    if (nx >= 0) nx += 2; else nx -= 2;
+    if (ny >= 0) ny += 2; else ny -= 2;
     return { ...p, pos_x: nx, pos_y: ny };
   });
 
@@ -379,6 +361,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
             key={p.id}
             className="building absolute group flex flex-col items-center justify-center hover:scale-110 transition-transform cursor-pointer pointer-events-auto"
             style={{
+              zIndex: 20 + p.pos_y,
               left: p.pos_x * CELL_SIZE,
               top: p.pos_y * CELL_SIZE,
               width: CELL_SIZE,
