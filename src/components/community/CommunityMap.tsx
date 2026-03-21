@@ -519,7 +519,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
 
         {/* Prédios e Vizinhos (Vêm por último no array para sobrepor os terrenos) */}
         {visibleProfiles.map(p => {
-          const isMe = p.id === currentUserId;
+          const isMe = p.user_id === currentUserId;
           return (
           <div
             key={p.id}
