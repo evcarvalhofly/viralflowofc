@@ -23,7 +23,7 @@ const navItems: NavItem[] = [
   { label: "Vídeos Virais", icon: <Film className="h-5 w-5" />, path: "/viral-videos" },
   { label: "Edição", icon: <FolderOpen className="h-5 w-5" />, path: "/assets" },
   { label: "ViralCut", icon: <Scissors className="h-5 w-5" />, path: "/viralcut" },
-  { label: "Comunidade", icon: <Users className="h-5 w-5" />, path: "/community", disabled: true },
+  { label: "Comunidade", icon: <Users className="h-5 w-5" />, path: "/community" },
 ];
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {

@@ -72,7 +72,6 @@ export function MediaPanel({
     { id: 'uploads', icon: <Upload className="h-3.5 w-3.5" />, label: 'Mídia' },
     { id: 'text', icon: <Type className="h-3.5 w-3.5" />, label: 'Texto' },
     { id: 'shapes', icon: <Shapes className="h-3.5 w-3.5" />, label: 'Formas' },
-    { id: 'transitions', icon: <Layers className="h-3.5 w-3.5" />, label: 'Trans.' },
   ];
 
   return (
@@ -102,14 +101,25 @@ export function MediaPanel({
         {/* ── Uploads tab ── */}
         {activeTab === 'uploads' && (
           <div className="p-2 space-y-2">
-            <Button
-              size="sm"
-              onClick={() => inputRef.current?.click()}
-              className="w-full h-8 text-xs gap-1.5 gradient-viral text-white border-0"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Importar Arquivo
-            </Button>
+            {isOverlayMode ? (
+              <Button
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+                className="w-full h-8 text-xs gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white border-0"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                Nova Camada (Arquivo)
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+                className="w-full h-8 text-xs gap-1.5 gradient-viral text-white border-0"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Importar Arquivo
+              </Button>
+            )}
             <input
               ref={inputRef}
               type="file"
