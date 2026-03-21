@@ -249,28 +249,66 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const activePointers = useRef(new Map<number, {x: number, y: number}>());
+  const initialZoomParams = useRef({ dist: 0, zoom: 1 });
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.building')) return;
-    setIsDragging(true);
-    lastPos.current = { x: e.clientX, y: e.clientY };
+    
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.current.size === 1) {
+      setIsDragging(true);
+      lastPos.current = { x: e.clientX, y: e.clientY };
+    } else if (activePointers.current.size === 2) {
+      const pts = Array.from(activePointers.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      initialZoomParams.current = { dist, zoom: zoom };
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
-    const dx = (e.clientX - lastPos.current.x) / zoom;
-    const dy = (e.clientY - lastPos.current.y) / zoom;
-    const maxPan = MAP_LIMIT_CELLS * CELL_SIZE;
-    setPan(prev => ({ 
-      x: Math.max(-maxPan, Math.min(maxPan, prev.x + dx)), 
-      y: Math.max(-maxPan, Math.min(maxPan, prev.y + dy)) 
-    }));
-    lastPos.current = { x: e.clientX, y: e.clientY };
+    if (!activePointers.current.has(e.pointerId)) return;
+    
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.current.size === 1 && isDragging) {
+      const dx = (e.clientX - lastPos.current.x) / zoom;
+      const dy = (e.clientY - lastPos.current.y) / zoom;
+      const maxPan = MAP_LIMIT_CELLS * CELL_SIZE;
+      setPan(prev => ({ 
+        x: Math.max(-maxPan, Math.min(maxPan, prev.x + dx)), 
+        y: Math.max(-maxPan, Math.min(maxPan, prev.y + dy)) 
+      }));
+      lastPos.current = { x: e.clientX, y: e.clientY };
+    } else if (activePointers.current.size === 2) {
+      const pts = Array.from(activePointers.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (initialZoomParams.current.dist > 0) {
+        const scale = dist / initialZoomParams.current.dist;
+        let newZoom = initialZoomParams.current.zoom * scale;
+        newZoom = Math.max(0.4, Math.min(newZoom, 2.0));
+        setZoom(newZoom);
+      }
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    setIsDragging(false);
+    activePointers.current.delete(e.pointerId);
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    
+    if (activePointers.current.size === 0) {
+      setIsDragging(false);
+    } else if (activePointers.current.size === 1) {
+      const remaining = Array.from(activePointers.current.values())[0];
+      lastPos.current = { x: remaining.x, y: remaining.y };
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setZoom(z => Math.max(0.4, Math.min(z + delta, 2.0)));
   };
 
   // CULLING & VIRTUALIZATION ALGORITHM - Corrigido para Zoom Pan!
@@ -356,13 +394,14 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
     <div 
       ref={containerRef}
       className={cn(
-        "w-full h-full relative overflow-hidden transition-colors duration-1000",
+        "w-full h-full relative overflow-hidden transition-colors duration-1000 touch-none",
         isDragging ? "cursor-grabbing" : "cursor-grab"
       )}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onWheel={handleWheel}
       style={{ backgroundColor: isNight ? '#0f172a' : '#7cb342' }}
     >
       {/* Zoom UI & Day/Night Toggle Header Layer */}
