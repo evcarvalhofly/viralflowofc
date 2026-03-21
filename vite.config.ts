@@ -17,8 +17,8 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     {
       name: "coop-coep",
-      configureServer(server) {
-        server.middlewares.use((req, res, next) => {
+      configureServer(server: import('vite').ViteDevServer) {
+        server.middlewares.use((req: import('http').IncomingMessage, res: import('http').ServerResponse, next: () => void) => {
           if (req.url?.includes("/viralcut") || req.url?.includes("/viral-cut")) {
             res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
             res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");

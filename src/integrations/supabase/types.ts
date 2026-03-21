@@ -146,6 +146,30 @@ export type Database = {
         }
         Relationships: []
       }
+      friendships: {
+        Row: {
+          created_at: string
+          friend_id: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          friend_id: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          friend_id?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       niches: {
         Row: {
           created_at: string
@@ -250,7 +274,15 @@ export type Database = {
           bio: string | null
           created_at: string
           display_name: string | null
+          habilidades: Json | null
           id: string
+          is_online: boolean | null
+          link1: string | null
+          link2: string | null
+          nivel: number | null
+          pos_x: number | null
+          pos_y: number | null
+          servicos: Json | null
           subscription_status: string
           updated_at: string
           user_id: string
@@ -260,7 +292,15 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
+          habilidades?: Json | null
           id?: string
+          is_online?: boolean | null
+          link1?: string | null
+          link2?: string | null
+          nivel?: number | null
+          pos_x?: number | null
+          pos_y?: number | null
+          servicos?: Json | null
           subscription_status?: string
           updated_at?: string
           user_id: string
@@ -270,7 +310,15 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
+          habilidades?: Json | null
           id?: string
+          is_online?: boolean | null
+          link1?: string | null
+          link2?: string | null
+          nivel?: number | null
+          pos_x?: number | null
+          pos_y?: number | null
+          servicos?: Json | null
           subscription_status?: string
           updated_at?: string
           user_id?: string

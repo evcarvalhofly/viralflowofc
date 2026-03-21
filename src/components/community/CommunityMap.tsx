@@ -374,17 +374,21 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
     return { ...p, pos_x: nx, pos_y: ny };
   });
 
-  // Centraliza a Câmera Assincronamente Quando o Mapa Carrega!
+  // Centraliza a Câmera no prédio do usuário atual ao carregar
   useEffect(() => {
-    if (currentUserId && mappedProfiles.length > 0 && !hasAutoCentered.current) {
-      const me = mappedProfiles.find(p => p.id === currentUserId);
-      if (me) {
-        // Centraliza transformando as coordenadas do terreno pelo tamanho do lote:
-        setPan({ x: -me.pos_x * CELL_SIZE, y: -me.pos_y * CELL_SIZE });
-        hasAutoCentered.current = true;
-      }
-    }
-  }, [currentUserId, mappedProfiles]);
+    if (!currentUserId || hasAutoCentered.current) return;
+
+    // Recalcula a posição do usuário atual no grid (mesma lógica do mappedProfiles)
+    const myProfile = profiles.find(p => p.id === currentUserId);
+    if (!myProfile) return;
+
+    // Posição final após resolução de colisões (simplificada: usa pos_x/pos_y do perfil)
+    const nx = myProfile.pos_x ?? 2;
+    const ny = myProfile.pos_y ?? 2;
+
+    setPan({ x: -nx * CELL_SIZE, y: -ny * CELL_SIZE });
+    hasAutoCentered.current = true;
+  }, [currentUserId, profiles]);
 
   const visibleProfiles = mappedProfiles.filter(p => {
     return p.pos_x >= startX && p.pos_x <= endX && p.pos_y >= startY && p.pos_y <= endY;
