@@ -424,11 +424,15 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
       onWheel={handleWheel}
       style={{ backgroundColor: isNight ? '#0f172a' : '#7cb342' }}
     >
-      {/* Zoom UI & Day/Night Toggle Header Layer */}
       {/* Controles compactos horizontais (Mobile-First) */}
       <div className="absolute flex items-center gap-1" style={{ right: '0.75rem', bottom: '0.75rem', zIndex: 60 }}>
          <div className="backdrop-blur-md rounded-full shadow-2xl flex items-center gap-1"
               style={{ backgroundColor: 'rgba(0,0,0,0.55)', padding: '4px 8px', border: '1px solid rgba(255,255,255,0.15)' }}>
+            <button onClick={() => {
+              const me = mappedProfiles.find(p => p.user_id === currentUserId);
+              if (me) setPan({ x: -me.pos_x * CELL_SIZE, y: -me.pos_y * CELL_SIZE });
+            }} className="text-white transition-all flex items-center justify-center gap-1 hover:opacity-80 active:scale-90 px-2" style={{ height: '32px', fontSize: '11px', fontWeight: 600 }}>🏠 <span className="hidden sm:inline">Meu Prédio</span></button>
+            <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
             <button onClick={() => setIsNight(n => !n)} className="text-white transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: '32px', height: '32px', fontSize: '16px' }}>{isNight ? '🌙' : '☀️'}</button>
             <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
             <button onClick={() => setZoom(z => Math.min(z + 0.2, 2.0))} className="text-white font-bold text-lg transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: '32px', height: '32px' }}>+</button>
