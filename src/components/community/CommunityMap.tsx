@@ -70,22 +70,37 @@ const StreetCell = ({ x, y, isNight }: { x: number, y: number, isNight: boolean 
 );
 
 const ShoppingMall = () => (
-  <div style={{ width: CELL_SIZE * 3, height: CELL_SIZE * 3, position: 'absolute', left: 0, top: 0, transform: 'translate(-50%, -50%)', pointerEvents: 'auto', cursor: 'pointer', zIndex: 5 }} className="hover:scale-[1.02] transition-transform duration-500">
-    {/* Shopping por cima (somente ele sem rotatoria, escalado pra 340px nativamente) */}
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, marginTop: '-60px' }}>
+  <div style={{ width: CELL_SIZE * 3, height: CELL_SIZE * 3, position: 'absolute', left: 0, top: -30, transform: 'translate(-50%, -50%)', pointerEvents: 'auto', cursor: 'pointer', zIndex: 5 }} className="hover:scale-[1.02] transition-transform duration-500">
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, marginTop: '-80px' }}>
       <svg width="340" height="340" viewBox="0 0 160 160" className="overflow-visible">
-         {/* Base do shopping */}
-         <Block cx={80} cy={95} rx={65} ry={32} h={30} top="#f1f5f9" left="#cbd5e1" right="#94a3b8" />
-         <Block cx={80} cy={60} rx={48} ry={24} h={35} top="#e2e8f0" left="#94a3b8" right="#64748b" />
-         {/* Vidros */}
-         <polygon points="80,60 115,77 115,105 80,88" fill="#38bdf8" opacity="0.6" />
-         <polygon points="32,84 80,108 80,136 32,112" fill="#38bdf8" opacity="0.4" />
-         {/* Holograma */}
-         <polygon points="80,45 88,50 80,55 72,50" fill="#facc15" className="animate-pulse" />
-         {/* Fundo preto nativo em SVG para garantir contraste absoluto do Título */}
-         <rect x="18" y="18" width="124" height="34" fill="#000" rx="6" opacity="0.85" />
-         <text x="80" y="38" fontSize="22" fill="#fbbf24" textAnchor="middle" fontWeight="bold">SHOPPING</text>
-         <text x="80" y="48" fontSize="10" fill="#fff" textAnchor="middle" fontWeight="bold" opacity="0.9">DO CRIADOR</text>
+         <defs>
+           <linearGradient id="mallTop" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#818cf8"/><stop offset="100%" stopColor="#6366f1"/></linearGradient>
+           <linearGradient id="mallLeft" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4f46e5"/><stop offset="100%" stopColor="#3730a3"/></linearGradient>
+           <linearGradient id="mallRight" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4338ca"/><stop offset="100%" stopColor="#312e81"/></linearGradient>
+           <linearGradient id="glassL" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#67e8f9" stopOpacity="0.7"/><stop offset="100%" stopColor="#22d3ee" stopOpacity="0.3"/></linearGradient>
+           <linearGradient id="glassR" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#a5f3fc" stopOpacity="0.5"/><stop offset="100%" stopColor="#06b6d4" stopOpacity="0.2"/></linearGradient>
+         </defs>
+         {/* Base ampla com gradiente */}
+         <Block cx={80} cy={95} rx={65} ry={32} h={30} top="url(#mallTop)" left="url(#mallLeft)" right="url(#mallRight)" />
+         {/* Torre central */}
+         <Block cx={80} cy={60} rx={48} ry={24} h={35} top="#a5b4fc" left="url(#mallLeft)" right="url(#mallRight)" />
+         {/* Painéis de vidro refletivos */}
+         <polygon points="80,60 115,77 115,105 80,88" fill="url(#glassL)" />
+         <polygon points="32,84 80,108 80,136 32,112" fill="url(#glassR)" />
+         {/* Linhas de andar (detalhe de pisos) */}
+         <line x1="80" y1="70" x2="115" y2="87" stroke="#c7d2fe" strokeWidth="0.5" opacity="0.6" />
+         <line x1="80" y1="80" x2="115" y2="97" stroke="#c7d2fe" strokeWidth="0.5" opacity="0.6" />
+         <line x1="32" y1="92" x2="80" y2="116" stroke="#c7d2fe" strokeWidth="0.5" opacity="0.4" />
+         <line x1="32" y1="100" x2="80" y2="124" stroke="#c7d2fe" strokeWidth="0.5" opacity="0.4" />
+         {/* Entrada principal */}
+         <polygon points="70,120 80,125 80,136 70,131" fill="#fbbf24" opacity="0.9" />
+         {/* Holograma topo com brilho */}
+         <polygon points="80,42 88,48 80,54 72,48" fill="#facc15" className="animate-pulse" />
+         <polygon points="80,38 85,42 80,46 75,42" fill="#fde68a" className="animate-pulse" opacity="0.6" />
+         {/* Letreiro com fundo */}
+         <rect x="20" y="16" width="120" height="28" fill="#1e1b4b" rx="6" opacity="0.92" />
+         <text x="80" y="33" fontSize="18" fill="#fbbf24" textAnchor="middle" fontWeight="bold" fontFamily="sans-serif">SHOPPING</text>
+         <text x="80" y="42" fontSize="8" fill="#e0e7ff" textAnchor="middle" fontWeight="bold" letterSpacing="2">DO CRIADOR</text>
       </svg>
     </div>
   </div>
@@ -107,12 +122,13 @@ const Car = ({ route, color, delay }: any) => {
   );
 };
 
-const TrafficLayer = () => {
-  const entities = React.useMemo(() => Array.from({length: 40}).map((_, i) => {
+const TrafficLayer = ({ onlineCount }: { onlineCount: number }) => {
+  const carCount = Math.max(1, Math.min(onlineCount, 60));
+  const entities = React.useMemo(() => Array.from({length: carCount}).map((_, i) => {
     const routes = ['routeE', 'routeW', 'routeS', 'routeN'];
     const colors: any = { 0: 'red', 1: 'blue', 2: 'slate', 3: 'yellow', 4: 'neutral', 5: 'green', 6: 'orange' };
     return { id: i, route: routes[Math.floor(Math.random()*4)], color: colors[Math.floor(Math.random()*7)], delay: `-${Math.random()*90}s` };
-  }), []);
+  }), [carCount]);
 
   return (
     <>
@@ -231,6 +247,14 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
   const lastPos = useRef({ x: 0, y: 0 });
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const hasAutoCentered = useRef(false);
+
+  // Contagem de usuários online (dirige o trânsito e a badge)
+  // Garante que o próprio usuário logado sempre conta como online
+  const onlineCount = React.useMemo(() => {
+    const dbOnline = profiles.filter(p => p.is_online).length;
+    const meAlreadyCounted = profiles.some(p => p.user_id === currentUserId && p.is_online);
+    return meAlreadyCounted ? dbOnline : dbOnline + (currentUserId ? 1 : 0);
+  }, [profiles, currentUserId]);
 
   // Viewport culling (only render visible buildings)
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -401,15 +425,24 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
       style={{ backgroundColor: isNight ? '#0f172a' : '#7cb342' }}
     >
       {/* Zoom UI & Day/Night Toggle Header Layer */}
-      <div className="absolute flex flex-col gap-4 py-2" style={{ right: '2rem', bottom: '2.5rem', zIndex: 60 }}>
-         <div className="backdrop-blur-md rounded-[32px] shadow-2xl flex flex-col gap-2 items-center"
-              style={{ backgroundColor: 'rgba(0,0,0,0.6)', padding: '0.5rem', border: '2px solid rgba(255,255,255,0.2)' }}>
-            <button onClick={() => setIsNight(n => !n)} className="text-white font-black text-xl transition-all flex items-center justify-center hover:opacity-80" style={{ width: '48px', height: '48px' }}>{isNight ? '🌙' : '☀️'}</button>
-            <div style={{ width: '32px', height: '2px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '99px' }} />
-            <button onClick={() => setZoom(z => Math.min(z + 0.2, 2.0))} className="text-white font-black text-3xl transition-all flex items-center justify-center hover:opacity-80" style={{ width: '48px', height: '48px' }}>+</button>
-            <div style={{ width: '32px', height: '2px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '99px' }} />
-            <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.4))} className="text-white font-black text-3xl transition-all flex items-center justify-center hover:opacity-80" style={{ width: '48px', height: '48px' }}>-</button>
+      {/* Controles compactos horizontais (Mobile-First) */}
+      <div className="absolute flex items-center gap-1" style={{ right: '0.75rem', bottom: '0.75rem', zIndex: 60 }}>
+         <div className="backdrop-blur-md rounded-full shadow-2xl flex items-center gap-1"
+              style={{ backgroundColor: 'rgba(0,0,0,0.55)', padding: '4px 8px', border: '1px solid rgba(255,255,255,0.15)' }}>
+            <button onClick={() => setIsNight(n => !n)} className="text-white transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: '32px', height: '32px', fontSize: '16px' }}>{isNight ? '🌙' : '☀️'}</button>
+            <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
+            <button onClick={() => setZoom(z => Math.min(z + 0.2, 2.0))} className="text-white font-bold text-lg transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: '32px', height: '32px' }}>+</button>
+            <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.4))} className="text-white font-bold text-lg transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: '32px', height: '32px' }}>−</button>
          </div>
+      </div>
+
+      {/* Badge de Usuários Online */}
+      <div className="absolute flex items-center gap-1.5" style={{ left: '0.75rem', bottom: '0.75rem', zIndex: 60 }}>
+        <div className="backdrop-blur-md rounded-full shadow-lg flex items-center gap-1.5"
+             style={{ backgroundColor: 'rgba(0,0,0,0.55)', padding: '4px 10px', border: '1px solid rgba(255,255,255,0.15)' }}>
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-white text-[11px] font-semibold">{onlineCount} online</span>
+        </div>
       </div>
 
       {/* Origin Center Wrapper for CSS Scale Zoom native projection */}
@@ -513,7 +546,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
             zIndex: 3
           }}>
           <div className="absolute" style={{ left: MAP_LIMIT_CELLS * CELL_SIZE + CELL_SIZE/2, top: MAP_LIMIT_CELLS * CELL_SIZE + CELL_SIZE/2 }}>
-            <TrafficLayer />
+            <TrafficLayer onlineCount={onlineCount} />
           </div>
         </div>
 
