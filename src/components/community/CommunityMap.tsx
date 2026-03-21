@@ -373,17 +373,14 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
   useEffect(() => {
     if (!currentUserId || hasAutoCentered.current) return;
 
-    // Recalcula a posição do usuário atual no grid (mesma lógica do mappedProfiles)
-    const myProfile = profiles.find(p => p.id === currentUserId);
-    if (!myProfile) return;
+    // Busca pelo user_id (não pelo id do perfil)
+    const me = mappedProfiles.find(p => p.user_id === currentUserId);
+    if (!me) return;
 
-    // Posição final após resolução de colisões (simplificada: usa pos_x/pos_y do perfil)
-    const nx = myProfile.pos_x ?? 2;
-    const ny = myProfile.pos_y ?? 2;
-
-    setPan({ x: -nx * CELL_SIZE, y: -ny * CELL_SIZE });
+    setPan({ x: -me.pos_x * CELL_SIZE, y: -me.pos_y * CELL_SIZE });
     hasAutoCentered.current = true;
-  }, [currentUserId, profiles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId, profiles.length]);
 
   const visibleProfiles = mappedProfiles.filter(p => {
     return p.pos_x >= startX && p.pos_x <= endX && p.pos_y >= startY && p.pos_y <= endY;
