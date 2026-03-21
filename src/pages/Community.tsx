@@ -7,6 +7,7 @@ import { Settings } from 'lucide-react';
 const Community = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async () => {
     const { data, error } = await supabase
@@ -19,6 +20,9 @@ const Community = () => {
   }, []);
 
   useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setCurrentUserId(user.id);
+    });
     
     loadProfiles();
 
@@ -58,7 +62,7 @@ const Community = () => {
       </header>
 
       <div className="flex-1 relative overflow-hidden">
-        <CommunityMap profiles={profiles} />
+        <CommunityMap profiles={profiles} currentUserId={currentUserId} />
       </div>
 
       {showEditProfile && (

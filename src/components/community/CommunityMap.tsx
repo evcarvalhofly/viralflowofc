@@ -22,9 +22,11 @@ interface Profile {
 
 interface CommunityMapProps {
   profiles: Profile[];
+  currentUserId?: string | null;
 }
 
 const CELL_SIZE = 140; // 140x140 pixels grid cell spacing
+const MAP_LIMIT_CELLS = 5; // 11x11 lotes totais = 121 terrenos inicias (crescimento populacional sob demanda)
 
 const EmptyLot = ({ x, y }: { x: number, y: number }) => (
   <div 
@@ -47,11 +49,30 @@ const EmptyLot = ({ x, y }: { x: number, y: number }) => (
   </div>
 );
 
+const StreetCell = ({ x, y, isNight }: { x: number, y: number, isNight: boolean }) => (
+  <div
+    className="absolute pointer-events-none z-0 overflow-hidden"
+    style={{
+      left: x * CELL_SIZE,
+      top: y * CELL_SIZE,
+      width: CELL_SIZE,
+      height: CELL_SIZE,
+      backgroundColor: isNight ? '#334155' : '#94a3b8',
+      transform: 'translate(-50%, -50%)',
+    }}
+  >
+    {/* Marcação da pista vertical central: x===0 && |y|>1 */}
+    {x === 0 && Math.abs(y) > 1 && <div className="absolute top-0 bottom-0 left-1/2 w-1 -translate-x-1/2" style={{ borderLeft: '2px dashed #cbd5e1', opacity: isNight ? 0.3 : 1 }} />}
+    {/* Marcação da pista horizontal central: y===0 && |x|>1 */}
+    {y === 0 && Math.abs(x) > 1 && <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2" style={{ borderTop: '2px dashed #cbd5e1', opacity: isNight ? 0.3 : 1 }} />}
+  </div>
+);
+
 const ShoppingMall = () => (
   <div style={{ width: CELL_SIZE * 3, height: CELL_SIZE * 3, position: 'absolute', left: 0, top: 0, transform: 'translate(-50%, -50%)', pointerEvents: 'auto', cursor: 'pointer', zIndex: 5 }} className="hover:scale-[1.02] transition-transform duration-500">
-    {/* Shopping por cima (somente ele sem rotatoria, escalado pra 240px) */}
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-      <svg width="240" height="240" viewBox="0 0 160 160" className="overflow-visible">
+    {/* Shopping por cima (somente ele sem rotatoria, escalado pra 340px nativamente) */}
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, marginTop: '-60px' }}>
+      <svg width="340" height="340" viewBox="0 0 160 160" className="overflow-visible">
          {/* Base do shopping */}
          <Block cx={80} cy={95} rx={65} ry={32} h={30} top="#f1f5f9" left="#cbd5e1" right="#94a3b8" />
          <Block cx={80} cy={60} rx={48} ry={24} h={35} top="#e2e8f0" left="#94a3b8" right="#64748b" />
@@ -60,46 +81,45 @@ const ShoppingMall = () => (
          <polygon points="32,84 80,108 80,136 32,112" fill="#38bdf8" opacity="0.4" />
          {/* Holograma */}
          <polygon points="80,45 88,50 80,55 72,50" fill="#facc15" className="animate-pulse" />
-         <text x="80" y="38" fontSize="14" fill="#fbbf24" textAnchor="middle" fontWeight="bold" style={{ textShadow: '0px 0px 5px #fef08a' }}>SHOPPING</text>
-         <text x="80" y="46" fontSize="6" fill="#fff" textAnchor="middle" fontWeight="bold" opacity="0.9">DO CRIADOR</text>
+         {/* Fundo preto nativo em SVG para garantir contraste absoluto do Título */}
+         <rect x="18" y="18" width="124" height="34" fill="#000" rx="6" opacity="0.85" />
+         <text x="80" y="38" fontSize="22" fill="#fbbf24" textAnchor="middle" fontWeight="bold">SHOPPING</text>
+         <text x="80" y="48" fontSize="10" fill="#fff" textAnchor="middle" fontWeight="bold" opacity="0.9">DO CRIADOR</text>
       </svg>
     </div>
   </div>
 );
 
-const Car = ({ x, y, dx, color, delay }: any) => {
+const Car = ({ route, color, delay }: any) => {
   const bgColors: any = { red: '#ef4444', blue: '#3b82f6', slate: '#334155', yellow: '#facc15', neutral: '#17262b', green: '#22c55e', orange: '#f97316' };
   
   return (
     <div className="absolute pointer-events-none opacity-90" 
-         style={{ zIndex: 1, left: x, top: y, animation: `${dx ? 'driveX' : 'driveY'} 18s linear infinite`, animationDelay: delay }}>
+         style={{ left: 0, top: 0, animation: `${route} 18s linear infinite`, animationDelay: delay }}>
       <div className="rounded-[3px]" style={{ 
           backgroundColor: bgColors[color] || '#1e293b', 
-          width: dx ? '22px' : '11px', 
-          height: dx ? '11px' : '22px' 
+          width: '22px', 
+          height: '11px',
+          transform: 'translate(-50%, -50%)'
       }} />
     </div>
   );
 };
 
 const TrafficLayer = () => {
-  const entities = React.useMemo(() => Array.from({length: 30}).map((_, i) => {
-    const isX = Math.random() > 0.5;
-    const cellLine = (Math.floor(Math.random() * 40 - 20)) * CELL_SIZE - CELL_SIZE/2;
-    const start = -6000 + Math.random() * 4000;
-    
-    // Carros rodam no centro da rua (apenas offset de carro)
-    const offset = Math.random() > 0.5 ? 5 : -5;
-    
-    // Impedir que carros cruzem exatamente por dentro do raio do shopping center
-    if (Math.abs(cellLine) < CELL_SIZE * 3) return { id: i, x: -10000, y: -10000, color: 'neutral', dx: false }; // kill
-
-    const cx = isX ? start : cellLine + offset;
-    const cy = isX ? cellLine + offset : start;
-    const colors = ['red', 'blue', 'slate', 'yellow', 'neutral', 'green', 'orange'];
-    return { id: i, x: cx, y: cy, dx: isX, color: colors[Math.floor(Math.random()*7)], delay: `-${Math.random()*90}s` };
+  const entities = React.useMemo(() => Array.from({length: 40}).map((_, i) => {
+    const routes = ['routeE', 'routeW', 'routeS', 'routeN'];
+    const colors: any = { 0: 'red', 1: 'blue', 2: 'slate', 3: 'yellow', 4: 'neutral', 5: 'green', 6: 'orange' };
+    return { id: i, route: routes[Math.floor(Math.random()*4)], color: colors[Math.floor(Math.random()*7)], delay: `-${Math.random()*90}s` };
   }), []);
-  return <>{entities.map(e => <Car key={e.id} {...e} />)}</>;
+
+  return (
+    <>
+      <div style={{ position: 'relative' }}>
+        {entities.map(e => <Car key={e.id} {...e} />)}
+      </div>
+    </>
+  );
 };
 
 const LightPole = ({ x, y }: { x: number, y: number }) => (
@@ -201,13 +221,15 @@ const IsometricBuilding = ({ nivel, isOnline }: { nivel: number, isOnline: boole
   );
 };
 
-const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
+const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // Origem muda para o topo puro pra simplificar pan center
   const [zoom, setZoom] = useState(1);
+  const [isNight, setIsNight] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const hasAutoCentered = useRef(false);
 
   // Viewport culling (only render visible buildings)
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -236,10 +258,13 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
-    // Usar requestAnimationFrame aqui otimizaria ainda mais, mas o React bate no 60fps sozinho em trees baixas.
     const dx = (e.clientX - lastPos.current.x) / zoom;
     const dy = (e.clientY - lastPos.current.y) / zoom;
-    setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+    const maxPan = MAP_LIMIT_CELLS * CELL_SIZE;
+    setPan(prev => ({ 
+      x: Math.max(-maxPan, Math.min(maxPan, prev.x + dx)), 
+      y: Math.max(-maxPan, Math.min(maxPan, prev.y + dy)) 
+    }));
     lastPos.current = { x: e.clientX, y: e.clientY };
   };
 
@@ -269,21 +294,59 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
     }
   }
 
-  // Shift profiles coordinate natively outward to leave a 3x3 hole centered at (0, 0) for the perfectly sized Epic Shopping Mall.
+  // Shift mathematical coordinator (Cria as grandes Rodovias cruzadas separando os quarteirões da cidade)
+  const isInvalidLot = (nx: number, ny: number) => {
+    // Eixos 0 formam a Rodovia Cruz (sem terrenos)
+    if (nx === 0 || ny === 0) return true;
+    // O anel de Void em torno do Shopping Mall Matrix (Quadrado de 3x3 reservado)
+    if (Math.abs(nx) <= 1 && Math.abs(ny) <= 1) return true;
+    return false;
+  };
+
+  const occupiedCells = new Set<string>();
+
   const mappedProfiles = profiles.map(p => {
     let nx = p.pos_x;
     let ny = p.pos_y;
-    // Empurra pro lado de fora do centro absoluto 0,0 com buffer de segurança (empurrar >= 2) garantindo zona vazia
-    if (nx >= 0) nx += 2; else nx -= 2;
-    if (ny >= 0) ny += 2; else ny -= 2;
+
+    // Regalia do Fundador: Forçamos o prédio do Admin para o terreno de esquina premium do Shopping!
+    if (p.id === currentUserId) {
+      nx = 2;
+      ny = 2;
+    }
+
+    // Resolve as colisões nas Rodovias deslizando dinamicamente para fora de forma espiral-cartesiana
+    let attempts = 0;
+    while ((isInvalidLot(nx, ny) || occupiedCells.has(`${nx},${ny}`)) && attempts < 200) {
+      if (isInvalidLot(nx, ny)) {
+        if (nx === 0) nx += nx >= 0 ? 1 : -1;
+        if (ny === 0) ny += ny >= 0 ? 1 : -1;
+        if (Math.abs(nx) <= 1 && Math.abs(ny) <= 1) {
+          nx += nx >= 0 ? 1 : -1;
+          ny += ny >= 0 ? 1 : -1;
+        }
+      } else {
+        // Se apenas ocupado, empurra gentilmente no X
+        nx += nx >= 0 ? 1 : -1;
+      }
+      attempts++;
+    }
+    
+    occupiedCells.add(`${nx},${ny}`);
     return { ...p, pos_x: nx, pos_y: ny };
   });
 
-  const occupiedCells = new Set(mappedProfiles.map(p => `${p.pos_x},${p.pos_y}`));
-  // Visually block the entire 3x3 core area (-1 to 1) so lots don't spawn inside the roundabout and mall
-  for(let mx = -1; mx <= 1; mx++) {
-    for(let my = -1; my <= 1; my++) occupiedCells.add(`${mx},${my}`);
-  }
+  // Centraliza a Câmera Assincronamente Quando o Mapa Carrega!
+  useEffect(() => {
+    if (currentUserId && mappedProfiles.length > 0 && !hasAutoCentered.current) {
+      const me = mappedProfiles.find(p => p.id === currentUserId);
+      if (me) {
+        // Centraliza transformando as coordenadas do terreno pelo tamanho do lote:
+        setPan({ x: -me.pos_x * CELL_SIZE, y: -me.pos_y * CELL_SIZE });
+        hasAutoCentered.current = true;
+      }
+    }
+  }, [currentUserId, mappedProfiles]);
 
   const visibleProfiles = mappedProfiles.filter(p => {
     return p.pos_x >= startX && p.pos_x <= endX && p.pos_y >= startY && p.pos_y <= endY;
@@ -293,19 +356,21 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
     <div 
       ref={containerRef}
       className={cn(
-        "w-full h-full relative overflow-hidden transition-colors",
+        "w-full h-full relative overflow-hidden transition-colors duration-1000",
         isDragging ? "cursor-grabbing" : "cursor-grab"
       )}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      style={{ backgroundColor: '#7cb342' }}
+      style={{ backgroundColor: isNight ? '#0f172a' : '#7cb342' }}
     >
-      {/* Zoom UI Header Layer puramente inline para escapar do Cache */}
+      {/* Zoom UI & Day/Night Toggle Header Layer */}
       <div className="absolute flex flex-col gap-4 py-2" style={{ right: '2rem', bottom: '2.5rem', zIndex: 60 }}>
          <div className="backdrop-blur-md rounded-[32px] shadow-2xl flex flex-col gap-2 items-center"
               style={{ backgroundColor: 'rgba(0,0,0,0.6)', padding: '0.5rem', border: '2px solid rgba(255,255,255,0.2)' }}>
+            <button onClick={() => setIsNight(n => !n)} className="text-white font-black text-xl transition-all flex items-center justify-center hover:opacity-80" style={{ width: '48px', height: '48px' }}>{isNight ? '🌙' : '☀️'}</button>
+            <div style={{ width: '32px', height: '2px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '99px' }} />
             <button onClick={() => setZoom(z => Math.min(z + 0.2, 2.0))} className="text-white font-black text-3xl transition-all flex items-center justify-center hover:opacity-80" style={{ width: '48px', height: '48px' }}>+</button>
             <div style={{ width: '32px', height: '2px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '99px' }} />
             <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.4))} className="text-white font-black text-3xl transition-all flex items-center justify-center hover:opacity-80" style={{ width: '48px', height: '48px' }}>-</button>
@@ -314,31 +379,83 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
 
       {/* Origin Center Wrapper for CSS Scale Zoom native projection */}
       <div className="absolute left-1/2 top-1/2 w-0 h-0 transition-transform duration-300" style={{ transform: `scale(${zoom})` }}>
-         {/* Infinite Background Street Mesh Container (Scaled natively with map contents) */}
-         <div className="absolute w-[8000px] h-[8000px] left-[-4000px] top-[-4000px] pointer-events-none"
+         {/* Infinite Background Dot Mesh Container (Replaces pure concrete lines) */}
+         <div className="absolute w-[8000px] h-[8000px] left-[-4000px] top-[-4000px] pointer-events-none transition-opacity duration-1000 opacity-20"
               style={{
-                backgroundImage: `
-                  linear-gradient(to right, #94a3b8 16px, transparent 16px),
-                  linear-gradient(to bottom, #94a3b8 16px, transparent 16px)
-                `,
+                backgroundImage: `radial-gradient(${isNight ? '#cbd5e1' : '#000000'} 4px, transparent 4px)`,
                 backgroundSize: `${CELL_SIZE}px ${CELL_SIZE}px`,
-                // Shift background strictly by pan natively aligned to road path
+                // Shift background strictly by pan natively aligned to grid phase
                 backgroundPosition: `${pan.x - (CELL_SIZE/2) - 8}px ${pan.y - (CELL_SIZE/2) - 8}px`
               }} 
          />
          
-         {/* Hardware Accel Map Layer Content */}
+         {/* Hardware Accel Map Layer Content - Global Dimming with CSS Filters on Night mode! */}
          <div className="absolute left-0 top-0 will-change-transform pointer-events-none" 
-              style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0)` }}>
+              style={{ 
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0)`,
+                filter: isNight ? 'brightness(0.6) contrast(1.1) saturate(1.2)' : 'none',
+                transition: 'filter 1000ms ease'
+              }}>
             <style>{`
-              @keyframes driveX { 0% { transform: translateX(0); } 100% { transform: translateX(8000px); } }
-              @keyframes driveY { 0% { transform: translateY(0); } 100% { transform: translateY(8000px); } }
+              @keyframes routeE {
+                0% { transform: translate(-4000px, 20px) rotate(0deg); }
+                46% { transform: translate(-140px, 20px) rotate(0deg); }
+                46.1% { transform: translate(-140px, 20px) rotate(-90deg); }
+                48% { transform: translate(-140px, -140px) rotate(-90deg); }
+                48.1% { transform: translate(-140px, -140px) rotate(0deg); }
+                51.9% { transform: translate(140px, -140px) rotate(0deg); }
+                52% { transform: translate(140px, -140px) rotate(90deg); }
+                53.9% { transform: translate(140px, 20px) rotate(90deg); }
+                54% { transform: translate(140px, 20px) rotate(0deg); }
+                100% { transform: translate(4000px, 20px) rotate(0deg); }
+              }
+              @keyframes routeW {
+                0% { transform: translate(4000px, -20px) rotate(180deg); }
+                46% { transform: translate(140px, -20px) rotate(180deg); }
+                46.1% { transform: translate(140px, -20px) rotate(-90deg); }
+                48% { transform: translate(140px, 140px) rotate(-90deg); }
+                48.1% { transform: translate(140px, 140px) rotate(180deg); }
+                51.9% { transform: translate(-140px, 140px) rotate(180deg); }
+                52% { transform: translate(-140px, 140px) rotate(90deg); }
+                53.9% { transform: translate(-140px, -20px) rotate(90deg); }
+                54% { transform: translate(-140px, -20px) rotate(180deg); }
+                100% { transform: translate(-4000px, -20px) rotate(180deg); }
+              }
+              @keyframes routeS {
+                0% { transform: translate(-20px, -4000px) rotate(90deg); }
+                46% { transform: translate(-20px, -140px) rotate(90deg); }
+                46.1% { transform: translate(-20px, -140px) rotate(180deg); }
+                48% { transform: translate(-140px, -140px) rotate(180deg); }
+                48.1% { transform: translate(-140px, -140px) rotate(90deg); }
+                51.9% { transform: translate(-140px, 140px) rotate(90deg); }
+                52% { transform: translate(-140px, 140px) rotate(0deg); }
+                53.9% { transform: translate(-20px, 140px) rotate(0deg); }
+                54% { transform: translate(-20px, 140px) rotate(90deg); }
+                100% { transform: translate(-20px, 4000px) rotate(90deg); }
+              }
+              @keyframes routeN {
+                0% { transform: translate(20px, 4000px) rotate(-90deg); }
+                46% { transform: translate(20px, 140px) rotate(-90deg); }
+                46.1% { transform: translate(20px, 140px) rotate(0deg); }
+                48% { transform: translate(140px, 140px) rotate(0deg); }
+                48.1% { transform: translate(140px, 140px) rotate(-90deg); }
+                51.9% { transform: translate(140px, -140px) rotate(-90deg); }
+                52% { transform: translate(140px, -140px) rotate(180deg); }
+                53.9% { transform: translate(20px, -140px) rotate(180deg); }
+                54% { transform: translate(20px, -140px) rotate(-90deg); }
+                100% { transform: translate(20px, -4000px) rotate(-90deg); }
+              }
             `}</style>
-        {/* Renderização do Chão: Lotes e Postes PRIMEIRO NA ÁRVORE pra ficar embaixo: */}
+        {/* Renderização do Chão: Lotes, Ruas e Postes PRIMEIRO NA ÁRVORE pra ficar embaixo: */}
         {visibleCells.map(({ x, y }) => {
-          // Hide grid elements completely intersecting the giant shopping center [-1 to 1]
-          const isMallVoid = x >= -1 && x <= 1 && y >= -1 && y <= 1;
-          if (isMallVoid) return null;
+          // Limita a existência de lotes e rua à margem finita da cidade
+          if (Math.abs(x) > MAP_LIMIT_CELLS || Math.abs(y) > MAP_LIMIT_CELLS) return null;
+
+          // Desenho da Rodovia de Asfalto!
+          if (isInvalidLot(x, y)) {
+            if (x === 0 && y === 0) return null; // Shopping Matrix fica no (0,0), não desenha chão nele!
+            return <StreetCell key={`street-${x}-${y}`} x={x} y={y} isNight={isNight} />;
+          }
 
           const isOccupied = occupiedCells.has(`${x},${y}`);
           return (
@@ -352,11 +469,23 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
         {/* Shopping Mall DEPOIS dos terrenos para ficar cobrindo o gramado embaixo: */}
         <ShoppingMall />
         
-        {/* Transito também em cima: */}
-        <TrafficLayer />
+        {/* Caixa de Colisão (Clipping Mask) para bater os carros no final da cidade limite! */}
+        <div className="absolute pointer-events-none overflow-hidden" style={{
+            left: -MAP_LIMIT_CELLS * CELL_SIZE - CELL_SIZE/2,
+            top: -MAP_LIMIT_CELLS * CELL_SIZE - CELL_SIZE/2,
+            width: (MAP_LIMIT_CELLS * 2 + 1) * CELL_SIZE,
+            height: (MAP_LIMIT_CELLS * 2 + 1) * CELL_SIZE,
+            zIndex: 3
+          }}>
+          <div className="absolute" style={{ left: MAP_LIMIT_CELLS * CELL_SIZE + CELL_SIZE/2, top: MAP_LIMIT_CELLS * CELL_SIZE + CELL_SIZE/2 }}>
+            <TrafficLayer />
+          </div>
+        </div>
 
         {/* Prédios e Vizinhos (Vêm por último no array para sobrepor os terrenos) */}
-        {visibleProfiles.map(p => (
+        {visibleProfiles.map(p => {
+          const isMe = p.id === currentUserId;
+          return (
           <div
             key={p.id}
             className="building absolute group flex flex-col items-center justify-center hover:scale-110 transition-transform cursor-pointer pointer-events-auto"
@@ -370,6 +499,13 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
             }}
             onClick={(e) => { e.stopPropagation(); setSelectedProfile(p); }}
           >
+            {/* Terreno Highlight do Usuário Atual (Borda Vibrante Exata do Mapa) */}
+            {isMe && (
+              <div className="absolute flex items-center justify-center pointer-events-none z-0" style={{ inset: 0 }}>
+                 <div className="animate-pulse flex items-center justify-center p-0 m-0" style={{ width: CELL_SIZE - 4, height: CELL_SIZE - 4, border: '4px solid #ef4444', borderRadius: '16px', boxShadow: '0 0 30px rgba(239,68,68,0.8), inset 0 0 30px rgba(239,68,68,0.8)' }} />
+              </div>
+            )}
+
             {/* Building 2.5D Component */}
             <div className="relative group-hover:-translate-y-2 transition-transform duration-300 ease-out">
               <IsometricBuilding nivel={p.nivel || 1} isOnline={p.is_online} />
@@ -385,7 +521,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles }) => {
               </p>
             </div>
           </div>
-        ))}
+        )})}
       </div>
       </div>
 
