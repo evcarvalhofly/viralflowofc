@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 
 interface Profile {
   id: string;
+  user_id: string;
   display_name?: string;
   nome?: string;
   avatar_url?: string;
@@ -347,12 +348,6 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
     let nx = p.pos_x;
     let ny = p.pos_y;
 
-    // Regalia do Fundador: Forçamos o prédio do Admin para o terreno de esquina premium do Shopping!
-    if (p.id === currentUserId) {
-      nx = 2;
-      ny = 2;
-    }
-
     // Resolve as colisões nas Rodovias deslizando dinamicamente para fora de forma espiral-cartesiana
     let attempts = 0;
     while ((isInvalidLot(nx, ny) || occupiedCells.has(`${nx},${ny}`)) && attempts < 200) {
@@ -378,17 +373,14 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
   useEffect(() => {
     if (!currentUserId || hasAutoCentered.current) return;
 
-    // Recalcula a posição do usuário atual no grid (mesma lógica do mappedProfiles)
-    const myProfile = profiles.find(p => p.id === currentUserId);
-    if (!myProfile) return;
+    // Busca pelo user_id (não pelo id do perfil)
+    const me = mappedProfiles.find(p => p.user_id === currentUserId);
+    if (!me) return;
 
-    // Posição final após resolução de colisões (simplificada: usa pos_x/pos_y do perfil)
-    const nx = myProfile.pos_x ?? 2;
-    const ny = myProfile.pos_y ?? 2;
-
-    setPan({ x: -nx * CELL_SIZE, y: -ny * CELL_SIZE });
+    setPan({ x: -me.pos_x * CELL_SIZE, y: -me.pos_y * CELL_SIZE });
     hasAutoCentered.current = true;
-  }, [currentUserId, profiles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId, profiles.length]);
 
   const visibleProfiles = mappedProfiles.filter(p => {
     return p.pos_x >= startX && p.pos_x <= endX && p.pos_y >= startY && p.pos_y <= endY;
@@ -527,7 +519,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
 
         {/* Prédios e Vizinhos (Vêm por último no array para sobrepor os terrenos) */}
         {visibleProfiles.map(p => {
-          const isMe = p.id === currentUserId;
+          const isMe = p.user_id === currentUserId;
           return (
           <div
             key={p.id}
