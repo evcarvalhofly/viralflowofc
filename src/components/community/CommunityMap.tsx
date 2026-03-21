@@ -348,12 +348,6 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) 
     let nx = p.pos_x;
     let ny = p.pos_y;
 
-    // Regalia do Fundador: Forçamos o prédio do Admin para o terreno de esquina premium do Shopping!
-    if (p.id === currentUserId) {
-      nx = 2;
-      ny = 2;
-    }
-
     // Resolve as colisões nas Rodovias deslizando dinamicamente para fora de forma espiral-cartesiana
     let attempts = 0;
     while ((isInvalidLot(nx, ny) || occupiedCells.has(`${nx},${ny}`)) && attempts < 200) {
