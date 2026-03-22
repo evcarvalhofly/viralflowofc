@@ -24,6 +24,7 @@ interface Profile {
 interface CommunityMapProps {
   profiles: Profile[];
   currentUserId?: string | null;
+  onShoppingClick?: () => void;
 }
 
 const CELL_SIZE = 140; // 140x140 pixels grid cell spacing
