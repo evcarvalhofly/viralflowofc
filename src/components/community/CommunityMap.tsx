@@ -19,12 +19,14 @@ interface Profile {
   servicos: any;
   link1: string;
   link2: string;
+  is_frozen?: boolean;
 }
 
 interface CommunityMapProps {
   profiles: Profile[];
   currentUserId?: string | null;
   onShoppingClick?: () => void;
+  is_frozen?: boolean;
 }
 
 const CELL_SIZE = 140; // 140x140 pixels grid cell spacing
@@ -596,13 +598,20 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
             )}
 
             {/* Building 2.5D Component */}
-            <div className="relative group-hover:-translate-y-2 transition-transform duration-300 ease-out">
-              <IsometricBuilding nivel={p.nivel || 1} isOnline={p.is_online} />
+            <div className={`relative transition-transform duration-300 ease-out ${!p.is_frozen ? 'group-hover:-translate-y-2' : ''}`}>
+              <div className={p.is_frozen ? "grayscale brightness-50 opacity-80" : ""}>
+                <IsometricBuilding nivel={p.nivel || 1} isOnline={p.is_online && !p.is_frozen} />
+              </div>
             </div>
 
             {/* User Label Stand */}
             <div className="mt-2 text-center flex flex-col items-center z-10 pointer-events-none">
-              <p className="text-[11px] font-extrabold text-white max-w-[90px] truncate bg-[#050508]/80 px-2 py-0.5 rounded-md border border-white/10 shadow-lg">
+              {p.is_frozen && (
+                <span className="text-[9px] font-bold text-black uppercase tracking-wider bg-yellow-500 px-1.5 py-0.5 rounded-t shadow-md mb-[-2px] border border-yellow-600 z-20">
+                  ⚠ Prédio Suspeito
+                </span>
+              )}
+              <p className={`text-[11px] font-extrabold text-white max-w-[90px] truncate bg-[#050508]/80 px-2 py-0.5 rounded-md border shadow-lg ${p.is_frozen ? 'border-yellow-600/50 text-muted-foreground' : 'border-white/10'}`}>
                 {p.display_name || p.nome || 'Visitante'}
               </p>
               <p className="text-[9px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 rounded mt-1 shadow-md">
@@ -614,9 +623,11 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
       </div>
       </div>
 
+      {/* Modal Profile */}
       {selectedProfile && (
         <ProfileModal 
           profile={selectedProfile} 
+          currentUserId={currentUserId || null}
           onClose={() => setSelectedProfile(null)} 
         />
       )}

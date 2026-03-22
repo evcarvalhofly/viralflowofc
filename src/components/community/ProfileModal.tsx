@@ -1,5 +1,7 @@
-import React from 'react';
-import { X, UserPlus, MessageCircle, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, UserPlus, MessageCircle, ExternalLink, Flag, Users, Check, Clock } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface Profile {
   id: string;
@@ -17,12 +19,89 @@ interface Profile {
 
 interface ProfileModalProps {
   profile: Profile;
+  currentUserId: string | null;
   onClose: () => void;
 }
 
-const ProfileModal: React.FC<ProfileModalProps> = ({ profile, onClose }) => {
+const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onClose }) => {
   const habilidades = Array.isArray(profile.habilidades) ? profile.habilidades : [];
   const servicos = Array.isArray(profile.servicos) ? profile.servicos : [];
+
+  const [friendshipStatus, setFriendshipStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'friends' | 'loading'>('loading');
+  const [friendCount, setFriendCount] = useState(0);
+  const [isReporting, setIsReporting] = useState(false);
+
+  useEffect(() => {
+    loadFriendshipData();
+  }, [profile.id, currentUserId]);
+
+  const loadFriendshipData = async () => {
+    const { count } = await supabase
+      .from('friendships')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'accepted')
+      .or(`user_id.eq.${profile.id},friend_id.eq.${profile.id}`);
+    
+    setFriendCount(count || 0);
+
+    if (!currentUserId || currentUserId === profile.id) {
+      setFriendshipStatus('none');
+      return;
+    }
+
+    const { data } = await supabase
+      .from('friendships')
+      .select('*')
+      .or(`and(user_id.eq.${currentUserId},friend_id.eq.${profile.id}),and(user_id.eq.${profile.id},friend_id.eq.${currentUserId})`)
+      .maybeSingle();
+
+    if (!data) {
+      setFriendshipStatus('none');
+    } else if (data.status === 'accepted') {
+      setFriendshipStatus('friends');
+    } else if (data.status === 'pending') {
+      if (data.user_id === currentUserId) setFriendshipStatus('pending_sent');
+      else setFriendshipStatus('pending_received');
+    }
+  };
+
+  const handleAddFriend = async () => {
+    if (!currentUserId) {
+      toast.error('Você precisa estar logado!');
+      return;
+    }
+    
+    setFriendshipStatus('loading');
+    const { error } = await supabase
+      .from('friendships')
+      .insert({ user_id: currentUserId, friend_id: profile.id, status: 'pending' });
+
+    if (error) {
+      toast.error('Erro ao enviar pedido de amizade');
+      setFriendshipStatus('none');
+    } else {
+      toast.success('Pedido enviado! ⏳');
+      setFriendshipStatus('pending_sent');
+    }
+  };
+
+  const handleReport = async () => {
+    if (!currentUserId) return;
+    if (confirm('Tem certeza que deseja denunciar este usuário? Administradores irão analisar o caso.')) {
+      setIsReporting(true);
+      const { error } = await supabase
+        .from('reports')
+        .insert({ reporter_id: currentUserId, reported_id: profile.id, reason: 'Denúncia pela comunidade' });
+      
+      setIsReporting(false);
+      if (error) {
+        if (error.code === '23505') toast.error('Você já denunciou este usuário!');
+        else toast.error('Erro ao enviar denúncia');
+      } else {
+        toast.success('Denúncia enviada e registrada!');
+      }
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm shadow-2xl pointer-events-auto" onClick={onClose}>
@@ -47,10 +126,28 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, onClose }) => {
           </div>
         </div>
 
-        <h2 className="text-xl font-bold text-white">{profile.display_name || profile.nome || "Membro"}</h2>
-        <p className="text-xs text-[hsl(262,83%,58%)] font-semibold mb-3 bg-[hsl(262,83%,58%)]/10 px-2 py-0.5 rounded-full">
-          Nível {profile.nivel || 1}
-        </p>
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          {profile.display_name || profile.nome || "Membro"}
+          {currentUserId && currentUserId !== profile.id && (
+            <button 
+              onClick={handleReport} 
+              disabled={isReporting}
+              className="p-1 rounded bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition-colors"
+              title="Denunciar"
+            >
+              <Flag className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </h2>
+        <div className="flex items-center gap-2 mb-3">
+          <p className="text-xs text-[hsl(262,83%,58%)] font-semibold bg-[hsl(262,83%,58%)]/10 px-2 py-0.5 rounded-full">
+            Nível {profile.nivel || 1}
+          </p>
+          <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-white/5 py-0.5 px-2 rounded-full border border-white/5">
+            <Users className="w-3 h-3" />
+            {friendCount} {friendCount === 1 ? 'amigo' : 'amigos'}
+          </div>
+        </div>
 
         {profile.bio && (
           <p className="text-sm text-center text-muted-foreground mb-5 px-2 line-clamp-3">"{profile.bio}"</p>
@@ -99,14 +196,43 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, onClose }) => {
         )}
 
         {/* Action Buttons */}
-        <div className="flex w-full gap-2 mt-auto">
-          <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-colors">
-            <MessageCircle className="w-4 h-4" /> Mensagem
-          </button>
-          <button className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl gradient-viral text-white text-sm font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-opacity">
-            <UserPlus className="w-4 h-4" /> Adicionar
-          </button>
-        </div>
+        {currentUserId !== profile.id && (
+          <div className="flex w-full gap-2 mt-auto">
+            <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-colors">
+              <MessageCircle className="w-4 h-4" /> Mensagem
+            </button>
+
+            {friendshipStatus === 'none' && (
+              <button onClick={handleAddFriend} className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl gradient-viral text-white text-sm font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-opacity">
+                <UserPlus className="w-4 h-4" /> Adicionar
+              </button>
+            )}
+
+            {friendshipStatus === 'pending_sent' && (
+              <button disabled className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/10 text-white/50 text-sm font-bold cursor-not-allowed">
+                <Clock className="w-4 h-4" /> Solicitado
+              </button>
+            )}
+
+            {friendshipStatus === 'pending_received' && (
+              <button disabled className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/10 text-white/50 text-sm font-bold cursor-not-allowed">
+                <Clock className="w-4 h-4" /> Pendente no Sino
+              </button>
+            )}
+
+            {friendshipStatus === 'friends' && (
+              <button disabled className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-500/20 text-green-500 border border-green-500/30 text-sm font-bold cursor-default">
+                <Check className="w-4 h-4" /> Amigos
+              </button>
+            )}
+            
+            {friendshipStatus === 'loading' && (
+              <button disabled className="flex-1 justify-center flex items-center px-3 py-2.5 rounded-xl bg-white/5 text-white/30 text-sm font-bold animate-pulse">
+                ...
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
