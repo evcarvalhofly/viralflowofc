@@ -28,7 +28,7 @@ interface CommunityMapProps {
 }
 
 const CELL_SIZE = 140; // 140x140 pixels grid cell spacing
-const MAP_LIMIT_CELLS = 5; // 11x11 lotes totais = 121 terrenos inicias (crescimento populacional sob demanda)
+const BASE_MAP_LIMIT = 5; // Limite mínimo da cidade
 
 const EmptyLot = ({ x, y }: { x: number, y: number }) => (
   <div 
@@ -257,6 +257,19 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
     return meAlreadyCounted ? dbOnline : dbOnline + (currentUserId ? 1 : 0);
   }, [profiles, currentUserId]);
 
+  // Limite dinâmico do mapa — expande automaticamente quando 80% dos lotes estão ocupados
+  const mapLimit = React.useMemo(() => {
+    let limit = BASE_MAP_LIMIT;
+    // Calcula lotes válidos: total - rodovias - zona do shopping
+    const totalLots = (limit * 2 + 1) ** 2;
+    const invalidCount = (limit * 2 + 1) * 2 - 1 + 8; // eixos (x=0,y=0) + mall 3x3 excluindo centro
+    const available = totalLots - invalidCount;
+    if (profiles.length >= available * 0.8) {
+      limit += 2;
+    }
+    return limit;
+  }, [profiles.length]);
+
   // Viewport culling (only render visible buildings)
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
 
@@ -302,7 +315,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
     if (activePointers.current.size === 1 && isDragging) {
       const dx = (e.clientX - lastPos.current.x) / zoom;
       const dy = (e.clientY - lastPos.current.y) / zoom;
-      const maxPan = MAP_LIMIT_CELLS * CELL_SIZE;
+      const maxPan = mapLimit * CELL_SIZE;
       setPan(prev => ({ 
         x: Math.max(-maxPan, Math.min(maxPan, prev.x + dx)), 
         y: Math.max(-maxPan, Math.min(maxPan, prev.y + dy)) 
@@ -451,16 +464,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
       </div>
 
       {/* Origin Center Wrapper for CSS Scale Zoom native projection */}
-      <div className="absolute left-1/2 top-1/2 w-0 h-0 transition-transform duration-300" style={{ transform: `scale(${zoom})` }}>
-         {/* Infinite Background Dot Mesh Container (Replaces pure concrete lines) */}
-         <div className="absolute w-[8000px] h-[8000px] left-[-4000px] top-[-4000px] pointer-events-none transition-opacity duration-1000 opacity-20"
-              style={{
-                backgroundImage: `radial-gradient(${isNight ? '#cbd5e1' : '#000000'} 4px, transparent 4px)`,
-                backgroundSize: `${CELL_SIZE}px ${CELL_SIZE}px`,
-                // Shift background strictly by pan natively aligned to grid phase
-                backgroundPosition: `${pan.x - (CELL_SIZE/2) - 8}px ${pan.y - (CELL_SIZE/2) - 8}px`
-              }} 
-         />
+      <div className="absolute left-1/2 top-1/2 w-0 h-0 will-change-transform" style={{ transform: `scale(${zoom})` }}>
          
          {/* Hardware Accel Map Layer Content - Global Dimming with CSS Filters on Night mode! */}
          <div className="absolute left-0 top-0 will-change-transform pointer-events-none" 
@@ -522,7 +526,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
         {/* Renderização do Chão: Lotes, Ruas e Postes PRIMEIRO NA ÁRVORE pra ficar embaixo: */}
         {visibleCells.map(({ x, y }) => {
           // Limita a existência de lotes e rua à margem finita da cidade
-          if (Math.abs(x) > MAP_LIMIT_CELLS || Math.abs(y) > MAP_LIMIT_CELLS) return null;
+          if (Math.abs(x) > mapLimit || Math.abs(y) > mapLimit) return null;
 
           // Desenho da Rodovia de Asfalto!
           if (isInvalidLot(x, y)) {
@@ -541,16 +545,28 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
         
         {/* Shopping Mall DEPOIS dos terrenos para ficar cobrindo o gramado embaixo: */}
         <ShoppingMall onClick={() => onShoppingClick?.()} />
+
+        {/* Cerca delimitando a cidade */}
+        <div className="absolute pointer-events-none" style={{
+            left: -mapLimit * CELL_SIZE - CELL_SIZE / 2,
+            top: -mapLimit * CELL_SIZE - CELL_SIZE / 2,
+            width: (mapLimit * 2 + 1) * CELL_SIZE,
+            height: (mapLimit * 2 + 1) * CELL_SIZE,
+            border: '4px dashed #8B6914',
+            borderRadius: '12px',
+            boxShadow: 'inset 0 0 0 2px rgba(139,105,20,0.3)',
+            zIndex: 1,
+          }} />
         
         {/* Caixa de Colisão (Clipping Mask) para bater os carros no final da cidade limite! */}
         <div className="absolute pointer-events-none overflow-hidden" style={{
-            left: -MAP_LIMIT_CELLS * CELL_SIZE - CELL_SIZE/2,
-            top: -MAP_LIMIT_CELLS * CELL_SIZE - CELL_SIZE/2,
-            width: (MAP_LIMIT_CELLS * 2 + 1) * CELL_SIZE,
-            height: (MAP_LIMIT_CELLS * 2 + 1) * CELL_SIZE,
+            left: -mapLimit * CELL_SIZE - CELL_SIZE/2,
+            top: -mapLimit * CELL_SIZE - CELL_SIZE/2,
+            width: (mapLimit * 2 + 1) * CELL_SIZE,
+            height: (mapLimit * 2 + 1) * CELL_SIZE,
             zIndex: 3
           }}>
-          <div className="absolute" style={{ left: MAP_LIMIT_CELLS * CELL_SIZE + CELL_SIZE/2, top: MAP_LIMIT_CELLS * CELL_SIZE + CELL_SIZE/2 }}>
+          <div className="absolute" style={{ left: mapLimit * CELL_SIZE + CELL_SIZE/2, top: mapLimit * CELL_SIZE + CELL_SIZE/2 }}>
             <TrafficLayer onlineCount={onlineCount} />
           </div>
         </div>

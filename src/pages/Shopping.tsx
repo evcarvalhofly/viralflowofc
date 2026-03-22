@@ -414,7 +414,7 @@ const Shopping = () => {
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-sm">{sellerProfile.display_name ?? "Criador"}</p>
                           <span className="text-[10px] bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">
-                            Nível {sellerProfile.nivel ?? 1}
+                            Nv {sellerProfile.nivel ?? 1}
                           </span>
                         </div>
                         {sellerProfile.bio && (
@@ -422,7 +422,58 @@ const Shopping = () => {
                         )}
                         <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
+                            {/* Mini prédio isométrico do vendedor */}
+                            <svg width="16" height="20" viewBox="0 0 60 100" className="shrink-0">
+                              {(() => {
+                                const nv = sellerProfile.nivel ?? 1;
+                                if (nv >= 5) return (
+                                  <>
+                                    <polygon points="30,60 55,72.5 55,95 30,82.5" fill="#9333ea" />
+                                    <polygon points="30,60 5,72.5 5,95 30,82.5" fill="#c084fc" />
+                                    <polygon points="5,72.5 30,60 55,72.5 30,85" fill="#e9d5ff" />
+                                    <polygon points="30,15 50,25 50,72 30,62" fill="#9333ea" />
+                                    <polygon points="30,15 10,25 10,72 30,62" fill="#c084fc" />
+                                    <polygon points="10,25 30,15 50,25 30,35" fill="#e9d5ff" />
+                                    <polygon points="30,5 36,9 30,13 24,9" fill="#a855f7" />
+                                  </>
+                                );
+                                if (nv >= 4) return (
+                                  <>
+                                    <polygon points="30,55 54,68 54,95 30,82" fill="#475569" />
+                                    <polygon points="30,55 6,68 6,95 30,82" fill="#64748b" />
+                                    <polygon points="30,20 50,30 50,68 30,58" fill="#475569" />
+                                    <polygon points="30,20 10,30 10,68 30,58" fill="#64748b" />
+                                    <polygon points="10,30 30,20 50,30 30,40" fill="#cbd5e1" />
+                                  </>
+                                );
+                                if (nv >= 3) return (
+                                  <>
+                                    <polygon points="30,50 56,63 56,95 30,82" fill="#059669" />
+                                    <polygon points="30,50 4,63 4,95 30,82" fill="#10b981" />
+                                    <polygon points="30,25 52,36 52,63 30,52" fill="#10b981" />
+                                    <polygon points="30,25 8,36 8,63 30,52" fill="#34d399" />
+                                    <polygon points="8,36 30,25 52,36 30,46" fill="#a7f3d0" />
+                                  </>
+                                );
+                                if (nv >= 2) return (
+                                  <>
+                                    <polygon points="30,45 54,57 54,95 30,83" fill="#2563eb" />
+                                    <polygon points="30,45 6,57 6,95 30,83" fill="#3b82f6" />
+                                    <polygon points="30,28 50,38 50,57 30,47" fill="#3b82f6" />
+                                    <polygon points="30,28 10,38 10,57 30,47" fill="#60a5fa" />
+                                    <polygon points="10,38 30,28 50,38 30,48" fill="#bfdbfe" />
+                                  </>
+                                );
+                                return (
+                                  <>
+                                    <polygon points="30,50 52,61 52,95 30,84" fill="#94a3b8" />
+                                    <polygon points="30,50 8,61 8,95 30,84" fill="#cbd5e1" />
+                                    <polygon points="8,61 30,50 52,61 30,72" fill="#e2e8f0" />
+                                    <polygon points="30,38 38,43 30,48 22,43" fill="#f43f5e" />
+                                  </>
+                                );
+                              })()}
+                            </svg>
                             Prédio na Comunidade
                           </span>
                           <span className="flex items-center gap-1">
