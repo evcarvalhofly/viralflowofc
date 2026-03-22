@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, Store, X, Upload, Plus, Trash2, Tag, ChevronLeft, Package, MapPin, Clock } from "lucide-react";
+import { Search, Store, X, Upload, Plus, Trash2, Tag, Package, MapPin, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
