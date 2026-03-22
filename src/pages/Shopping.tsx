@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, Store, X, Upload, Plus, Trash2, Tag, ChevronLeft, Package, MapPin, Clock } from "lucide-react";
+import { Search, Store, X, Upload, Plus, Trash2, Tag, Package, MapPin, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -53,7 +53,9 @@ const Shopping = () => {
 
   const fetchProducts = async () => {
     setLoading(true);
-    let query = supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+    let query = db
       .from("products")
       .select("*")
       .eq("status", "active")
@@ -63,18 +65,20 @@ const Shopping = () => {
     if (activeCategory !== "Todos") query = query.eq("category", activeCategory);
 
     const { data } = await query;
-    setProducts(data ?? []);
+    setProducts((data as Product[]) ?? []);
     setLoading(false);
   };
 
   const fetchMyProducts = async () => {
     if (!user) return;
-    const { data } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+    const { data } = await db
       .from("products")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
-    setMyProducts(data ?? []);
+    setMyProducts((data as Product[]) ?? []);
   };
 
   useEffect(() => {
@@ -130,7 +134,9 @@ const Shopping = () => {
         }
       }
 
-      const { error } = await supabase.from("products").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+      const { error } = await db.from("products").insert({
         user_id: user.id,
         title: sellTitle.trim(),
         description: sellDesc.trim() || null,
@@ -159,7 +165,9 @@ const Shopping = () => {
   };
 
   const handleDeleteProduct = async (id: string) => {
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+    const { error } = await db
       .from("products")
       .update({ status: "inactive" })
       .eq("id", id)
@@ -393,7 +401,7 @@ const Shopping = () => {
                     </div>
                   ) : sellerProfile ? (
                     <div className="flex items-start gap-3">
-                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center overflow-hidden shrink-0">
+                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-violet-600 flex items-center justify-center overflow-hidden shrink-0">
                         {sellerProfile.avatar_url ? (
                           <img src={sellerProfile.avatar_url} alt="" className="w-full h-full object-cover" />
                         ) : (
