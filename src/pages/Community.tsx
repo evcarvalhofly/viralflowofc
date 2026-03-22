@@ -3,7 +3,7 @@ import CommunityMap from '@/components/community/CommunityMap';
 import EditProfileModal from '@/components/community/EditProfileModal';
 import { ShoppingPanel } from '@/components/community/ShoppingPanel';
 import { supabase } from '@/integrations/supabase/client';
-import { Settings, ShoppingBag } from 'lucide-react';
+import { Settings } from 'lucide-react';
 
 const Community = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -47,18 +47,11 @@ const Community = () => {
         <div>
           <h1 className="text-xl font-bold text-white">Comunidade ViralFlow</h1>
           <p className="text-xs text-muted-foreground">
-            Navegue pela cidade, encontre criadores e faça conexões reais.
+            Navegue pela cidade — clique no Shopping do Editor para comprar e vender.
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-primary">
           <span className="hidden sm:inline text-muted-foreground">{profiles.length} Habitantes</span>
-          <button 
-            onClick={() => setShowShopping(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-primary transition-colors"
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span className="font-medium">Shopping</span>
-          </button>
           <button 
             onClick={() => setShowEditProfile(true)}
             className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-colors"
@@ -70,7 +63,11 @@ const Community = () => {
       </header>
 
       <div className="flex-1 relative overflow-hidden">
-        <CommunityMap profiles={profiles} currentUserId={currentUserId} />
+        <CommunityMap
+          profiles={profiles}
+          currentUserId={currentUserId}
+          onShoppingClick={() => setShowShopping(true)}
+        />
       </div>
 
       {showEditProfile && (
