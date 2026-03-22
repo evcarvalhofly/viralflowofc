@@ -239,7 +239,7 @@ const IsometricBuilding = ({ nivel, isOnline }: { nivel: number, isOnline: boole
   );
 };
 
-const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId }) => {
+const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, onShoppingClick }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // Origem muda para o topo puro pra simplificar pan center
   const [zoom, setZoom] = useState(1);
