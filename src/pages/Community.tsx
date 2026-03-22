@@ -54,7 +54,7 @@ const Community = () => {
           <span className="hidden sm:inline text-muted-foreground">{profiles.length} Habitantes</span>
           <button 
             onClick={() => setShowShopping(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-amber-400 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-primary transition-colors"
           >
             <ShoppingBag className="w-4 h-4" />
             <span className="font-medium">Shopping</span>
