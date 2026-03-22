@@ -53,7 +53,9 @@ const Shopping = () => {
 
   const fetchProducts = async () => {
     setLoading(true);
-    let query = supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+    let query = db
       .from("products")
       .select("*")
       .eq("status", "active")
@@ -63,18 +65,20 @@ const Shopping = () => {
     if (activeCategory !== "Todos") query = query.eq("category", activeCategory);
 
     const { data } = await query;
-    setProducts(data ?? []);
+    setProducts((data as Product[]) ?? []);
     setLoading(false);
   };
 
   const fetchMyProducts = async () => {
     if (!user) return;
-    const { data } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+    const { data } = await db
       .from("products")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
-    setMyProducts(data ?? []);
+    setMyProducts((data as Product[]) ?? []);
   };
 
   useEffect(() => {
