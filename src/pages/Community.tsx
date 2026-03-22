@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import CommunityMap from '@/components/community/CommunityMap';
 import EditProfileModal from '@/components/community/EditProfileModal';
+import { ShoppingPanel } from '@/components/community/ShoppingPanel';
 import { supabase } from '@/integrations/supabase/client';
-import { Settings } from 'lucide-react';
+import { Settings, ShoppingBag } from 'lucide-react';
 
 const Community = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showShopping, setShowShopping] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async () => {
@@ -26,7 +28,6 @@ const Community = () => {
     
     loadProfiles();
 
-    // Inscreve-se para atualizações no banco (novos usuários chegando)
     const channel = supabase
       .channel('community_updates')
       .on('postgres_changes', 
@@ -49,14 +50,21 @@ const Community = () => {
             Navegue pela cidade, encontre criadores e faça conexões reais.
           </p>
         </div>
-        <div className="flex items-center gap-4 text-sm text-primary">
-          <span className="hidden sm:inline">{profiles.length} Habitantes</span>
+        <div className="flex items-center gap-2 text-sm text-primary">
+          <span className="hidden sm:inline text-muted-foreground">{profiles.length} Habitantes</span>
+          <button 
+            onClick={() => setShowShopping(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-primary transition-colors"
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span className="font-medium">Shopping</span>
+          </button>
           <button 
             onClick={() => setShowEditProfile(true)}
             className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-colors"
           >
             <Settings className="w-4 h-4" />
-            <span className="font-medium">Editar Meu Prédio</span>
+            <span className="font-medium hidden sm:inline">Editar Prédio</span>
           </button>
         </div>
       </header>
@@ -70,6 +78,10 @@ const Community = () => {
           onClose={() => setShowEditProfile(false)} 
           onSaved={() => { setShowEditProfile(false); loadProfiles(); }}
         />
+      )}
+
+      {showShopping && (
+        <ShoppingPanel onClose={() => setShowShopping(false)} />
       )}
     </div>
   );
