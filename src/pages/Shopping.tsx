@@ -134,7 +134,9 @@ const Shopping = () => {
         }
       }
 
-      const { error } = await supabase.from("products").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+      const { error } = await db.from("products").insert({
         user_id: user.id,
         title: sellTitle.trim(),
         description: sellDesc.trim() || null,
