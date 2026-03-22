@@ -540,7 +540,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
         })}
         
         {/* Shopping Mall DEPOIS dos terrenos para ficar cobrindo o gramado embaixo: */}
-        <ShoppingMall />
+        <ShoppingMall onClick={() => onShoppingClick?.()} />
         
         {/* Caixa de Colisão (Clipping Mask) para bater os carros no final da cidade limite! */}
         <div className="absolute pointer-events-none overflow-hidden" style={{
