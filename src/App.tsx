@@ -57,6 +57,7 @@ const App = () => (
               <Route path="/viral-videos" element={<ProtectedRoute><ViralVideos /></ProtectedRoute>} />
               <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
               <Route path="/viralcut" element={<ProtectedRoute><ViralCut /></ProtectedRoute>} />
+              <Route path="/shopping" element={<ProtectedRoute><Shopping /></ProtectedRoute>} />
               <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
