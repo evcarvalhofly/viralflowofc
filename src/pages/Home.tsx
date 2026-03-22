@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap, Scissors } from "lucide-react";
+import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap, Scissors, Store } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,6 +67,16 @@ const modules = [
     available: true,
   },
   {
+    label: "Shopping",
+    description: "Compre e venda serviços e produtos digitais",
+    icon: Store,
+    path: "/shopping",
+    gradient: "from-[hsl(45,90%,50%)] to-[hsl(25,85%,40%)]",
+    glow: "hsl(45,90%,50%)",
+    emoji: "🏪",
+    available: true,
+  },
+  {
     label: "Comunidade",
     description: "Conecte-se com outros criadores",
     icon: Users,
@@ -74,7 +84,7 @@ const modules = [
     gradient: "from-[hsl(220,20%,35%)] to-[hsl(220,20%,25%)]",
     glow: "hsl(220,20%,35%)",
     emoji: "👥",
-    available: false,
+    available: true,
   },
 ];
 
