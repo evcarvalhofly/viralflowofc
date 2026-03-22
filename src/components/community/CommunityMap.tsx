@@ -69,8 +69,8 @@ const StreetCell = ({ x, y, isNight }: { x: number, y: number, isNight: boolean 
   </div>
 );
 
-const ShoppingMall = () => (
-  <div style={{ width: CELL_SIZE * 3, height: CELL_SIZE * 3, position: 'absolute', left: 0, top: -30, transform: 'translate(-50%, -50%)', pointerEvents: 'auto', cursor: 'pointer', zIndex: 5 }} className="hover:scale-[1.02] transition-transform duration-500">
+const ShoppingMall = ({ onClick }: { onClick: () => void }) => (
+  <div onClick={onClick} style={{ width: CELL_SIZE * 3, height: CELL_SIZE * 3, position: 'absolute', left: 0, top: -30, transform: 'translate(-50%, -50%)', pointerEvents: 'auto', cursor: 'pointer', zIndex: 5 }} className="hover:scale-[1.02] transition-transform duration-500">
     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, marginTop: '-80px' }}>
       <svg width="340" height="340" viewBox="0 0 160 160" className="overflow-visible">
          <defs>
@@ -100,7 +100,7 @@ const ShoppingMall = () => (
          {/* Letreiro com fundo */}
          <rect x="20" y="16" width="120" height="28" fill="#1e1b4b" rx="6" opacity="0.92" />
          <text x="80" y="33" fontSize="18" fill="#fbbf24" textAnchor="middle" fontWeight="bold" fontFamily="sans-serif">SHOPPING</text>
-         <text x="80" y="42" fontSize="8" fill="#e0e7ff" textAnchor="middle" fontWeight="bold" letterSpacing="2">DO CRIADOR</text>
+         <text x="80" y="42" fontSize="8" fill="#e0e7ff" textAnchor="middle" fontWeight="bold" letterSpacing="2">DO EDITOR</text>
       </svg>
     </div>
   </div>
