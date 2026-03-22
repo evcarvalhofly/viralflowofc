@@ -401,7 +401,7 @@ const Shopping = () => {
                     </div>
                   ) : sellerProfile ? (
                     <div className="flex items-start gap-3">
-                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center overflow-hidden shrink-0">
+                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-violet-600 flex items-center justify-center overflow-hidden shrink-0">
                         {sellerProfile.avatar_url ? (
                           <img src={sellerProfile.avatar_url} alt="" className="w-full h-full object-cover" />
                         ) : (
