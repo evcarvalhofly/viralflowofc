@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap, Scissors } from "lucide-react";
+import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap, Scissors, Bell } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,6 +74,16 @@ const modules = [
     gradient: "from-[hsl(220,60%,45%)] to-[hsl(220,50%,30%)]",
     glow: "hsl(220,60%,45%)",
     emoji: "👥",
+    available: true,
+  },
+  {
+    label: "Avisos",
+    description: "Novidades, atualizações e comunicados do ViralFlow",
+    icon: Bell,
+    path: "/avisos",
+    gradient: "from-[hsl(45,90%,50%)] to-[hsl(30,80%,40%)]",
+    glow: "hsl(45,90%,50%)",
+    emoji: "📢",
     available: true,
   },
 ];
