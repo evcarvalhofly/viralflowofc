@@ -315,6 +315,7 @@ export type Database = {
           display_name: string | null
           habilidades: Json | null
           id: string
+          is_frozen: boolean | null
           is_online: boolean | null
           link1: string | null
           link2: string | null
@@ -325,7 +326,6 @@ export type Database = {
           subscription_status: string
           updated_at: string
           user_id: string
-          is_frozen: boolean | null
         }
         Insert: {
           avatar_url?: string | null
@@ -334,6 +334,7 @@ export type Database = {
           display_name?: string | null
           habilidades?: Json | null
           id?: string
+          is_frozen?: boolean | null
           is_online?: boolean | null
           link1?: string | null
           link2?: string | null
@@ -344,7 +345,6 @@ export type Database = {
           subscription_status?: string
           updated_at?: string
           user_id: string
-          is_frozen?: boolean | null
         }
         Update: {
           avatar_url?: string | null
@@ -353,6 +353,7 @@ export type Database = {
           display_name?: string | null
           habilidades?: Json | null
           id?: string
+          is_frozen?: boolean | null
           is_online?: boolean | null
           link1?: string | null
           link2?: string | null
@@ -363,48 +364,32 @@ export type Database = {
           subscription_status?: string
           updated_at?: string
           user_id?: string
-          is_frozen?: boolean | null
         }
         Relationships: []
       }
       reports: {
         Row: {
-          id: string
-          reporter_id: string
-          reported_id: string
-          reason: string | null
           created_at: string
+          id: string
+          reason: string | null
+          reported_id: string
+          reporter_id: string
         }
         Insert: {
-          id?: string
-          reporter_id: string
-          reported_id: string
-          reason?: string | null
           created_at?: string
+          id?: string
+          reason?: string | null
+          reported_id: string
+          reporter_id: string
         }
         Update: {
-          id?: string
-          reporter_id?: string
-          reported_id?: string
-          reason?: string | null
           created_at?: string
+          id?: string
+          reason?: string | null
+          reported_id?: string
+          reporter_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "reports_reported_id_fkey"
-            columns: ["reported_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "reports_reporter_id_fkey"
-            columns: ["reporter_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       user_ai_memory: {
         Row: {
