@@ -76,6 +76,16 @@ const modules = [
     emoji: "👥",
     available: true,
   },
+  {
+    label: "Avisos",
+    description: "Novidades, atualizações e comunicados do ViralFlow",
+    icon: Bell,
+    path: "/avisos",
+    gradient: "from-[hsl(45,90%,50%)] to-[hsl(30,80%,40%)]",
+    glow: "hsl(45,90%,50%)",
+    emoji: "📢",
+    available: true,
+  },
 ];
 
 const Home = () => {
