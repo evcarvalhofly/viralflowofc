@@ -14,6 +14,7 @@ import ViralVideos from "./pages/ViralVideos";
 import Assets from "./pages/Assets";
 import ViralCut from "./pages/ViralCut";
 import Community from "./pages/Community";
+import Avisos from "./pages/Avisos";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
