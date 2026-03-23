@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, ExternalLink, Flag, Users, Check, Clock, UserMinus } from 'lucide-react';
+import { X, UserPlus, ExternalLink, Flag, Users, Check, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -28,6 +28,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
   const servicos = Array.isArray(profile.servicos) ? profile.servicos : [];
 
   const [friendshipStatus, setFriendshipStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'friends' | 'loading'>('loading');
+  const [friendshipId, setFriendshipId] = useState<string | null>(null);
   const [friendCount, setFriendCount] = useState(0);
   const [isReporting, setIsReporting] = useState(false);
 
@@ -57,9 +58,12 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
 
     if (!data) {
       setFriendshipStatus('none');
+      setFriendshipId(null);
     } else if (data.status === 'accepted') {
       setFriendshipStatus('friends');
+      setFriendshipId(data.id);
     } else if (data.status === 'pending') {
+      setFriendshipId(data.id);
       if (data.user_id === currentUserId) setFriendshipStatus('pending_sent');
       else setFriendshipStatus('pending_received');
     }
@@ -85,6 +89,23 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
     }
   };
 
+  const handleCancelFriend = async () => {
+    if (!friendshipId) return;
+    setFriendshipStatus('loading');
+    const { error } = await supabase
+      .from('friendships')
+      .delete()
+      .eq('id', friendshipId);
+
+    if (error) {
+      toast.error('Erro ao remover amizade');
+    } else {
+      toast.success('Amizade removida');
+      setFriendshipStatus('none');
+      setFriendshipId(null);
+    }
+  };
+
   const handleReport = async () => {
     if (!currentUserId) return;
     if (confirm('Tem certeza que deseja denunciar este usuário? Administradores irão analisar o caso.')) {
@@ -106,16 +127,16 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm shadow-2xl pointer-events-auto" onClick={onClose}>
       <div 
-        className="bg-[#111113] border border-white/10 p-6 rounded-2xl w-full max-w-sm flex flex-col items-center animate-in zoom-in-95 duration-200 shadow-2xl relative"
+        className="bg-card border border-border p-6 rounded-2xl w-full max-w-sm flex flex-col items-center animate-in zoom-in-95 duration-200 shadow-2xl relative"
         onClick={e => e.stopPropagation()}
       >
-        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 bg-white/5 rounded-full text-muted-foreground hover:text-white transition-colors">
+        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors">
           <X className="w-4 h-4" />
         </button>
 
         {/* Avatar Ring */}
-        <div className="mt-2 p-[2px] rounded-full bg-gradient-to-r from-[hsl(262,83%,58%)] to-[hsl(220,14%,92%)] mb-4 shadow-xl">
-          <div className="w-20 h-20 rounded-full bg-[#111113] flex items-center justify-center overflow-hidden border-2 border-[#111113]">
+        <div className="mt-2 p-[2px] rounded-full bg-gradient-to-r from-primary to-foreground/20 mb-4 shadow-xl">
+          <div className="w-20 h-20 rounded-full bg-card flex items-center justify-center overflow-hidden border-2 border-card">
             {(profile.avatar_url || profile.foto_url) ? (
                <img src={profile.avatar_url || profile.foto_url} alt="Profile" className="w-full h-full object-cover" />
             ) : (
@@ -126,7 +147,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
           </div>
         </div>
 
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+        <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
           {profile.display_name || profile.nome || "Membro"}
           {currentUserId && currentUserId !== profile.id && (
             <button 
@@ -140,10 +161,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
           )}
         </h2>
         <div className="flex items-center gap-2 mb-3">
-          <p className="text-xs text-[hsl(262,83%,58%)] font-semibold bg-[hsl(262,83%,58%)]/10 px-2 py-0.5 rounded-full">
+          <p className="text-xs text-primary font-semibold bg-primary/10 px-2 py-0.5 rounded-full">
             Nível {profile.nivel || 1}
           </p>
-          <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-white/5 py-0.5 px-2 rounded-full border border-white/5">
+          <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-muted/50 py-0.5 px-2 rounded-full border border-border">
             <Users className="w-3 h-3" />
             {friendCount} {friendCount === 1 ? 'amigo' : 'amigos'}
           </div>
@@ -159,7 +180,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
             <h3 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 text-center font-bold">Habilidades & Foco</h3>
             <div className="flex flex-wrap gap-1.5 justify-center">
               {habilidades.map((hab: string, i: number) => (
-                <span key={i} className="px-2 py-0.5 rounded-md bg-[hsl(262,83%,58%)]/10 text-[hsl(262,83%,58%)] text-[10px] font-medium border border-[hsl(262,83%,58%)]/20">
+                <span key={i} className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-medium border border-primary/20">
                   {hab}
                 </span>
               ))}
@@ -171,9 +192,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
         {servicos.length > 0 && (
           <div className="w-full mb-5">
             <h3 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 text-center font-bold">Oferece Serviços</h3>
-            <ul className="text-xs text-white/80 space-y-1.5 text-center">
+            <ul className="text-xs text-foreground/80 space-y-1.5 text-center">
               {servicos.map((serv: string, i: number) => (
-                <li key={i} className="bg-white/5 rounded-md py-1 px-2 border border-white/10">{serv}</li>
+                <li key={i} className="bg-muted/50 rounded-md py-1 px-2 border border-border">{serv}</li>
               ))}
             </ul>
           </div>
@@ -198,36 +219,32 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
         {/* Action Buttons */}
         {currentUserId !== profile.id && (
           <div className="flex w-full gap-2 mt-auto">
-            <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-colors">
-              <MessageCircle className="w-4 h-4" /> Mensagem
-            </button>
-
             {friendshipStatus === 'none' && (
               <button onClick={handleAddFriend} className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl gradient-viral text-white text-sm font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-opacity">
-                <UserPlus className="w-4 h-4" /> Adicionar
+                <UserPlus className="w-4 h-4" /> Adicionar Amigo
               </button>
             )}
 
             {friendshipStatus === 'pending_sent' && (
-              <button disabled className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/10 text-white/50 text-sm font-bold cursor-not-allowed">
-                <Clock className="w-4 h-4" /> Solicitado
+              <button onClick={handleCancelFriend} className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-muted text-muted-foreground text-sm font-bold hover:bg-destructive/10 hover:text-destructive transition-colors">
+                <Clock className="w-4 h-4" /> Solicitado — Cancelar
               </button>
             )}
 
             {friendshipStatus === 'pending_received' && (
-              <button disabled className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/10 text-white/50 text-sm font-bold cursor-not-allowed">
-                <Clock className="w-4 h-4" /> Pendente no Sino
+              <button disabled className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-muted/50 text-muted-foreground text-sm font-bold cursor-not-allowed">
+                <Clock className="w-4 h-4" /> Aceite no Sino 🔔
               </button>
             )}
 
             {friendshipStatus === 'friends' && (
-              <button disabled className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-500/20 text-green-500 border border-green-500/30 text-sm font-bold cursor-default">
-                <Check className="w-4 h-4" /> Amigos
+              <button onClick={handleCancelFriend} className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-500/20 text-green-500 border border-green-500/30 text-sm font-bold hover:bg-destructive/20 hover:text-destructive hover:border-destructive/30 transition-colors">
+                <Check className="w-4 h-4" /> Amigos — Remover
               </button>
             )}
             
             {friendshipStatus === 'loading' && (
-              <button disabled className="flex-1 justify-center flex items-center px-3 py-2.5 rounded-xl bg-white/5 text-white/30 text-sm font-bold animate-pulse">
+              <button disabled className="flex-1 justify-center flex items-center px-3 py-2.5 rounded-xl bg-muted text-muted-foreground text-sm font-bold animate-pulse">
                 ...
               </button>
             )}

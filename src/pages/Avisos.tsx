@@ -41,10 +41,11 @@ const Avisos = () => {
     const db = supabase as any;
     const channel = db
       .channel('avisos_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'avisos' }, loadAvisos)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'avisos' }, () => { loadAvisos(); })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,7 +140,7 @@ const Avisos = () => {
         {isAdmin && (
           <div className="mb-8 p-5 rounded-2xl border border-primary/30 bg-primary/5 shadow-lg">
             <p className="text-xs font-bold text-primary uppercase tracking-widest mb-3 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block" />
               Painel Admin — Novo Aviso
             </p>
             <textarea
