@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, ExternalLink, Flag, Users, Check, Clock } from 'lucide-react';
+import { X, UserPlus, ExternalLink, Flag, Users, Check, Clock, MessageCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import DirectChatWindow from './DirectChatWindow';
 
 interface Profile {
   id: string;
+  user_id: string;
   display_name?: string;
   nome?: string;
   avatar_url?: string;
@@ -31,6 +33,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
   const [friendshipId, setFriendshipId] = useState<string | null>(null);
   const [friendCount, setFriendCount] = useState(0);
   const [isReporting, setIsReporting] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   useEffect(() => {
     loadFriendshipData();
@@ -41,11 +44,11 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
       .from('friendships')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'accepted')
-      .or(`user_id.eq.${profile.id},friend_id.eq.${profile.id}`);
-    
+      .or(`user_id.eq.${profile.user_id},friend_id.eq.${profile.user_id}`);
+
     setFriendCount(count || 0);
 
-    if (!currentUserId || currentUserId === profile.id) {
+    if (!currentUserId || currentUserId === profile.user_id) {
       setFriendshipStatus('none');
       return;
     }
@@ -53,7 +56,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
     const { data } = await supabase
       .from('friendships')
       .select('*')
-      .or(`and(user_id.eq.${currentUserId},friend_id.eq.${profile.id}),and(user_id.eq.${profile.id},friend_id.eq.${currentUserId})`)
+      .or(`and(user_id.eq.${currentUserId},friend_id.eq.${profile.user_id}),and(user_id.eq.${profile.user_id},friend_id.eq.${currentUserId})`)
       .maybeSingle();
 
     if (!data) {
@@ -78,7 +81,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
     setFriendshipStatus('loading');
     const { error } = await supabase
       .from('friendships')
-      .insert({ user_id: currentUserId, friend_id: profile.id, status: 'pending' });
+      .insert({ user_id: currentUserId, friend_id: profile.user_id, status: 'pending' });
 
     if (error) {
       toast.error('Erro ao enviar pedido de amizade');
@@ -112,7 +115,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
       setIsReporting(true);
       const { error } = await supabase
         .from('reports')
-        .insert({ reporter_id: currentUserId, reported_id: profile.id, reason: 'Denúncia pela comunidade' });
+        .insert({ reporter_id: currentUserId, reported_id: profile.user_id, reason: 'Denúncia pela comunidade' });
       
       setIsReporting(false);
       if (error) {
@@ -125,6 +128,15 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
   };
 
   return (
+    <>
+    {showChat && (
+      <DirectChatWindow
+        peerId={profile.user_id}
+        peerName={profile.display_name || profile.nome || 'Usuário'}
+        peerAvatar={profile.avatar_url || profile.foto_url}
+        onClose={() => setShowChat(false)}
+      />
+    )}
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm shadow-2xl pointer-events-auto" onClick={onClose}>
       <div 
         className="bg-card border border-border p-6 rounded-2xl w-full max-w-sm flex flex-col items-center animate-in zoom-in-95 duration-200 shadow-2xl relative"
@@ -149,7 +161,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
 
         <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
           {profile.display_name || profile.nome || "Membro"}
-          {currentUserId && currentUserId !== profile.id && (
+          {currentUserId && currentUserId !== profile.user_id && (
             <button 
               onClick={handleReport} 
               disabled={isReporting}
@@ -217,7 +229,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
         )}
 
         {/* Action Buttons */}
-        {currentUserId !== profile.id && (
+        {currentUserId !== profile.user_id && (
           <div className="flex w-full gap-2 mt-auto">
             {friendshipStatus === 'none' && (
               <button onClick={handleAddFriend} className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl gradient-viral text-white text-sm font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-opacity">
@@ -238,9 +250,17 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
             )}
 
             {friendshipStatus === 'friends' && (
-              <button onClick={handleCancelFriend} className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-500/20 text-green-500 border border-green-500/30 text-sm font-bold hover:bg-destructive/20 hover:text-destructive hover:border-destructive/30 transition-colors">
-                <Check className="w-4 h-4" /> Amigos — Remover
-              </button>
+              <>
+                <button
+                  onClick={() => setShowChat(true)}
+                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/30 text-sm font-bold hover:bg-primary/20 transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" /> Mensagem
+                </button>
+                <button onClick={handleCancelFriend} className="flex-1 justify-center flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-500/20 text-green-500 border border-green-500/30 text-sm font-bold hover:bg-destructive/20 hover:text-destructive hover:border-destructive/30 transition-colors">
+                  <Check className="w-4 h-4" /> Amigos — Remover
+                </button>
+              </>
             )}
             
             {friendshipStatus === 'loading' && (
@@ -252,6 +272,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
         )}
       </div>
     </div>
+    </>
   );
 };
 

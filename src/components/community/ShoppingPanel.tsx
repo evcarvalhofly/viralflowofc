@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import DirectChatWindow from "./DirectChatWindow";
 
 interface Product {
   id: string;
@@ -40,6 +41,10 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [sellerProfile, setSellerProfile] = useState<SellerProfile | null>(null);
   const [myProducts, setMyProducts] = useState<Product[]>([]);
+
+  const [chatPeerId, setChatPeerId] = useState<string | null>(null);
+  const [chatPeerName, setChatPeerName] = useState('');
+  const [chatPeerAvatar, setChatPeerAvatar] = useState<string | null>(null);
 
   // Sell form
   const [sellTitle, setSellTitle] = useState("");
@@ -160,6 +165,7 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-end">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -368,12 +374,18 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
                 )}
               </div>
 
-              <button
-                onClick={() => toast.info("Em breve: chat direto com o vendedor!")}
-                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm hover:opacity-90 transition-opacity"
-              >
-                Tenho interesse 💬
-              </button>
+              {user && selectedProduct && user.id !== selectedProduct.user_id && (
+                <button
+                  onClick={() => {
+                    setChatPeerId(selectedProduct.user_id);
+                    setChatPeerName(sellerProfile?.display_name ?? 'Vendedor');
+                    setChatPeerAvatar(sellerProfile?.avatar_url ?? null);
+                  }}
+                  className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm hover:opacity-90 transition-opacity"
+                >
+                  Tenho interesse 💬
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -471,5 +483,15 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
         )}
       </div>
     </div>
+
+    {chatPeerId && (
+      <DirectChatWindow
+        peerId={chatPeerId}
+        peerName={chatPeerName}
+        peerAvatar={chatPeerAvatar}
+        onClose={() => setChatPeerId(null)}
+      />
+    )}
+    </>
   );
 };

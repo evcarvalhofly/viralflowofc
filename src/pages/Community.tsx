@@ -25,17 +25,33 @@ const Community = () => {
   }, []);
 
   const loadNotificationCount = useCallback(async (userId: string, email?: string) => {
-    // Conta pedidos de amizade pendentes
-    const { count } = await supabase
+    const db = supabase as any;
+
+    // Pedidos de amizade pendentes (sou o destinatário)
+    const { count: pendingCount } = await supabase
       .from('friendships')
       .select('*', { count: 'exact', head: true })
       .eq('friend_id', userId)
       .eq('status', 'pending');
-    
-    let total = count || 0;
 
-    // Se for admin, verifica contas congeladas
-    const isAdmin = email === "evcarvalhodev@gmail.com" || email === "evcarvalhodev";
+    // Amizades aceitas que ainda não vi (sou o remetente)
+    const { count: acceptedCount } = await db
+      .from('friendships')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('status', 'accepted')
+      .eq('sender_notified', false);
+
+    // Mensagens não lidas
+    const { count: unreadCount } = await db
+      .from('direct_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('receiver_id', userId)
+      .is('read_at', null);
+
+    let total = (pendingCount || 0) + (acceptedCount || 0) + (unreadCount || 0);
+
+    const isAdmin = email === "evcarvalhodev@gmail.com";
     if (isAdmin) {
       const { count: frozenCount } = await supabase
         .from('profiles')

@@ -225,7 +225,13 @@ const Avisos = () => {
                 </div>
 
                 {aviso.content && (
-                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap mb-3">{aviso.content}</p>
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap mb-3">
+                    {aviso.content.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
+                      /^https?:\/\//.test(part)
+                        ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all hover:opacity-80">{part}</a>
+                        : part
+                    )}
+                  </p>
                 )}
 
                 {aviso.image_url && (
