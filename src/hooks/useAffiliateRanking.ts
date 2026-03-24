@@ -26,9 +26,9 @@ export const useAffiliateRanking = () => {
       setError(rpcError.message);
     } else {
       setRanking(
-        ((data ?? []) as AffiliateRankingEntry[]).map((row, idx) => ({
+        ((data ?? []) as (AffiliateRankingEntry & { rank_position?: number })[]).map((row, idx) => ({
           ...row,
-          position: idx + 1,
+          position: Number(row.rank_position ?? idx + 1),
           active_clients: Number(row.active_clients),
           total_earned: Number(row.total_earned),
         }))

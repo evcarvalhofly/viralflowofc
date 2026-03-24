@@ -224,7 +224,7 @@ RETURNS TABLE (
   avatar_url    TEXT,
   active_clients BIGINT,
   total_earned  NUMERIC,
-  position      BIGINT
+  rank_position BIGINT
 )
 LANGUAGE SQL
 SECURITY DEFINER
@@ -244,7 +244,7 @@ AS $$
       ORDER BY
         COALESCE(SUM(c.amount) FILTER (WHERE c.status IN ('pending','approved','paid')), 0) DESC,
         COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'converted') DESC
-    )                                                                   AS position
+    )                                                                   AS rank_position
   FROM affiliates a
   JOIN profiles p ON p.user_id = a.user_id
   LEFT JOIN referrals r   ON r.affiliate_id = a.id
