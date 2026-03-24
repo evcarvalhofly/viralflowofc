@@ -166,12 +166,12 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-end">
+    <div className="fixed inset-0 z-[55] flex items-end sm:items-center justify-end">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Panel */}
-      <div className="relative w-full sm:w-[420px] h-[90vh] sm:h-full bg-background border-l border-border shadow-2xl flex flex-col rounded-t-3xl sm:rounded-none">
+      {/* Panel — usa h-screen para garantir altura correta em qualquer viewport */}
+      <div className="relative w-full sm:w-[420px] h-[92dvh] sm:h-screen bg-background border-l border-border shadow-2xl flex flex-col rounded-t-3xl sm:rounded-none" style={{ maxHeight: '100dvh' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
