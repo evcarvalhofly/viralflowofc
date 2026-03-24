@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Zap, MessageSquare, ClipboardList, TrendingUp,
-  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film, Home, Scissors, Bell
+  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film, Home, Scissors, Bell, Handshake
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,7 @@ const navItems: NavItem[] = [
   { label: "ViralCut", icon: <Scissors className="h-5 w-5" />, path: "/viralcut" },
   { label: "Comunidade", icon: <Users className="h-5 w-5" />, path: "/community" },
   { label: "Avisos", icon: <Bell className="h-5 w-5" />, path: "/avisos" },
+  { label: "Afiliados", icon: <Handshake className="h-5 w-5" />, path: "/affiliates" },
 ];
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {

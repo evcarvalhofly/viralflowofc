@@ -16,11 +16,13 @@ import Assets from "./pages/Assets";
 import ViralCut from "./pages/ViralCut";
 import Community from "./pages/Community";
 import Avisos from "./pages/Avisos";
+import Affiliates from "./pages/Affiliates";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 import { NotificationPermissionModal } from "./components/NotificationPermissionModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useBackgroundNotifications } from "./hooks/useBackgroundNotifications";
+import { useAffiliateTracking } from "./hooks/useAffiliateTracking";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,9 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
 
   // Escuta eventos Supabase e mostra notificações em background
   useBackgroundNotifications();
+
+  // Rastreia cliques em links de afiliado (?ref=CODIGO na URL)
+  useAffiliateTracking();
 
   // Mostra modal de permissão de notificações quando usuário logado e permissão não concedida
   useEffect(() => {
@@ -94,6 +99,7 @@ const App = () => (
                 <Route path="/viralcut" element={<ProtectedRoute><ViralCut /></ProtectedRoute>} />
                 <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
                 <Route path="/avisos" element={<ProtectedRoute><Avisos /></ProtectedRoute>} />
+                <Route path="/affiliates" element={<ProtectedRoute><Affiliates /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppShell>
