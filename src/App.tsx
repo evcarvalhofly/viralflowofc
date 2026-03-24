@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,8 +18,41 @@ import Community from "./pages/Community";
 import Avisos from "./pages/Avisos";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
+import { NotificationPermissionModal } from "./components/NotificationPermissionModal";
+import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
+import { useBackgroundNotifications } from "./hooks/useBackgroundNotifications";
 
 const queryClient = new QueryClient();
+
+/** Carrega hooks globais e UI de notificação/PWA — só para usuários autenticados */
+const AppShell = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
+  const [showNotifModal, setShowNotifModal] = useState(false);
+
+  // Escuta eventos Supabase e mostra notificações em background
+  useBackgroundNotifications();
+
+  // Mostra modal de permissão de notificações quando usuário logado e permissão não concedida
+  useEffect(() => {
+    if (!user) return;
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') {
+      // Pequeno delay para não aparecer imediatamente ao abrir o app
+      const t = setTimeout(() => setShowNotifModal(true), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [user?.id]);
+
+  return (
+    <>
+      {children}
+      {showNotifModal && (
+        <NotificationPermissionModal onClose={() => setShowNotifModal(false)} />
+      )}
+      <PWAInstallPrompt />
+    </>
+  );
+};
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -48,19 +82,21 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-              <Route path="/auth" element={<AuthRoute><Auth /></AuthRoute>} />
-              <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-              <Route path="/planning" element={<ProtectedRoute><Planning /></ProtectedRoute>} />
-              <Route path="/gameover" element={<ProtectedRoute><GameOver /></ProtectedRoute>} />
-              <Route path="/viral-videos" element={<ProtectedRoute><ViralVideos /></ProtectedRoute>} />
-              <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
-              <Route path="/viralcut" element={<ProtectedRoute><ViralCut /></ProtectedRoute>} />
-              <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
-              <Route path="/avisos" element={<ProtectedRoute><Avisos /></ProtectedRoute>} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <AppShell>
+              <Routes>
+                <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                <Route path="/auth" element={<AuthRoute><Auth /></AuthRoute>} />
+                <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+                <Route path="/planning" element={<ProtectedRoute><Planning /></ProtectedRoute>} />
+                <Route path="/gameover" element={<ProtectedRoute><GameOver /></ProtectedRoute>} />
+                <Route path="/viral-videos" element={<ProtectedRoute><ViralVideos /></ProtectedRoute>} />
+                <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
+                <Route path="/viralcut" element={<ProtectedRoute><ViralCut /></ProtectedRoute>} />
+                <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
+                <Route path="/avisos" element={<ProtectedRoute><Avisos /></ProtectedRoute>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </AppShell>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
