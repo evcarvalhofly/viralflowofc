@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, MessageCircle } from 'lucide-react';
+import { X, Send, Check, CheckCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -14,7 +14,7 @@ interface Message {
 }
 
 interface DirectChatWindowProps {
-  peerId: string;          // auth.users UUID do outro usuário
+  peerId: string;
   peerName: string;
   peerAvatar?: string | null;
   onClose: () => void;
@@ -25,6 +25,7 @@ const DirectChatWindow = ({ peerId, peerName, peerAvatar, onClose }: DirectChatW
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [peerOnline, setPeerOnline] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const loadMessages = async () => {
@@ -40,7 +41,7 @@ const DirectChatWindow = ({ peerId, peerName, peerAvatar, onClose }: DirectChatW
 
     if (data) setMessages(data);
 
-    // Mark received messages as read
+    // Marca como lido as mensagens recebidas
     await db
       .from('direct_messages')
       .update({ read_at: new Date().toISOString() })
@@ -50,28 +51,69 @@ const DirectChatWindow = ({ peerId, peerName, peerAvatar, onClose }: DirectChatW
   };
 
   useEffect(() => {
+    if (!user) return;
     loadMessages();
 
+    // ── Presence: status online/offline ──────────────────────────────
+    const presenceChannel = supabase.channel('user_presence', {
+      config: { presence: { key: user.id } },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState() as Record<string, any[]>;
+        setPeerOnline(!!state[peerId]?.length);
+      })
+      .on('presence', { event: 'join' }, ({ key }: { key: string }) => {
+        if (key === peerId) setPeerOnline(true);
+      })
+      .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
+        if (key === peerId) setPeerOnline(false);
+      })
+      .subscribe(async (status: string) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({ online_at: new Date().toISOString() });
+        }
+      });
+
+    // ── Mensagens: INSERT + UPDATE em tempo real ─────────────────────
     const db = supabase as any;
-    const channel = db
-      .channel(`chat_${user?.id}_${peerId}`)
+    const msgChannel = db
+      .channel(`chat_${user.id}_${peerId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages' }, (payload: any) => {
         const msg = payload.new;
-        if (
-          (msg.sender_id === user?.id && msg.receiver_id === peerId) ||
-          (msg.sender_id === peerId && msg.receiver_id === user?.id)
-        ) {
-          setMessages(prev => {
-            // Remove optimistic duplicate and add real message
-            const filtered = prev.filter(m => !m.id.startsWith('temp_') || m.sender_id !== msg.sender_id || m.content !== msg.content);
-            if (filtered.some(m => m.id === msg.id)) return filtered;
-            return [...filtered, msg];
-          });
+        const isMine = msg.sender_id === user.id && msg.receiver_id === peerId;
+        const isPeer = msg.sender_id === peerId && msg.receiver_id === user.id;
+        if (!isMine && !isPeer) return;
+
+        setMessages(prev => {
+          const filtered = prev.filter(
+            m => !m.id.startsWith('temp_') || m.sender_id !== msg.sender_id || m.content !== msg.content
+          );
+          if (filtered.some(m => m.id === msg.id)) return filtered;
+          return [...filtered, msg];
+        });
+
+        // Se recebi uma nova mensagem enquanto o chat está aberto → marcar como lida
+        if (isPeer) {
+          db.from('direct_messages')
+            .update({ read_at: new Date().toISOString() })
+            .eq('id', msg.id);
         }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'direct_messages' }, (payload: any) => {
+        const msg = payload.new;
+        // Atualiza o read_at localmente quando o peer leu a mensagem
+        setMessages(prev =>
+          prev.map(m => m.id === msg.id ? { ...m, read_at: msg.read_at } : m)
+        );
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(presenceChannel);
+      supabase.removeChannel(msgChannel);
+    };
   }, [peerId, user?.id]);
 
   useEffect(() => {
@@ -110,28 +152,44 @@ const DirectChatWindow = ({ peerId, peerName, peerAvatar, onClose }: DirectChatW
     setSending(false);
   };
 
-  const formatTime = (iso: string) => {
-    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  };
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div className="fixed bottom-4 right-4 z-[60] w-80 flex flex-col rounded-2xl border border-border bg-card shadow-2xl shadow-black/40 overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-muted/30">
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden shrink-0">
-          {peerAvatar ? (
-            <img src={peerAvatar} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <span className="text-xs font-bold text-primary">{peerName[0]?.toUpperCase()}</span>
-          )}
+        {/* Avatar com bolinha de status */}
+        <div className="relative shrink-0">
+          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
+            {peerAvatar ? (
+              <img src={peerAvatar} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xs font-bold text-primary">{peerName[0]?.toUpperCase()}</span>
+            )}
+          </div>
+          {/* Bolinha online/offline */}
+          <span
+            className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-card transition-colors ${
+              peerOnline ? 'bg-green-500' : 'bg-muted-foreground/40'
+            }`}
+          />
         </div>
+
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate">{peerName}</p>
           <div className="flex items-center gap-1">
-            <MessageCircle className="w-3 h-3 text-primary" />
-            <p className="text-[10px] text-muted-foreground">Mensagem direta</p>
+            <span
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                peerOnline ? 'bg-green-500' : 'bg-muted-foreground/40'
+              }`}
+            />
+            <p className={`text-[10px] font-medium transition-colors ${peerOnline ? 'text-green-400' : 'text-muted-foreground'}`}>
+              {peerOnline ? 'Online' : 'Offline'}
+            </p>
           </div>
         </div>
+
         <button onClick={onClose} className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
           <X className="w-4 h-4" />
         </button>
@@ -146,6 +204,7 @@ const DirectChatWindow = ({ peerId, peerName, peerAvatar, onClose }: DirectChatW
         )}
         {messages.map(msg => {
           const isMe = msg.sender_id === user?.id;
+          const isTemp = msg.id.startsWith('temp_');
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm break-words ${
@@ -154,9 +213,26 @@ const DirectChatWindow = ({ peerId, peerName, peerAvatar, onClose }: DirectChatW
                   : 'bg-muted text-foreground rounded-bl-sm'
               }`}>
                 <p className="leading-snug">{msg.content}</p>
-                <p className={`text-[9px] mt-1 ${isMe ? 'text-primary-foreground/60 text-right' : 'text-muted-foreground'}`}>
-                  {formatTime(msg.created_at)}
-                </p>
+                <div className={`flex items-center gap-0.5 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                  <span className={`text-[9px] ${isMe ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+                    {formatTime(msg.created_at)}
+                  </span>
+                  {/* Confirmações de leitura (só nas minhas mensagens) */}
+                  {isMe && (
+                    <span className="ml-0.5">
+                      {isTemp ? (
+                        // Enviando — um check cinza
+                        <Check className="w-3 h-3 text-primary-foreground/40" />
+                      ) : msg.read_at ? (
+                        // Lido — dois checks azuis
+                        <CheckCheck className="w-3.5 h-3.5 text-blue-300" />
+                      ) : (
+                        // Entregue mas não lido — dois checks brancos/opacos
+                        <CheckCheck className="w-3.5 h-3.5 text-primary-foreground/50" />
+                      )}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
