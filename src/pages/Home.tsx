@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap, Scissors, Bell } from "lucide-react";
+import { MessageSquare, ClipboardList, TrendingUp, Film, FolderOpen, Users, Zap, Scissors, Bell, Handshake } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -84,6 +84,16 @@ const modules = [
     gradient: "from-[hsl(45,90%,50%)] to-[hsl(30,80%,40%)]",
     glow: "hsl(45,90%,50%)",
     emoji: "📢",
+    available: true,
+  },
+  {
+    label: "Afiliados",
+    description: "Indique o ViralFlow e ganhe 50% de comissão por indicado",
+    icon: Handshake,
+    path: "/affiliates",
+    gradient: "from-[hsl(262,83%,58%)] to-[hsl(240,70%,45%)]",
+    glow: "hsl(262,83%,58%)",
+    emoji: "🤝",
     available: true,
   },
 ];
