@@ -22,8 +22,8 @@ interface Props {
 const benefits = [
   {
     icon: <DollarSign className="h-5 w-5 text-emerald-400" />,
-    title: '30% de comissão',
-    desc: 'Ganhe 30% de cada mensalidade dos seus indicados',
+    title: '50% de comissão',
+    desc: 'Ganhe 50% de cada mensalidade dos seus indicados, direto na sua conta',
   },
   {
     icon: <RefreshCcw className="h-5 w-5 text-blue-400" />,
@@ -32,13 +32,13 @@ const benefits = [
   },
   {
     icon: <Users className="h-5 w-5 text-purple-400" />,
-    title: 'Revenda de acessos',
-    desc: 'Compre logins no atacado e revenda pelo seu próprio preço',
+    title: 'Rede de sub-afiliados',
+    desc: 'Indique outros afiliados e ganhe % sobre as comissões deles também',
   },
   {
     icon: <TrendingUp className="h-5 w-5 text-orange-400" />,
     title: 'Dashboard completo',
-    desc: 'Acompanhe cliques, conversões, receita e churn em tempo real',
+    desc: 'Acompanhe cliques, conversões, saldo disponível e histórico em tempo real',
   },
   {
     icon: <Link2 className="h-5 w-5 text-cyan-400" />,
@@ -47,8 +47,8 @@ const benefits = [
   },
   {
     icon: <ShieldCheck className="h-5 w-5 text-green-400" />,
-    title: 'Vínculo permanente',
-    desc: 'O cliente fica vinculado a você para sempre, mesmo que saia e volte',
+    title: 'Saque via PIX',
+    desc: 'Solicite seu saldo disponível a qualquer momento diretamente pelo painel',
   },
 ];
 
@@ -91,7 +91,7 @@ const AffiliateRegistration = ({ onRegister, registering }: Props) => {
         </h1>
         <p className="text-muted-foreground text-base max-w-xl mx-auto">
           Indique criadores de conteúdo e receba{' '}
-          <strong className="text-white">30% de comissão</strong> em cada mensalidade
+          <strong className="text-white">50% de comissão</strong> em cada mensalidade
           paga — automaticamente, todo mês, enquanto o cliente estiver ativo.
         </p>
       </div>
