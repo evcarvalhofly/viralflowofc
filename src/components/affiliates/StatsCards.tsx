@@ -1,15 +1,15 @@
 /**
  * StatsCards
  *
- * Cards de métricas do dashboard do afiliado.
- * Layout responsivo: 2 colunas no mobile, 4 no desktop.
+ * Cards de métricas do dashboard do afiliado v2.
+ * Layout responsivo: 2 colunas no mobile, 3 no tablet, 6 no desktop.
  */
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   MousePointerClick, Users, DollarSign, Clock,
-  CheckCircle2, XCircle, TrendingDown, ArrowUpRight,
+  CheckCircle2, XCircle, TrendingDown, ArrowUpRight, Wallet,
 } from 'lucide-react';
 import type { AffiliateDashboardStats } from '@/types/affiliates';
 
@@ -48,17 +48,28 @@ const cards = (s: AffiliateDashboardStats) => [
     icon: <DollarSign className="h-5 w-5" />,
     color: 'text-emerald-400',
     bg: 'bg-emerald-400/10',
-    sub: `${fmt(s.paidCommissions, true)} pagos`,
+    sub: `${fmt(s.paidBalance, true)} sacados`,
     subIcon: <CheckCircle2 className="h-3 w-3 text-emerald-400" />,
   },
   {
-    label: 'Comissão pendente',
-    value: fmt(s.pendingCommissions, true),
+    label: 'Em carência',
+    value: fmt(s.pendingBalance, true),
     icon: <Clock className="h-5 w-5" />,
+    color: 'text-orange-400',
+    bg: 'bg-orange-400/10',
+    sub: 'Libera em 7 dias',
+    subIcon: null,
+  },
+  {
+    label: 'Disponível p/ saque',
+    value: fmt(s.availableBalance, true),
+    icon: <Wallet className="h-5 w-5" />,
     color: 'text-yellow-400',
     bg: 'bg-yellow-400/10',
-    sub: 'Aguardando pagamento',
-    subIcon: null,
+    sub: 'Pronto para sacar',
+    subIcon: s.availableBalance > 0
+      ? <CheckCircle2 className="h-3 w-3 text-yellow-400" />
+      : null,
   },
   {
     label: 'Taxa de cancelamento',
@@ -70,15 +81,6 @@ const cards = (s: AffiliateDashboardStats) => [
     subIcon: s.cancelledClients > 0
       ? <XCircle className="h-3 w-3 text-red-400" />
       : null,
-  },
-  {
-    label: 'Logins registrados',
-    value: fmt(s.loginsRegistered),
-    icon: <Users className="h-5 w-5" />,
-    color: 'text-blue-400',
-    bg: 'bg-blue-400/10',
-    sub: `${s.loginsActive} ativos · ${s.loginsPending} pendentes`,
-    subIcon: null,
   },
 ];
 

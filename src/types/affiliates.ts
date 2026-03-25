@@ -1,16 +1,15 @@
 // =============================================
-// TIPOS DO SISTEMA DE AFILIADOS - ViralFlow
+// TIPOS DO SISTEMA DE AFILIADOS v2 - ViralFlow
 // =============================================
 
 export type AffiliateStatus = 'active' | 'suspended';
 export type ReferralStatus = 'pending' | 'converted' | 'cancelled';
-export type SubscriptionStatus = 'active' | 'cancelled' | 'expired';
 export type CommissionType = 'initial' | 'recurring';
-export type CommissionStatus = 'pending' | 'approved' | 'paid' | 'cancelled';
-export type LoginAccountStatus = 'available' | 'active' | 'cancelled';
-export type PurchaseStatus = 'pending' | 'paid' | 'delivered' | 'cancelled';
+/** pending = em carência (7 dias) | available = liberado p/ saque | paid = sacado | cancelled = reembolso */
+export type CommissionStatus = 'pending' | 'available' | 'approved' | 'paid' | 'cancelled';
+export type WithdrawalRequestStatus = 'pending' | 'paid' | 'rejected';
 
-/** Registro do afiliado — gerado ao se cadastrar */
+/** Registro do afiliado */
 export interface Affiliate {
   id: string;
   user_id: string;
@@ -18,6 +17,8 @@ export interface Affiliate {
   status: AffiliateStatus;
   /** Percentual de comissão (ex: 30.00 = 30%) */
   commission_rate: number;
+  /** Afiliado que indicou este afiliado (MLM nível 2) */
+  referred_by_affiliate_id: string | null;
   created_at: string;
 }
 
@@ -37,19 +38,6 @@ export interface Referral {
   };
 }
 
-/** Assinatura mensal de um usuário */
-export interface Subscription {
-  id: string;
-  user_id: string;
-  affiliate_id: string | null;
-  status: SubscriptionStatus;
-  plan: string;
-  amount: number;
-  started_at: string;
-  cancelled_at: string | null;
-  next_billing_date: string | null;
-}
-
 /** Registro individual de comissão (1 por ciclo de cobrança) */
 export interface Commission {
   id: string;
@@ -60,48 +48,27 @@ export interface Commission {
   type: CommissionType;
   amount: number;
   status: CommissionStatus;
+  /** Data a partir da qual a comissão fica disponível para saque (carência 7 dias) */
+  available_after: string | null;
+  /** 1 = indicação direta | 2 = sub-afiliado (MLM) */
+  level: number;
   period_start: string | null;
   period_end: string | null;
   paid_at: string | null;
   created_at: string;
 }
 
-/** Solicitação de compra de slots de login para revenda */
-export interface AffiliateLoginPurchase {
+/** Solicitação de saque do afiliado */
+export interface WithdrawalRequest {
   id: string;
   affiliate_id: string;
-  quantity: number;
-  unit_price: number;
-  total_price: number;
+  amount: number;
+  status: WithdrawalRequestStatus;
+  pix_key: string;
   notes: string | null;
-  /** pending = aguardando pagamento | paid = pago | delivered = logins entregues */
-  status: PurchaseStatus;
-  created_at: string;
-}
-
-/** Conta de cliente criada/gerenciada pelo afiliado para revenda */
-export interface AffiliateCreatedAccount {
-  id: string;
-  affiliate_id: string;
-  purchase_id: string | null;
-  user_id: string | null;
-  login_email: string;
-  client_name: string | null;
-  notes: string | null;
-  /** available = aguardando ativação | active = ativo | cancelled = cancelado */
-  status: LoginAccountStatus;
-  sold_at: string | null;
-  cancelled_at: string | null;
-  created_at: string;
-}
-
-/** Click no link de afiliado */
-export interface RefClick {
-  id: string;
-  affiliate_id: string;
-  ref_code: string;
-  converted: boolean;
-  created_at: string;
+  admin_notes: string | null;
+  requested_at: string;
+  processed_at: string | null;
 }
 
 /** Métricas consolidadas do dashboard do afiliado */
@@ -112,12 +79,14 @@ export interface AffiliateDashboardStats {
   activeClients: number;
   cancelledClients: number;
   churnRate: number;
-  pendingCommissions: number;
+  /** Comissões em carência (ainda não liberadas para saque) */
+  pendingBalance: number;
+  /** Comissões liberadas e prontas para sacar */
+  availableBalance: number;
+  /** Comissões já sacadas */
+  paidBalance: number;
+  /** Total histórico gerado (todas as comissões) */
   totalEarned: number;
-  paidCommissions: number;
-  loginsRegistered: number;
-  loginsActive: number;
-  loginsPending: number;
 }
 
 /** Entrada do ranking de afiliados */

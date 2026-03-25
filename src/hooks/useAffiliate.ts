@@ -1,24 +1,25 @@
 /**
  * useAffiliate
  *
- * Hook central do sistema de afiliados.
+ * Hook central do sistema de afiliados v2.
  * Gerencia:
  * - Estado do afiliado do usuário logado
- * - Cadastro como afiliado
- * - Métricas do dashboard
+ * - Cadastro como afiliado (com MLM: captura referred_by_affiliate_id)
+ * - Métricas do dashboard (pendente/disponível/pago)
  * - Indicações (referrals)
- * - Comissões
- * - Contas criadas para revenda
+ * - Comissões com carência de 7 dias
+ * - Solicitações de saque
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { getStoredRefCode } from '@/hooks/useAffiliateTracking';
 import type {
   Affiliate,
   Referral,
   Commission,
-  AffiliateCreatedAccount,
+  WithdrawalRequest,
   AffiliateDashboardStats,
 } from '@/types/affiliates';
 
@@ -49,8 +50,9 @@ export const useAffiliate = () => {
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [commissionsLoading, setCommissionsLoading] = useState(false);
 
-  const [createdAccounts, setCreatedAccounts] = useState<AffiliateCreatedAccount[]>([]);
-  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
+  const [withdrawalsLoading, setWithdrawalsLoading] = useState(false);
+  const [withdrawalSubmitting, setWithdrawalSubmitting] = useState(false);
 
   // ─── Busca afiliado do usuário logado ───────────────────────────────────────
 
@@ -68,35 +70,43 @@ export const useAffiliate = () => {
     setLoading(false);
   }, [user]);
 
+  // ─── Libera comissões com carência vencida (via função SECURITY DEFINER) ────
+
+  const releaseAvailableCommissions = useCallback(async (affiliateId: string) => {
+    await db.rpc('release_available_commissions', { p_affiliate_id: affiliateId });
+  }, []);
+
   // ─── Métricas consolidadas ───────────────────────────────────────────────────
 
   const fetchStats = useCallback(async (affiliateId: string) => {
     setStatsLoading(true);
 
-    const [clicksRes, referralsRes, commissionsRes, accountsRes] =
-      await Promise.all([
-        db.from('ref_clicks').select('id, converted').eq('affiliate_id', affiliateId),
-        db.from('referrals').select('id, status').eq('affiliate_id', affiliateId),
-        db.from('commissions').select('id, amount, status').eq('affiliate_id', affiliateId),
-        db.from('affiliate_created_accounts').select('id, status').eq('affiliate_id', affiliateId),
-      ]);
+    const [clicksRes, referralsRes, commissionsRes] = await Promise.all([
+      db.from('ref_clicks').select('id, converted').eq('affiliate_id', affiliateId),
+      db.from('referrals').select('id, status').eq('affiliate_id', affiliateId),
+      db.from('commissions').select('id, amount, status').eq('affiliate_id', affiliateId),
+    ]);
 
     const clicks = (clicksRes.data ?? []) as { id: string; converted: boolean }[];
     const refs = (referralsRes.data ?? []) as { id: string; status: string }[];
     const comms = (commissionsRes.data ?? []) as { id: string; amount: number; status: string }[];
-    const accounts = (accountsRes.data ?? []) as { id: string; status: string }[];
 
     const converted = refs.filter(r => r.status === 'converted').length;
     const cancelled = refs.filter(r => r.status === 'cancelled').length;
     const finished = converted + cancelled;
 
-    const pendingComm = comms
-      .filter(c => c.status === 'pending' || c.status === 'approved')
+    const pendingBalance = comms
+      .filter(c => c.status === 'pending')
       .reduce((sum, c) => sum + Number(c.amount), 0);
-    const paidComm = comms
+    const availableBalance = comms
+      .filter(c => c.status === 'available' || c.status === 'approved')
+      .reduce((sum, c) => sum + Number(c.amount), 0);
+    const paidBalance = comms
       .filter(c => c.status === 'paid')
       .reduce((sum, c) => sum + Number(c.amount), 0);
-    const totalEarned = comms.reduce((sum, c) => sum + Number(c.amount), 0);
+    const totalEarned = comms
+      .filter(c => c.status !== 'cancelled')
+      .reduce((sum, c) => sum + Number(c.amount), 0);
 
     setStats({
       totalClicks: clicks.length,
@@ -105,12 +115,10 @@ export const useAffiliate = () => {
       activeClients: converted,
       cancelledClients: cancelled,
       churnRate: finished > 0 ? Math.round((cancelled / finished) * 100) : 0,
-      pendingCommissions: pendingComm,
+      pendingBalance,
+      availableBalance,
+      paidBalance,
       totalEarned,
-      paidCommissions: paidComm,
-      loginsRegistered: accounts.length,
-      loginsActive: accounts.filter(a => a.status === 'active').length,
-      loginsPending: accounts.filter(a => a.status === 'available').length,
     });
 
     setStatsLoading(false);
@@ -129,7 +137,6 @@ export const useAffiliate = () => {
 
     const list = (refs ?? []) as Referral[];
 
-    // Busca profiles dos usuários indicados
     const userIds = list
       .map(r => r.referred_user_id)
       .filter(Boolean) as string[];
@@ -171,20 +178,44 @@ export const useAffiliate = () => {
     setCommissionsLoading(false);
   }, []);
 
-  // ─── Contas criadas para revenda ─────────────────────────────────────────────
+  // ─── Solicitações de saque ───────────────────────────────────────────────────
 
-  const fetchCreatedAccounts = useCallback(async (affiliateId: string) => {
-    setAccountsLoading(true);
+  const fetchWithdrawals = useCallback(async (affiliateId: string) => {
+    setWithdrawalsLoading(true);
 
     const { data } = await db
-      .from('affiliate_created_accounts')
+      .from('withdrawal_requests')
       .select('*')
       .eq('affiliate_id', affiliateId)
-      .order('created_at', { ascending: false });
+      .order('requested_at', { ascending: false });
 
-    setCreatedAccounts((data ?? []) as AffiliateCreatedAccount[]);
-    setAccountsLoading(false);
+    setWithdrawals((data ?? []) as WithdrawalRequest[]);
+    setWithdrawalsLoading(false);
   }, []);
+
+  // ─── Solicitar saque ─────────────────────────────────────────────────────────
+
+  const requestWithdrawal = useCallback(
+    async (amount: number, pixKey: string, notes?: string): Promise<{ error?: string }> => {
+      if (!affiliate) return { error: 'Você não é afiliado' };
+      if (withdrawalSubmitting) return { error: 'Aguarde...' };
+      setWithdrawalSubmitting(true);
+
+      const { error } = await db.from('withdrawal_requests').insert({
+        affiliate_id: affiliate.id,
+        amount,
+        pix_key: pixKey.trim(),
+        notes: notes?.trim() || null,
+        status: 'pending',
+      });
+
+      setWithdrawalSubmitting(false);
+      if (error) return { error: error.message };
+      await fetchWithdrawals(affiliate.id);
+      return {};
+    },
+    [affiliate, withdrawalSubmitting, fetchWithdrawals]
+  );
 
   // ─── Cadastro como afiliado ──────────────────────────────────────────────────
 
@@ -204,13 +235,27 @@ export const useAffiliate = () => {
       refCode = generateRefCode();
     }
 
+    // Captura quem indicou este afiliado (MLM nível 2)
+    let referredByAffiliateId: string | null = null;
+    const storedRef = getStoredRefCode();
+    if (storedRef) {
+      const { data: referrer } = await db
+        .from('affiliates')
+        .select('id')
+        .eq('ref_code', storedRef)
+        .eq('status', 'active')
+        .maybeSingle();
+      referredByAffiliateId = referrer?.id ?? null;
+    }
+
     const { data, error } = await db
       .from('affiliates')
       .insert({
         user_id: user.id,
         ref_code: refCode,
         status: 'active',
-        commission_rate: 30.00,
+        commission_rate: 50.00,
+        referred_by_affiliate_id: referredByAffiliateId,
       })
       .select()
       .maybeSingle();
@@ -222,50 +267,6 @@ export const useAffiliate = () => {
     return {};
   }, [user, registering]);
 
-  // ─── Registrar cliente (compra de login) ─────────────────────────────────────
-
-  const registerClientLogin = useCallback(
-    async (
-      email: string,
-      clientName?: string,
-      notes?: string
-    ): Promise<{ error?: string }> => {
-      if (!affiliate) return { error: 'Você não é afiliado' };
-
-      const { error } = await db.from('affiliate_created_accounts').insert({
-        affiliate_id: affiliate.id,
-        login_email: email.trim().toLowerCase(),
-        client_name: clientName?.trim() || null,
-        notes: notes?.trim() || null,
-        status: 'available',
-      });
-
-      if (error) return { error: error.message };
-      await fetchCreatedAccounts(affiliate.id);
-      return {};
-    },
-    [affiliate, fetchCreatedAccounts]
-  );
-
-  // ─── Atualizar status de conta ───────────────────────────────────────────────
-
-  const updateAccountStatus = useCallback(
-    async (accountId: string, status: string): Promise<{ error?: string }> => {
-      const updateData: Record<string, unknown> = { status };
-      if (status === 'cancelled') updateData.cancelled_at = new Date().toISOString();
-
-      const { error } = await db
-        .from('affiliate_created_accounts')
-        .update(updateData)
-        .eq('id', accountId);
-
-      if (error) return { error: error.message };
-      if (affiliate) await fetchCreatedAccounts(affiliate.id);
-      return {};
-    },
-    [affiliate, fetchCreatedAccounts]
-  );
-
   // ─── Efeitos ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -274,10 +275,13 @@ export const useAffiliate = () => {
 
   useEffect(() => {
     if (!affiliate) return;
-    fetchStats(affiliate.id);
+    // Libera comissões com carência vencida, depois atualiza stats
+    releaseAvailableCommissions(affiliate.id).then(() => {
+      fetchStats(affiliate.id);
+      fetchCommissions(affiliate.id);
+    });
     fetchReferrals(affiliate.id);
-    fetchCommissions(affiliate.id);
-    fetchCreatedAccounts(affiliate.id);
+    fetchWithdrawals(affiliate.id);
   }, [affiliate?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── API Pública ─────────────────────────────────────────────────────────────
@@ -292,16 +296,16 @@ export const useAffiliate = () => {
     referralsLoading,
     commissions,
     commissionsLoading,
-    createdAccounts,
-    accountsLoading,
+    withdrawals,
+    withdrawalsLoading,
+    withdrawalSubmitting,
     register,
-    registerClientLogin,
-    updateAccountStatus,
+    requestWithdrawal,
     refetch: {
       stats: () => affiliate && fetchStats(affiliate.id),
       referrals: () => affiliate && fetchReferrals(affiliate.id),
       commissions: () => affiliate && fetchCommissions(affiliate.id),
-      accounts: () => affiliate && fetchCreatedAccounts(affiliate.id),
+      withdrawals: () => affiliate && fetchWithdrawals(affiliate.id),
     },
   };
 };

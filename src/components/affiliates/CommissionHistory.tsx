@@ -1,8 +1,8 @@
 /**
  * CommissionHistory
  *
- * Tabela completa do histórico de comissões do afiliado.
- * Mostra: data, tipo (inicial/recorrente), valor, status, período.
+ * Histórico de comissões com carência de 7 dias.
+ * Mostra: data, tipo, valor, status, disponível em.
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -21,10 +21,11 @@ interface Props {
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  pending: { label: 'Pendente', variant: 'outline' },
-  approved: { label: 'Aprovado', variant: 'secondary' },
-  paid: { label: 'Pago', variant: 'default' },
-  cancelled: { label: 'Cancelado', variant: 'destructive' },
+  pending:   { label: 'Em carência', variant: 'outline' },
+  available: { label: 'Disponível',  variant: 'secondary' },
+  approved:  { label: 'Disponível',  variant: 'secondary' }, // legado
+  paid:      { label: 'Pago',        variant: 'default' },
+  cancelled: { label: 'Cancelado',   variant: 'destructive' },
 };
 
 const typeConfig = {
@@ -48,23 +49,42 @@ const fmtDate = (iso: string | null) =>
     ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
     : '—';
 
+/** Mostra countdown até a comissão ficar disponível */
+const CarenciaLabel = ({ availableAfter }: { availableAfter: string }) => {
+  const diff = new Date(availableAfter).getTime() - Date.now();
+  if (diff <= 0) return <span className="text-emerald-400 text-[11px]">Liberando...</span>;
+  const days = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+  return (
+    <span className="text-orange-400 text-[11px]">
+      {days > 0 ? `${days}d ${hours}h` : `${hours}h`}
+    </span>
+  );
+};
+
 const CommissionHistory = ({ commissions, loading }: Props) => {
-  const total = commissions.reduce((sum, c) => sum + Number(c.amount), 0);
+  const total = commissions
+    .filter(c => c.status !== 'cancelled')
+    .reduce((sum, c) => sum + Number(c.amount), 0);
   const paid = commissions
     .filter(c => c.status === 'paid')
     .reduce((sum, c) => sum + Number(c.amount), 0);
-  const pending = commissions
-    .filter(c => c.status === 'pending' || c.status === 'approved')
+  const inHold = commissions
+    .filter(c => c.status === 'pending')
+    .reduce((sum, c) => sum + Number(c.amount), 0);
+  const available = commissions
+    .filter(c => c.status === 'available' || c.status === 'approved')
     .reduce((sum, c) => sum + Number(c.amount), 0);
 
   return (
     <div className="space-y-4">
       {/* Resumo */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total gerado', value: total, color: 'text-white' },
-          { label: 'Total pago', value: paid, color: 'text-emerald-400' },
-          { label: 'Pendente', value: pending, color: 'text-yellow-400' },
+          { label: 'Total gerado',  value: total,     color: 'text-white' },
+          { label: 'Em carência',   value: inHold,    color: 'text-orange-400' },
+          { label: 'Disponível',    value: available,  color: 'text-yellow-400' },
+          { label: 'Total pago',    value: paid,      color: 'text-emerald-400' },
         ].map((item) => (
           <Card key={item.label} className="bg-card/50 border-border/60">
             <CardContent className="p-4 text-center">
@@ -101,10 +121,10 @@ const CommissionHistory = ({ commissions, loading }: Props) => {
                   <TableRow className="hover:bg-transparent border-border/40">
                     <TableHead className="text-xs w-24">Data</TableHead>
                     <TableHead className="text-xs">Tipo</TableHead>
-                    <TableHead className="text-xs">Período</TableHead>
+                    <TableHead className="text-xs hidden sm:table-cell">Período</TableHead>
                     <TableHead className="text-xs text-right">Valor</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
-                    <TableHead className="text-xs w-20">Pago em</TableHead>
+                    <TableHead className="text-xs">Disponível em</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -125,7 +145,7 @@ const CommissionHistory = ({ commissions, loading }: Props) => {
                             {type.label}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="text-xs text-muted-foreground hidden sm:table-cell">
                           {c.period_start
                             ? `${fmtDate(c.period_start)} → ${fmtDate(c.period_end)}`
                             : '—'}
@@ -138,8 +158,13 @@ const CommissionHistory = ({ commissions, loading }: Props) => {
                             {status.label}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {fmtDate(c.paid_at)}
+                        <TableCell>
+                          {c.status === 'pending' && c.available_after
+                            ? <CarenciaLabel availableAfter={c.available_after} />
+                            : (c.status === 'available' || c.status === 'approved')
+                            ? <span className="text-emerald-400 text-[11px]">Liberado ✓</span>
+                            : <span className="text-muted-foreground text-[11px]">—</span>
+                          }
                         </TableCell>
                       </TableRow>
                     );
