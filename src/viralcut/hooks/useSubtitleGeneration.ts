@@ -127,11 +127,22 @@ export function useSubtitleGeneration() {
         throw new Error(result?.error ?? `Erro HTTP ${res.status}`);
       }
 
-      const segments: SubtitleSegment[] = (result.segments ?? []).map((s: any) => ({
-        start: s.start,
-        end: s.end,
-        text: s.text.trim(),
-      }));
+      // Usa word-level timestamps quando disponíveis (gpt-4o-transcribe),
+      // caso contrário usa os segmentos (fallback para whisper-1)
+      let segments: SubtitleSegment[];
+      if (result.words && result.words.length > 0) {
+        segments = result.words.map((w: any) => ({
+          start: w.start,
+          end: w.end,
+          text: (w.word ?? w.text ?? '').trim(),
+        }));
+      } else {
+        segments = (result.segments ?? []).map((s: any) => ({
+          start: s.start,
+          end: s.end,
+          text: s.text.trim(),
+        }));
+      }
 
       // Registra uso (não bloqueia em caso de falha)
       Promise.resolve(

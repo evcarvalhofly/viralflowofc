@@ -34,10 +34,10 @@ Deno.serve(async (req) => {
     // Repassa o arquivo para o OpenAI Whisper
     const openaiForm = new FormData();
     openaiForm.append('file', audioFile, audioFile.name || 'audio.wav');
-    openaiForm.append('model', 'whisper-1');
+    openaiForm.append('model', 'gpt-4o-transcribe');
     openaiForm.append('language', language);
     openaiForm.append('response_format', 'verbose_json');
-    openaiForm.append('timestamp_granularities[]', 'segment');
+    openaiForm.append('timestamp_granularities[]', 'word');
 
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',

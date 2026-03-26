@@ -584,18 +584,32 @@ const ViralCut = () => {
     viral:   { fontSize: 3, color: '#facc15', backgroundColor: 'rgba(0,0,0,0.82)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0 } },
   };
 
-  // Divide segmento longo em chunks de até maxWords palavras com tempo proporcional
-  const splitByWords = (seg: SubtitleSegment, maxWords = 3): SubtitleSegment[] => {
-    const words = seg.text.trim().split(/\s+/).filter(Boolean);
-    if (words.length <= maxWords) return [seg];
-    const chunks: string[] = [];
-    for (let i = 0; i < words.length; i += maxWords) chunks.push(words.slice(i, i + maxWords).join(' '));
-    const dur = seg.end - seg.start;
-    return chunks.map((text, idx) => ({
-      start: seg.start + (idx / chunks.length) * dur,
-      end: seg.start + ((idx + 1) / chunks.length) * dur,
-      text,
-    }));
+  // Agrupa palavras em chunks de N usando timestamps reais (word-level) ou
+  // divide proporcionalmente como fallback (segmentos de frase)
+  const buildSubtitleChunks = (segs: SubtitleSegment[], groupSize: number): SubtitleSegment[] => {
+    const isWordLevel = segs.length > 0 && segs.every(s => !s.text.includes(' '));
+    if (isWordLevel) {
+      // Agrupa palavras reais: timing preciso
+      const out: SubtitleSegment[] = [];
+      for (let i = 0; i < segs.length; i += groupSize) {
+        const chunk = segs.slice(i, i + groupSize);
+        out.push({ start: chunk[0].start, end: chunk[chunk.length - 1].end, text: chunk.map(w => w.text).join(' ') });
+      }
+      return out;
+    }
+    // Fallback: segmentos de frase — divide proporcionalmente
+    return segs.flatMap(seg => {
+      const words = seg.text.trim().split(/\s+/).filter(Boolean);
+      if (words.length <= groupSize) return [seg];
+      const chunks: string[] = [];
+      for (let i = 0; i < words.length; i += groupSize) chunks.push(words.slice(i, i + groupSize).join(' '));
+      const dur = seg.end - seg.start;
+      return chunks.map((text, idx) => ({
+        start: seg.start + (idx / chunks.length) * dur,
+        end: seg.start + ((idx + 1) / chunks.length) * dur,
+        text,
+      }));
+    });
   };
 
   const handleAddSubtitles = useCallback((segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number) => {
@@ -609,7 +623,7 @@ const ViralCut = () => {
       }
       const styleDetails = SUBTITLE_TEXT_DETAILS[style];
       // Divide segmentos longos em até 3 palavras por legenda
-      const newItems: TrackItem[] = segments.flatMap(seg => splitByWords(seg, maxWords))
+      const newItems: TrackItem[] = buildSubtitleChunks(segments, maxWords)
         .map((seg) => {
           // Converte timestamp do arquivo de mídia para posição na timeline
           const start = videoItem.startTime + (seg.start - videoItem.mediaStart);
