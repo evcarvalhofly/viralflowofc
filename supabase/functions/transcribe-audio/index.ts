@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
     openaiForm.append('language', language);
     openaiForm.append('response_format', 'verbose_json');
     openaiForm.append('timestamp_granularities[]', 'word');
+    openaiForm.append('timestamp_granularities[]', 'segment');
 
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',

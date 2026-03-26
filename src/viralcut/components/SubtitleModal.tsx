@@ -8,7 +8,7 @@ interface SubtitleModalProps {
   videoItem: TrackItem | null;       // clip de vídeo selecionado ou primeiro da timeline
   mediaFile: MediaFile | null;        // arquivo correspondente ao videoItem
   userId: string;
-  onGenerate: (segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number) => void;
+  onGenerate: (segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number, isWordLevel: boolean) => void;
   onClose: () => void;
 }
 
@@ -78,7 +78,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
       setError(result.error);
       return;
     }
-    onGenerate(result.segments, videoItem, style, maxWords);
+    onGenerate(result.segments, videoItem, style, maxWords, result.isWordLevel);
     onClose();
   };
 

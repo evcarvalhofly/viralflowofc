@@ -584,35 +584,42 @@ const ViralCut = () => {
     viral:   { fontSize: 3, color: '#facc15', backgroundColor: 'rgba(0,0,0,0.82)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0 } },
   };
 
-  // Agrupa palavras em chunks de N usando timestamps reais (word-level) ou
-  // divide proporcionalmente como fallback (segmentos de frase)
-  const buildSubtitleChunks = (segs: SubtitleSegment[], groupSize: number): SubtitleSegment[] => {
-    const isWordLevel = segs.length > 0 && segs.every(s => !s.text.includes(' '));
-    if (isWordLevel) {
-      // Agrupa palavras reais: timing preciso
-      const out: SubtitleSegment[] = [];
-      for (let i = 0; i < segs.length; i += groupSize) {
-        const chunk = segs.slice(i, i + groupSize);
-        out.push({ start: chunk[0].start, end: chunk[chunk.length - 1].end, text: chunk.map(w => w.text).join(' ') });
-      }
-      return out;
+  // Agrupa palavras usando timestamps reais com detecção de pausa natural,
+  // ou divide proporcionalmente como fallback (segmentos de frase)
+  const buildSubtitleChunks = (segs: SubtitleSegment[], groupSize: number, isWordLevel: boolean): SubtitleSegment[] => {
+    if (!isWordLevel) {
+      // Fallback: segmentos de frase — divide proporcionalmente
+      return segs.flatMap(seg => {
+        const words = seg.text.trim().split(/\s+/).filter(Boolean);
+        if (words.length <= groupSize) return [seg];
+        const chunks: string[] = [];
+        for (let i = 0; i < words.length; i += groupSize) chunks.push(words.slice(i, i + groupSize).join(' '));
+        const dur = seg.end - seg.start;
+        return chunks.map((text, idx) => ({
+          start: seg.start + (idx / chunks.length) * dur,
+          end: seg.start + ((idx + 1) / chunks.length) * dur,
+          text,
+        }));
+      });
     }
-    // Fallback: segmentos de frase — divide proporcionalmente
-    return segs.flatMap(seg => {
-      const words = seg.text.trim().split(/\s+/).filter(Boolean);
-      if (words.length <= groupSize) return [seg];
-      const chunks: string[] = [];
-      for (let i = 0; i < words.length; i += groupSize) chunks.push(words.slice(i, i + groupSize).join(' '));
-      const dur = seg.end - seg.start;
-      return chunks.map((text, idx) => ({
-        start: seg.start + (idx / chunks.length) * dur,
-        end: seg.start + ((idx + 1) / chunks.length) * dur,
-        text,
-      }));
-    });
+    // Word-level: quebra por pausa natural (>0.4s) OU ao atingir groupSize palavras
+    const PAUSE_THRESHOLD = 0.4;
+    const out: SubtitleSegment[] = [];
+    let chunk: SubtitleSegment[] = [];
+    for (let i = 0; i < segs.length; i++) {
+      chunk.push(segs[i]);
+      const nextPause = i + 1 < segs.length ? segs[i + 1].start - segs[i].end : Infinity;
+      if (chunk.length >= groupSize || nextPause > PAUSE_THRESHOLD) {
+        out.push({ start: chunk[0].start, end: chunk[chunk.length - 1].end, text: chunk.map(w => w.text).join(' ') });
+        chunk = [];
+      }
+    }
+    if (chunk.length > 0)
+      out.push({ start: chunk[0].start, end: chunk[chunk.length - 1].end, text: chunk.map(w => w.text).join(' ') });
+    return out;
   };
 
-  const handleAddSubtitles = useCallback((segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number) => {
+  const handleAddSubtitles = useCallback((segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number, isWordLevel: boolean) => {
     updateProject((p) => {
       // Cria ou reutiliza trilha "Legendas"
       let subtitleTrack = p.tracks.find((t) => t.type === 'text' && t.items.some((i) => i.name.startsWith('Legenda')));
@@ -623,7 +630,7 @@ const ViralCut = () => {
       }
       const styleDetails = SUBTITLE_TEXT_DETAILS[style];
       // Divide segmentos longos em até 3 palavras por legenda
-      const newItems: TrackItem[] = buildSubtitleChunks(segments, maxWords)
+      const newItems: TrackItem[] = buildSubtitleChunks(segments, maxWords, isWordLevel)
         .map((seg) => {
           // Converte timestamp do arquivo de mídia para posição na timeline
           const start = videoItem.startTime + (seg.start - videoItem.mediaStart);

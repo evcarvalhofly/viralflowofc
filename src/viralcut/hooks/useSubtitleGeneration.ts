@@ -42,14 +42,15 @@ function encodeWAV(samples: Float32Array, sampleRate: number): Blob {
  * Extrai áudio do arquivo de vídeo, reamostrado para 16kHz mono WAV.
  * Reduz o tamanho para envio (ex: vídeo 100MB → ~10MB de áudio).
  */
-async function extractAudioWAV(file: File): Promise<Blob> {
+async function extractAudioWAV(file: File, maxDurationSec = 600): Promise<Blob> {
   const arrayBuffer = await file.arrayBuffer();
   const tempCtx = new AudioContext();
   const decoded = await tempCtx.decodeAudioData(arrayBuffer);
   await tempCtx.close();
 
   const targetRate = 16000;
-  const offlineCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * targetRate), targetRate);
+  const duration = Math.min(decoded.duration, maxDurationSec);
+  const offlineCtx = new OfflineAudioContext(1, Math.ceil(duration * targetRate), targetRate);
   const source = offlineCtx.createBufferSource();
   source.buffer = decoded;
   source.connect(offlineCtx.destination);
@@ -73,7 +74,7 @@ export function useSubtitleGeneration() {
     clipDurationSec: number;
     language: string;
     userId: string;
-  }): Promise<{ segments: SubtitleSegment[]; error?: string }> => {
+  }): Promise<{ segments: SubtitleSegment[]; isWordLevel: boolean; error?: string }> => {
     const { videoFile, clipDurationSec, language, userId } = opts;
 
     // Verifica limite mensal
@@ -81,7 +82,7 @@ export function useSubtitleGeneration() {
     const remaining = MONTHLY_LIMIT_SECONDS - used;
     if (clipDurationSec > remaining) {
       const remMin = Math.floor(remaining / 60);
-      return { segments: [], error: `Limite mensal atingido. Você tem apenas ${remMin} minutos restantes este mês.` };
+      return { segments: [], isWordLevel: false, error: `Limite mensal atingido. Você tem apenas ${remMin} minutos restantes este mês.` };
     }
 
     setGenerating(true);
@@ -127,10 +128,10 @@ export function useSubtitleGeneration() {
         throw new Error(result?.error ?? `Erro HTTP ${res.status}`);
       }
 
-      // Usa word-level timestamps quando disponíveis (gpt-4o-transcribe),
-      // caso contrário usa os segmentos (fallback para whisper-1)
+      // Usa word-level timestamps quando disponíveis, caso contrário usa segmentos
+      const isWordLevel = !!(result.words && result.words.length > 0);
       let segments: SubtitleSegment[];
-      if (result.words && result.words.length > 0) {
+      if (isWordLevel) {
         segments = result.words.map((w: any) => ({
           start: w.start,
           end: w.end,
@@ -149,9 +150,9 @@ export function useSubtitleGeneration() {
         (supabase as any).rpc('increment_subtitle_usage', { p_user_id: userId, p_seconds: Math.ceil(clipDurationSec) })
       ).catch(() => {});
 
-      return { segments };
+      return { segments, isWordLevel };
     } catch (e: any) {
-      return { segments: [], error: e.message ?? 'Erro desconhecido' };
+      return { segments: [], isWordLevel: false, error: e.message ?? 'Erro desconhecido' };
     } finally {
       setGenerating(false);
       setStatusLabel('');
