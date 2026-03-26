@@ -4,7 +4,7 @@
 // Playhead: draggable by handle; click empty lane area to seek
 // Quick-split button: cuts ALL items across tracks at playhead
 // ============================================================
-import { useRef, useState, useCallback, useMemo } from 'react';
+import { useRef, useState, useCallback, useMemo, useEffect } from 'react';
 import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors, Plus } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
@@ -36,6 +36,7 @@ interface TimelineProps {
   onOpenMediaPanel?: () => void;
   onSplitAllAtPlayhead?: () => void;
   onDeleteSelected?: () => void;
+  onZoomChange?: (newZoom: number) => void;
 }
 
 function fmtRuler(s: number) {
@@ -101,11 +102,64 @@ export function Timeline({
   onOpenMediaPanel,
   onSplitAllAtPlayhead,
   onDeleteSelected,
+  onZoomChange,
 }: TimelineProps) {
   const rulerScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const labelsRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+
+  // ── Pinch-to-zoom ─────────────────────────────────────────────
+  const pinchRef = useRef<{ dist: number } | null>(null);
+  const zoomRef  = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        pinchRef.current = { dist: Math.hypot(dx, dy) };
+      } else {
+        pinchRef.current = null;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !pinchRef.current) return;
+      e.preventDefault(); // block browser pinch-zoom / scroll during our gesture
+
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const ratio = newDist / pinchRef.current.dist;
+      pinchRef.current.dist = newDist;
+
+      const newZoom = Math.min(300, Math.max(20, Math.round(zoomRef.current * ratio)));
+      if (newZoom !== zoomRef.current) {
+        zoomRef.current = newZoom;
+        onZoomChange?.(newZoom);
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinchRef.current = null;
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove',  onTouchMove,  { passive: false });
+    el.addEventListener('touchend',   onTouchEnd,   { passive: true });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove',  onTouchMove);
+      el.removeEventListener('touchend',   onTouchEnd);
+    };
+  }, [onZoomChange]);
 
   // Double-click detection: track last click per item
   const lastClickRef = useRef<{ id: string; time: number } | null>(null);
@@ -132,7 +186,7 @@ export function Timeline({
     const scroll = scrollRef.current;
     if (!scroll) return 0;
     const rect = scroll.getBoundingClientRect();
-    // 160px label column offset
+    // 160px label column scrolls with content, offset needed
     const x = clientX - rect.left - 160 + scroll.scrollLeft;
     return Math.max(0, x / zoom);
   }, [zoom]);
@@ -458,7 +512,7 @@ export function Timeline({
         ref={scrollRef}
         onScroll={handleTrackScroll}
       >
-        {/* Inner wrapper with explicit full timeline width — ensures border-b spans entire scrollable area */}
+        {/* Inner wrapper: labels (160px) + timeline content scroll together */}
         <div style={{ width: totalWidth + 160, minWidth: '100%' }}>
         {tracks.map((track) => (
           <div
@@ -469,8 +523,8 @@ export function Timeline({
             )}
             style={{ height: TRACK_H[track.type] ?? 56 }}
           >
-            {/* Track label — sticky so it stays visible when scrolling horizontally */}
-            <div className="sticky left-0 w-[160px] shrink-0 flex items-center gap-1.5 px-2 bg-card border-r border-border z-10">
+            {/* Track label — scrolls with content (slides left when seeking forward) */}
+            <div className="w-[160px] shrink-0 flex items-center gap-1.5 px-2 bg-card border-r border-border z-10">
               <div className="p-1 rounded text-muted-foreground shrink-0">
                 <TrackIcon type={track.type} />
               </div>
@@ -628,7 +682,7 @@ export function Timeline({
           </div>
         )}
         </div>{/* end inner width wrapper */}
-      </div>
+      </div>{/* end scroll container */}
     </div>
   );
 }

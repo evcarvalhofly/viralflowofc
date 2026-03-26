@@ -981,6 +981,7 @@ const ViralCut = () => {
                   if (track) handleItemDelete(track.id, selectedItemId);
                 }
               }}
+              onZoomChange={(z) => setZoom(z)}
             />
           </div>
         </div>
@@ -1206,6 +1207,7 @@ const ViralCut = () => {
                 if (track) handleItemDelete(track.id, selectedItemId);
               }
             }}
+            onZoomChange={(z) => setZoom(z)}
           />
         </div>
       </div>
