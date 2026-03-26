@@ -17,7 +17,10 @@ import { Toolbar } from '@/viralcut/components/Toolbar';
 import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
+import { SubtitleModal } from '@/viralcut/components/SubtitleModal';
+import { SubtitleSegment, SubtitleStyle } from '@/viralcut/hooks/useSubtitleGeneration';
 import { exportProjectWithMediaBunny } from '@/viralcut/export3/exportProjectWithMediaBunny';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
@@ -121,8 +124,11 @@ function calcDuration(tracks: Track[]): number {
 
 type MobileTab = 'editar' | 'audio' | 'texto' | 'camada' | 'midia';
 
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string ?? '';
+
 const ViralCut = () => {
   const isMobile = useIsMobile();
+  const { user } = useAuth();
   const importRef = useRef<HTMLInputElement>(null);
   const importJsonRef = useRef<HTMLInputElement>(null);
   const autoCutImportRef = useRef<HTMLInputElement>(null);
@@ -148,6 +154,7 @@ const ViralCut = () => {
   const [mobileTab, setMobileTab] = useState<MobileTab>('editar');
   const [showMobilePanel, setShowMobilePanel] = useState(false);
   const [showAutoCut, setShowAutoCut] = useState(false);
+  const [showSubtitleModal, setShowSubtitleModal] = useState(false);
 
   const hasMedia = media.length > 0;
 
@@ -571,6 +578,67 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
   }, [updateProject, isMobile]);
 
+  // ── Subtitle text styles per preset ──────────────────────
+  const SUBTITLE_TEXT_DETAILS: Record<SubtitleStyle, Partial<typeof DEFAULT_TEXT_DETAILS>> = {
+    classic: { fontSize: 4.5, color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.75)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0 } },
+    minimal: { fontSize: 4.5, color: '#ffffff', backgroundColor: 'transparent', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 1, y: 1, blur: 6 } },
+    viral:   { fontSize: 4.5, color: '#facc15', backgroundColor: 'rgba(0,0,0,0.82)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0 } },
+  };
+
+  const handleAddSubtitles = useCallback((segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle) => {
+    updateProject((p) => {
+      // Cria ou reutiliza trilha "Legendas"
+      let subtitleTrack = p.tracks.find((t) => t.type === 'text' && t.items.some((i) => i.name.startsWith('Legenda')));
+      let tracks = p.tracks;
+      if (!subtitleTrack) {
+        subtitleTrack = { id: createId(), type: 'text', items: [], locked: false, muted: false };
+        tracks = [...p.tracks, subtitleTrack];
+      }
+      const styleDetails = SUBTITLE_TEXT_DETAILS[style];
+      const newItems: TrackItem[] = segments
+        .map((seg) => {
+          // Converte timestamp do arquivo de mídia para posição na timeline
+          const start = videoItem.startTime + (seg.start - videoItem.mediaStart);
+          const end   = videoItem.startTime + (seg.end   - videoItem.mediaStart);
+          // Ignora segmentos fora da janela do clip
+          if (end <= videoItem.startTime || start >= videoItem.endTime) return null;
+          const safeStart = Math.max(start, videoItem.startTime);
+          const safeEnd   = Math.min(end,   videoItem.endTime);
+          if (safeEnd - safeStart < 0.1) return null;
+          return {
+            id: createId(), mediaId: '', trackId: subtitleTrack!.id,
+            startTime: safeStart, endTime: safeEnd,
+            mediaStart: 0, mediaEnd: safeEnd - safeStart,
+            name: `Legenda`, type: 'text' as const,
+            textDetails: { ...DEFAULT_TEXT_DETAILS, ...styleDetails, text: seg.text },
+          } as TrackItem;
+        })
+        .filter(Boolean) as TrackItem[];
+
+      const updatedTracks = tracks.map((t) =>
+        t.id === subtitleTrack!.id ? { ...t, items: [...t.items, ...newItems] } : t
+      );
+      return { ...p, tracks: updatedTracks };
+    }, { pushHistory: true });
+  }, [updateProject]);
+
+  // Clipe de vídeo para legendas: item selecionado (se for vídeo) ou primeiro da timeline
+  const subtitleVideoItem = useMemo(() => {
+    if (selectedItem?.type === 'video') return selectedItem;
+    for (const t of project.tracks) {
+      if (t.type === 'video' && !t.muted) {
+        const item = t.items[0];
+        if (item) return item;
+      }
+    }
+    return null;
+  }, [selectedItem, project.tracks]);
+
+  const subtitleMediaFile = useMemo(
+    () => subtitleVideoItem ? media.find((m) => m.id === subtitleVideoItem.mediaId) ?? null : null,
+    [subtitleVideoItem, media]
+  );
+
   const handleSplitAllAtPlayhead = useCallback(() => {
     const t = currentTime;
     updateProject((p) => {
@@ -904,6 +972,7 @@ const ViralCut = () => {
         canUndo={canUndo}
         canRedo={canRedo}
         onExport={() => { setExportState({ status: 'idle', progress: 0, label: '' }); setExportOpen(true); }}
+        onSubtitles={hasMedia ? () => setShowSubtitleModal(true) : undefined}
         onSave={persistence.saveNow}
         onExportJson={persistence.exportJson}
         onImportJson={() => importJsonRef.current?.click()}
@@ -1019,6 +1088,17 @@ const ViralCut = () => {
         onChange={(e) => { if (e.target.files?.[0]) { persistence.importJson(e.target.files[0]); e.target.value = ''; } }} />
 
       <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
+
+      {showSubtitleModal && (
+        <SubtitleModal
+          videoItem={subtitleVideoItem}
+          mediaFile={subtitleMediaFile}
+          userId={user?.id ?? ''}
+          apiKey={OPENAI_API_KEY}
+          onGenerate={handleAddSubtitles}
+          onClose={() => setShowSubtitleModal(false)}
+        />
+      )}
     </div>
   );
 };
