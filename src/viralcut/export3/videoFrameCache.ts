@@ -6,8 +6,8 @@
 // The browser already handles orientation correctly for display.
 // ============================================================
 
-const SEEK_EPSILON_SEC = 1 / 120; // ~8ms — skip seek if already there
-const SEEK_TIMEOUT_MS  = 8000;
+const SEEK_EPSILON_SEC = 1 / 50;  // ~20ms — skip seek if already within one frame (~30fps)
+const SEEK_TIMEOUT_MS  = 4000;   // 4s is generous; 8s was causing slow exports
 
 export class VideoFrameCache {
   private videos = new Map<string, HTMLVideoElement>();

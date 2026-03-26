@@ -82,9 +82,10 @@ export function getExportDimensions(
 
 export function getVideoBitrate(width: number, height: number, fps: number): number {
   const pixels = width * height;
-  if (pixels >= 1920 * 1080) return fps >= 60 ? 12_000_000 : 8_000_000;
-  if (pixels >= 1280 * 720) return fps >= 60 ? 8_000_000 : 5_000_000;
-  return 3_000_000;
+  // Short social-media clips — slightly lower CBR still looks great
+  if (pixels >= 1920 * 1080) return fps >= 60 ? 10_000_000 : 6_000_000;
+  if (pixels >= 1280 * 720)  return fps >= 60 ? 7_000_000  : 4_000_000;
+  return 2_500_000;
 }
 
 /**

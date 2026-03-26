@@ -88,13 +88,21 @@ export async function createTimelineAudioBuffer(
     const srcChR = decoded.numberOfChannels >= 2 ? decoded.getChannelData(1) : srcChL;
 
     for (let outSample = outStart; outSample < outEnd; outSample++) {
-      const clipSample = outSample - outStart; // position within clip in output samples
-      const srcSample = Math.floor(srcStart + clipSample * playbackRate);
+      const clipSample = outSample - outStart;
+      const srcPos = srcStart + clipSample * playbackRate;
+      const srcIdx = Math.floor(srcPos);
+      const frac   = srcPos - srcIdx;
 
-      if (srcSample >= decoded.length) break;
+      if (srcIdx >= decoded.length) break;
 
-      const sL = srcChL ? (srcChL[srcSample] ?? 0) : 0;
-      const sR = srcChR ? (srcChR[srcSample] ?? 0) : sL;
+      // Linear interpolation between adjacent samples for smooth playback rate changes
+      const sL0 = srcChL ? (srcChL[srcIdx]     ?? 0) : 0;
+      const sL1 = srcChL ? (srcChL[srcIdx + 1] ?? sL0) : 0;
+      const sR0 = srcChR ? (srcChR[srcIdx]     ?? 0) : sL0;
+      const sR1 = srcChR ? (srcChR[srcIdx + 1] ?? sR0) : sL1;
+
+      const sL = sL0 + (sL1 - sL0) * frac;
+      const sR = sR0 + (sR1 - sR0) * frac;
 
       outputL[outSample] = Math.max(-1, Math.min(1, outputL[outSample] + sL * volume));
       outputR[outSample] = Math.max(-1, Math.min(1, outputR[outSample] + sR * volume));

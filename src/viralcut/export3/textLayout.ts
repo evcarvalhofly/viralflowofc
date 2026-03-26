@@ -62,6 +62,17 @@ export function drawTextItemOnCanvas(
     ctx.shadowBlur = td.boxShadow.blur;
   }
 
+  // Stroke (outline) — draw before fill so fill renders on top
+  if (td.strokeWidth && td.strokeWidth > 0) {
+    ctx.lineWidth = td.strokeWidth * (fontSize / 16); // scale stroke with font size
+    ctx.strokeStyle = td.strokeColor ?? '#000000';
+    ctx.lineJoin = 'round';
+    lines.forEach((l, li) => {
+      const lineY = topY + li * lineHeight + lineHeight / 2;
+      ctx.strokeText(l, x, lineY, maxW);
+    });
+  }
+
   ctx.fillStyle = td.color || '#ffffff';
   lines.forEach((l, li) => {
     const lineY = topY + li * lineHeight + lineHeight / 2;
