@@ -629,26 +629,34 @@ const ViralCut = () => {
         tracks = [...p.tracks, subtitleTrack];
       }
       const styleDetails = SUBTITLE_TEXT_DETAILS[style];
-      // Divide segmentos longos em até 3 palavras por legenda
+      // Coleta todos os clips de vídeo do mesmo arquivo de mídia, em ordem de timeline
+      const videoClips = p.tracks
+        .filter(t => t.type === 'video' && !t.muted)
+        .flatMap(t => t.items)
+        .filter(item => item.mediaId === videoItem.mediaId)
+        .sort((a, b) => a.startTime - b.startTime);
+
+      // Para cada chunk, mapeia para o(s) clip(s) correto(s) na timeline
       const newItems: TrackItem[] = buildSubtitleChunks(segments, maxWords, isWordLevel)
-        .map((seg) => {
-          // Converte timestamp do arquivo de mídia para posição na timeline
-          const start = videoItem.startTime + (seg.start - videoItem.mediaStart);
-          const end   = videoItem.startTime + (seg.end   - videoItem.mediaStart);
-          // Ignora segmentos fora da janela do clip
-          if (end <= videoItem.startTime || start >= videoItem.endTime) return null;
-          const safeStart = Math.max(start, videoItem.startTime);
-          const safeEnd   = Math.min(end,   videoItem.endTime);
-          if (safeEnd - safeStart < 0.1) return null;
-          return {
-            id: createId(), mediaId: '', trackId: subtitleTrack!.id,
-            startTime: safeStart, endTime: safeEnd,
-            mediaStart: 0, mediaEnd: safeEnd - safeStart,
-            name: `Legenda`, type: 'text' as const,
-            textDetails: { ...DEFAULT_TEXT_DETAILS, ...styleDetails, text: seg.text },
-          } as TrackItem;
-        })
-        .filter(Boolean) as TrackItem[];
+        .flatMap((seg) => {
+          const results: TrackItem[] = [];
+          for (const clip of videoClips) {
+            const overlapStart = Math.max(seg.start, clip.mediaStart);
+            const overlapEnd   = Math.min(seg.end,   clip.mediaEnd);
+            if (overlapEnd - overlapStart < 0.1) continue;
+            const timeStart = clip.startTime + (overlapStart - clip.mediaStart);
+            const timeEnd   = clip.startTime + (overlapEnd   - clip.mediaStart);
+            if (timeEnd - timeStart < 0.1) continue;
+            results.push({
+              id: createId(), mediaId: '', trackId: subtitleTrack!.id,
+              startTime: timeStart, endTime: timeEnd,
+              mediaStart: 0, mediaEnd: timeEnd - timeStart,
+              name: `Legenda`, type: 'text' as const,
+              textDetails: { ...DEFAULT_TEXT_DETAILS, ...styleDetails, text: seg.text },
+            } as TrackItem);
+          }
+          return results;
+        });
 
       const updatedTracks = tracks.map((t) =>
         t.id === subtitleTrack!.id ? { ...t, items: [...t.items, ...newItems] } : t
