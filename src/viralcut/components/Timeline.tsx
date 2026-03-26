@@ -4,7 +4,7 @@
 // Playhead: draggable by handle; click empty lane area to seek
 // Quick-split button: cuts ALL items across tracks at playhead
 // ============================================================
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useMemo } from 'react';
 import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors, Plus } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
@@ -118,10 +118,14 @@ export function Timeline({
   }, []);
 
   const totalWidth = Math.max(duration * zoom + 300, 800);
-  const tickInterval = zoom < 60 ? 5 : zoom < 100 ? 2 : 1;
-  const ticks: number[] = [];
-  const totalSeconds = Math.ceil(totalWidth / zoom);
-  for (let i = 0; i <= totalSeconds; i += tickInterval) ticks.push(i);
+
+  const ticks = useMemo(() => {
+    const tickInterval = zoom < 60 ? 5 : zoom < 100 ? 2 : 1;
+    const totalSeconds = Math.ceil(totalWidth / zoom);
+    const result: number[] = [];
+    for (let i = 0; i <= totalSeconds; i += tickInterval) result.push(i);
+    return result;
+  }, [zoom, totalWidth]);
 
   // ── Shared: convert clientX inside the scroll area to timeline time ──
   const clientXToTime = useCallback((clientX: number): number => {

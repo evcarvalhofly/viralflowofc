@@ -205,20 +205,24 @@ const ViralCut = () => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? handleRedo() : handleUndo(); }
       if (e.key === 's' || e.key === 'S') { e.preventDefault(); splitAllRef.current?.(); }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedItemId) {
-          const track = project.tracks.find((t) => t.items.some((i) => i.id === selectedItemId));
-          if (track) handleItemDelete(track.id, selectedItemId);
+        const itemId = selectedItemIdRef.current;
+        if (itemId) {
+          const track = tracksRef.current.find((t) => t.items.some((i) => i.id === itemId));
+          if (track) handleItemDeleteRef.current?.(track.id, itemId);
         }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleUndo, handleRedo, selectedItemId, project.tracks, isMobile]);
+  }, [handleUndo, handleRedo, isMobile]);
 
   // ── Ref to latest tracks for RAF/effect callbacks ─────────
   const tracksRef = useRef(project.tracks);
   useEffect(() => { tracksRef.current = project.tracks; }, [project.tracks]);
+  const selectedItemIdRef = useRef(selectedItemId);
+  useEffect(() => { selectedItemIdRef.current = selectedItemId; }, [selectedItemId]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleItemDeleteRef = useRef<(trackId: string, itemId: string) => void>(null as any);
   useEffect(() => { mediaRef.current = media; }, [media]);
 
   // ── Playback ticker ───────────────────────────────────────
@@ -273,9 +277,14 @@ const ViralCut = () => {
   // ── Import media ──────────────────────────────────────────
   const handleImport = useCallback(async (files: FileList) => {
     for (const file of Array.from(files)) {
+      // Skip re-import of same file (same name + size) to avoid duplicate blob URLs
+      const existing = mediaRef.current.find((m) => m.name === file.name && m.file?.size === file.size);
+      if (existing) { setSelectedMediaId(existing.id); continue; }
+
       const url = URL.createObjectURL(file);
       // Fast metadata — no FFmpeg, never blocks the UI
-      const meta = await getMediaMetadata(file);
+      const meta = await getMediaMetadata(file).catch(() => null);
+      if (!meta) { URL.revokeObjectURL(url); continue; }
       const { duration, width, height, orientation } = meta;
       const thumbnail = await generateThumbnail(file);
       const type: MediaFile['type'] = file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'image';
@@ -529,6 +538,7 @@ const ViralCut = () => {
     }), { pushHistory: true });
     setSelectedItemId(null);
   }, [updateProject]);
+  handleItemDeleteRef.current = handleItemDelete;
 
   const handleUpdateItem = useCallback((trackId: string, itemId: string, updates: Partial<TrackItem>) => {
     setProjectRaw((p) => ({

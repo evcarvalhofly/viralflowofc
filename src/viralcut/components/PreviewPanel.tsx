@@ -3,7 +3,7 @@
 // Two hidden <video> elements swap on each clip change so there
 // is ZERO seek delay visible to the user (no black flash).
 // ============================================================
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Move } from 'lucide-react';
 import { Track, TrackItem, MediaFile, TextDetails, ImageDetails } from '../types';
 import { cn } from '@/lib/utils';
@@ -315,11 +315,14 @@ export function PreviewPanel({
     activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current, []);
 
   // ── Derived active items ───────────────────────────────────
-  const activeVideoTracks = tracks.filter((t) => t.type === 'video' && !t.muted);
+  const activeVideoTracks = useMemo(
+    () => tracks.filter((t) => t.type === 'video' && !t.muted),
+    [tracks]
+  );
   const baseVideoTrack = activeVideoTracks.length > 0 ? activeVideoTracks[0] : null;
   const overlayVideoTracks = activeVideoTracks.length > 1 ? activeVideoTracks.slice(1) : [];
 
-  const activeVideoItem = (() => {
+  const activeVideoItem = useMemo(() => {
     if (!baseVideoTrack) return null;
     for (const item of baseVideoTrack.items) {
       if (currentTime >= item.startTime && currentTime < item.endTime) {
@@ -327,9 +330,9 @@ export function PreviewPanel({
       }
     }
     return null;
-  })();
+  }, [baseVideoTrack, currentTime, media]);
 
-  const activeVideoOverlays = (() => {
+  const activeVideoOverlays = useMemo(() => {
     const overlays: { item: TrackItem; trackId: string; mediaFile?: MediaFile }[] = [];
     for (const track of overlayVideoTracks) {
       for (const item of track.items) {
@@ -339,33 +342,41 @@ export function PreviewPanel({
       }
     }
     return overlays;
-  })();
+  }, [overlayVideoTracks, currentTime, media]);
 
   // Next video item (for background preloading of base video ONLY)
-  const nextVideoItem = (() => {
+  const nextVideoItem = useMemo(() => {
     if (!activeVideoItem || !baseVideoTrack) return null;
-    const all = baseVideoTrack.items.sort((a, b) => a.startTime - b.startTime);
+    const all = [...baseVideoTrack.items].sort((a, b) => a.startTime - b.startTime);
     const idx = all.findIndex((i) => i.id === activeVideoItem.item.id);
     if (idx < 0 || idx >= all.length - 1) return null;
     const next = all[idx + 1];
     return { item: next, mediaFile: media.find((m) => m.id === next.mediaId) };
-  })();
+  }, [activeVideoItem, baseVideoTrack, media]);
 
   const { w: canvasW, h: canvasH } = previewSize(
     activeVideoItem?.mediaFile?.width,
     activeVideoItem?.mediaFile?.height
   );
 
-  const activeTextItems: TrackItem[] = tracks
-    .filter((t) => t.type === 'text' && !t.muted)
-    .flatMap((t) => t.items)
-    .filter((i) => currentTime >= i.startTime && currentTime < i.endTime);
+  const activeTextItems = useMemo(
+    () =>
+      tracks
+        .filter((t) => t.type === 'text' && !t.muted)
+        .flatMap((t) => t.items)
+        .filter((i) => currentTime >= i.startTime && currentTime < i.endTime),
+    [tracks, currentTime]
+  );
 
-  const activeImageItems: { item: TrackItem; trackId: string; mediaFile?: MediaFile }[] = tracks
-    .filter((t) => t.type === 'image' && !t.muted)
-    .flatMap((t) => t.items.map((item) => ({ item, trackId: t.id })))
-    .filter(({ item }) => currentTime >= item.startTime && currentTime < item.endTime)
-    .map(({ item, trackId }) => ({ item, trackId, mediaFile: media.find((m) => m.id === item.mediaId) }));
+  const activeImageItems = useMemo(
+    () =>
+      tracks
+        .filter((t) => t.type === 'image' && !t.muted)
+        .flatMap((t) => t.items.map((item) => ({ item, trackId: t.id })))
+        .filter(({ item }) => currentTime >= item.startTime && currentTime < item.endTime)
+        .map(({ item, trackId }) => ({ item, trackId, mediaFile: media.find((m) => m.id === item.mediaId) })),
+    [tracks, currentTime, media]
+  );
 
   const getTrackId = useCallback((itemId: string) => {
     return tracks.find((t) => t.items.some((i) => i.id === itemId))?.id ?? '';

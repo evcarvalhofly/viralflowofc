@@ -115,14 +115,6 @@ export function renderTimelineFrame({
       const srcW = videoEl.videoWidth  || width;
       const srcH = videoEl.videoHeight || height;
 
-      console.log('[DrawVideoElement]', {
-        mediaId:     videoItem.mediaId,
-        videoWidth:  srcW,
-        videoHeight: srcH,
-        canvasWidth: width,
-        canvasHeight: height,
-      });
-
       ctx.save();
       ctx.globalAlpha = vd?.opacity ?? 1;
       if (filters.length) {
