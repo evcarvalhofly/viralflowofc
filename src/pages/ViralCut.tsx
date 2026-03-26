@@ -275,7 +275,8 @@ const ViralCut = () => {
   }, []);
 
   // ── Import media ──────────────────────────────────────────
-  const handleImport = useCallback(async (files: FileList) => {
+  // mode='timeline' → adds to main track; mode='layer' → adds as overlay; mode='library' → media library only
+  const importMediaFiles = useCallback(async (files: FileList, mode: 'timeline' | 'layer' | 'library') => {
     for (const file of Array.from(files)) {
       // Skip re-import of same file (same name + size) to avoid duplicate blob URLs
       const existing = mediaRef.current.find((m) => m.name === file.name && m.file?.size === file.size);
@@ -294,68 +295,98 @@ const ViralCut = () => {
         orientation,
       };
 
-      // ── Add to state immediately so the editor opens right away ──
+      // ── Add to media library immediately ──
       setMedia((prev) => [...prev, mf]);
       setSelectedMediaId(mf.id);
 
-      // ── Capture project orientation state BEFORE updating ────────
-      let capturedIsFirstVideo = false;
-      let capturedAspectRatio: Project['aspectRatio'] = '16:9';
+      if (mode === 'library') continue; // desktop: user chooses what to do manually
 
-      updateProject((p) => {
-        const targetType: Track['type'] = type === 'audio' ? 'audio' : type === 'image' ? 'image' : 'video';
-        let track = p.tracks.find((t) => t.type === targetType);
-        let tracks = p.tracks;
+      const targetType: Track['type'] = type === 'audio' ? 'audio' : type === 'image' ? 'image' : 'video';
 
-        // ── Auto-orient: only on first video, only if project is still at defaults
-        const isFirstVideo =
-          type === 'video' &&
-          p.aspectRatio === '16:9' &&
-          p.width === 1920 &&
-          p.height === 1080 &&
-          (p.tracks.find((t) => t.type === 'video')?.items.length ?? 0) === 0;
-
-        capturedIsFirstVideo = isFirstVideo;
-        capturedAspectRatio = p.aspectRatio;
-
-        let orientationPatch: Partial<Project> = {};
-        const orientW = width;
-        const orientH = height;
-        if (isFirstVideo && orientW && orientH) {
-          const resolved = resolveAspectRatioFromMedia(orientW, orientH);
-          orientationPatch = {
-            aspectRatio: resolved.aspectRatio,
-            width: resolved.projectWidth,
-            height: resolved.projectHeight,
+      if (mode === 'layer') {
+        // Mobile Camada tab: import directly as overlay layer
+        updateProject((p) => {
+          const videoTracks = p.tracks.filter(t => t.type === 'video');
+          if (targetType === 'video' && videoTracks.length >= 3) {
+            alert('Máximo de 2 camadas extras de vídeo atingido para manter a performance de exportação.');
+            return p;
+          }
+          const dur = duration > 0 ? duration : 5;
+          const newTrack: Track = { id: createId(), type: targetType, items: [], locked: false, muted: false };
+          const item: TrackItem = {
+            id: createId(), mediaId: mf.id, trackId: newTrack.id,
+            startTime: currentTime, endTime: currentTime + dur,
+            mediaStart: 0, mediaEnd: dur,
+            name: file.name.replace(/\.[^.]+$/, '') + ' (Camada)', type: targetType,
+            videoDetails: targetType === 'video' ? { ...DEFAULT_VIDEO_DETAILS, posX: 50, posY: 50, width: 33, height: 33 } : undefined,
+            audioDetails: targetType === 'audio' ? { ...DEFAULT_AUDIO_DETAILS } : undefined,
+            imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS, posX: 50, posY: 50, width: 33, height: 33 } : undefined,
           };
-        }
+          newTrack.items.push(item);
+          return { ...p, tracks: [...p.tracks, newTrack] };
+        }, { pushHistory: true });
+      } else {
+        // mode === 'timeline': add to main timeline track
+        // ── Capture project orientation state BEFORE updating ────────
+        let capturedIsFirstVideo = false;
+        let capturedAspectRatio: Project['aspectRatio'] = '16:9';
 
-        if (!track && targetType === 'image') {
-          const newTrack: Track = { id: createId(), type: 'image', items: [], locked: false, muted: false };
-          tracks = [...p.tracks, newTrack];
-          track = newTrack;
-        }
-        if (!track) return { ...p, ...orientationPatch };
-        const lastEnd = track.items.reduce((acc, i) => Math.max(acc, i.endTime), 0);
-        const dur = duration > 0 ? duration : 5;
-        const item: TrackItem = {
-          id: createId(), mediaId: mf.id, trackId: track.id,
-          startTime: lastEnd, endTime: lastEnd + dur,
-          mediaStart: 0, mediaEnd: dur,
-          name: file.name.replace(/\.[^.]+$/, ''),
-          type: targetType,
-          videoDetails: targetType === 'video' ? { ...DEFAULT_VIDEO_DETAILS } : undefined,
-          audioDetails: targetType === 'audio' ? { ...DEFAULT_AUDIO_DETAILS } : undefined,
-          imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS } : undefined,
-        };
-        const newTracks = tracks.map((t) => t.id === track!.id ? { ...t, items: [...t.items, item] } : t);
-        return { ...p, ...orientationPatch, tracks: newTracks };
-      }, { pushHistory: true });
+        updateProject((p) => {
+          let track = p.tracks.find((t) => t.type === targetType);
+          let tracks = p.tracks;
 
-      // No background probe needed — browser already returns
-      // display-corrected dimensions from video.videoWidth/videoHeight.
+          // ── Auto-orient: only on first video, only if project is still at defaults
+          const isFirstVideo =
+            type === 'video' &&
+            p.aspectRatio === '16:9' &&
+            p.width === 1920 &&
+            p.height === 1080 &&
+            (p.tracks.find((t) => t.type === 'video')?.items.length ?? 0) === 0;
+
+          capturedIsFirstVideo = isFirstVideo;
+          capturedAspectRatio = p.aspectRatio;
+
+          let orientationPatch: Partial<Project> = {};
+          const orientW = width;
+          const orientH = height;
+          if (isFirstVideo && orientW && orientH) {
+            const resolved = resolveAspectRatioFromMedia(orientW, orientH);
+            orientationPatch = {
+              aspectRatio: resolved.aspectRatio,
+              width: resolved.projectWidth,
+              height: resolved.projectHeight,
+            };
+          }
+
+          if (!track && targetType === 'image') {
+            const newTrack: Track = { id: createId(), type: 'image', items: [], locked: false, muted: false };
+            tracks = [...p.tracks, newTrack];
+            track = newTrack;
+          }
+          if (!track) return { ...p, ...orientationPatch };
+          const lastEnd = track.items.reduce((acc, i) => Math.max(acc, i.endTime), 0);
+          const dur = duration > 0 ? duration : 5;
+          const item: TrackItem = {
+            id: createId(), mediaId: mf.id, trackId: track.id,
+            startTime: lastEnd, endTime: lastEnd + dur,
+            mediaStart: 0, mediaEnd: dur,
+            name: file.name.replace(/\.[^.]+$/, ''),
+            type: targetType,
+            videoDetails: targetType === 'video' ? { ...DEFAULT_VIDEO_DETAILS } : undefined,
+            audioDetails: targetType === 'audio' ? { ...DEFAULT_AUDIO_DETAILS } : undefined,
+            imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS } : undefined,
+          };
+          const newTracks = tracks.map((t) => t.id === track!.id ? { ...t, items: [...t.items, item] } : t);
+          return { ...p, ...orientationPatch, tracks: newTracks };
+        }, { pushHistory: true });
+      }
     }
-  }, [updateProject, resolveAspectRatioFromMedia]);
+  }, [updateProject, resolveAspectRatioFromMedia, currentTime]);
+
+  // Convenience wrappers for each context
+  const handleImport         = useCallback((files: FileList) => importMediaFiles(files, 'timeline'), [importMediaFiles]);
+  const handleImportLibrary  = useCallback((files: FileList) => importMediaFiles(files, 'library'),  [importMediaFiles]);
+  const handleImportLayer    = useCallback((files: FileList) => importMediaFiles(files, 'layer'),    [importMediaFiles]);
 
   const handleAutoCutImport = useCallback(async (files: FileList) => {
     await handleImport(files);
@@ -1011,7 +1042,7 @@ const ViralCut = () => {
                     onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
                     onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} defaultTab="text" />
                 ) : mobileTab === 'camada' ? (
-                  <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImport}
+                  <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImportLayer}
                     onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
                     onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} isOverlayMode={true} defaultTab="uploads" />
                 ) : mobileTab === 'midia' ? (
@@ -1100,7 +1131,7 @@ const ViralCut = () => {
               <AutoCut tracks={project.tracks} media={media} onApplyCuts={handleApplyAutoCuts}
                 onClose={() => setShowAutoCut(false)} />
             ) : (
-              <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImport}
+              <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImportLibrary}
                 onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
                 onAddOverlay={handleAddOverlay} onAddText={handleAddText} onAddShape={handleAddShape} onAddTransition={() => {}} />
             )}
