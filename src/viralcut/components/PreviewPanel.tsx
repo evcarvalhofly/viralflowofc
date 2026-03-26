@@ -116,7 +116,8 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
   };
 
   const handlePinchStart = (e: React.TouchEvent) => {
-    if (!isSelected || e.touches.length < 2) return;
+    if (e.touches.length < 2) return;
+    onSelect();
     e.stopPropagation();
     e.preventDefault();
 
@@ -203,7 +204,7 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
       }}
       onMouseDown={handleDragStart}
       onTouchStart={(e) => {
-        if (e.touches.length >= 2 && isSelected) {
+        if (e.touches.length >= 2) {
           handlePinchStart(e);
         } else {
           const now = Date.now();

@@ -19,7 +19,7 @@ const STYLE_OPTIONS: { id: SubtitleStyle; label: string; desc: string; preview: 
     desc: 'Fundo escuro + texto branco',
     preview: (
       <span className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'rgba(0,0,0,0.75)' }}>
-        Exemplo de legenda
+        Exemplo
       </span>
     ),
   },
@@ -29,7 +29,7 @@ const STYLE_OPTIONS: { id: SubtitleStyle; label: string; desc: string; preview: 
     desc: 'Texto branco com sombra',
     preview: (
       <span className="px-2 py-0.5 text-xs font-bold text-white" style={{ textShadow: '1px 1px 4px #000, -1px -1px 4px #000' }}>
-        Exemplo de legenda
+        Exemplo
       </span>
     ),
   },
@@ -39,7 +39,7 @@ const STYLE_OPTIONS: { id: SubtitleStyle; label: string; desc: string; preview: 
     desc: 'Amarelo + fundo escuro',
     preview: (
       <span className="px-2 py-0.5 rounded text-xs font-bold" style={{ color: '#facc15', background: 'rgba(0,0,0,0.8)' }}>
-        Exemplo de legenda
+        Exemplo
       </span>
     ),
   },

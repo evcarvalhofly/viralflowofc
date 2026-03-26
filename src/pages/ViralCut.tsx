@@ -579,9 +579,23 @@ const ViralCut = () => {
 
   // ── Subtitle text styles per preset ──────────────────────
   const SUBTITLE_TEXT_DETAILS: Record<SubtitleStyle, Partial<typeof DEFAULT_TEXT_DETAILS>> = {
-    classic: { fontSize: 4.5, color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.75)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0 } },
-    minimal: { fontSize: 4.5, color: '#ffffff', backgroundColor: 'transparent', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 1, y: 1, blur: 6 } },
-    viral:   { fontSize: 4.5, color: '#facc15', backgroundColor: 'rgba(0,0,0,0.82)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0 } },
+    classic: { fontSize: 3, color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.75)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0 } },
+    minimal: { fontSize: 3, color: '#ffffff', backgroundColor: 'transparent', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 1, y: 1, blur: 6 } },
+    viral:   { fontSize: 3, color: '#facc15', backgroundColor: 'rgba(0,0,0,0.82)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0 } },
+  };
+
+  // Divide segmento longo em chunks de até maxWords palavras com tempo proporcional
+  const splitByWords = (seg: SubtitleSegment, maxWords = 3): SubtitleSegment[] => {
+    const words = seg.text.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= maxWords) return [seg];
+    const chunks: string[] = [];
+    for (let i = 0; i < words.length; i += maxWords) chunks.push(words.slice(i, i + maxWords).join(' '));
+    const dur = seg.end - seg.start;
+    return chunks.map((text, idx) => ({
+      start: seg.start + (idx / chunks.length) * dur,
+      end: seg.start + ((idx + 1) / chunks.length) * dur,
+      text,
+    }));
   };
 
   const handleAddSubtitles = useCallback((segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle) => {
@@ -594,7 +608,8 @@ const ViralCut = () => {
         tracks = [...p.tracks, subtitleTrack];
       }
       const styleDetails = SUBTITLE_TEXT_DETAILS[style];
-      const newItems: TrackItem[] = segments
+      // Divide segmentos longos em até 3 palavras por legenda
+      const newItems: TrackItem[] = segments.flatMap(seg => splitByWords(seg, 3))
         .map((seg) => {
           // Converte timestamp do arquivo de mídia para posição na timeline
           const start = videoItem.startTime + (seg.start - videoItem.mediaStart);
