@@ -34,6 +34,8 @@ const GameOver = () => {
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
 
   const recognitionRef = useRef<any>(null);
+  // Ref síncrono para evitar race condition no onend
+  const isRecordingRef = useRef(false);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -41,7 +43,10 @@ const GameOver = () => {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
-        recognition.continuous = true;
+        // continuous: false + reinício manual no onend evita duplicação no mobile.
+        // Quando continuous:true, o browser mobile reinicia internamente e
+        // event.resultIndex volta a 0, reprocessando transcritos já adicionados.
+        recognition.continuous = false;
         recognition.interimResults = true;
         recognition.lang = "pt-BR";
 
@@ -51,33 +56,42 @@ const GameOver = () => {
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
-              finalTranscript += transcript + " ";
+              finalTranscript += transcript;
             } else {
               currentInterim += transcript;
             }
           }
-          if (finalTranscript) {
-            setText((prev) => prev + (prev.endsWith(" ") || prev.length === 0 ? "" : " ") + finalTranscript);
+          if (finalTranscript.trim()) {
+            setText((prev) => prev + (prev.length > 0 && !prev.endsWith(" ") ? " " : "") + finalTranscript.trim() + " ");
           }
           setInterimText(currentInterim);
         };
 
         recognition.onerror = (event: any) => {
+          // Ignora "no-speech" para não parar gravação por silêncio
+          if (event.error === "no-speech") return;
           console.error("Speech recognition error", event.error);
+          isRecordingRef.current = false;
           setIsRecording(false);
           setInterimText("");
         };
 
         recognition.onend = () => {
-          setIsRecording(false);
           setInterimText("");
+          // Se ainda estiver gravando, reinicia a sessão (seamless no mobile)
+          if (isRecordingRef.current) {
+            try { recognition.start(); } catch (_) {}
+          } else {
+            setIsRecording(false);
+          }
         };
 
         recognitionRef.current = recognition;
       }
     }
-    
+
     return () => {
+      isRecordingRef.current = false;
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
@@ -95,13 +109,16 @@ const GameOver = () => {
     }
 
     if (isRecording) {
+      isRecordingRef.current = false;
       recognitionRef.current.stop();
       setIsRecording(false);
     } else {
       try {
+        isRecordingRef.current = true;
         recognitionRef.current.start();
         setIsRecording(true);
       } catch (e) {
+        isRecordingRef.current = false;
         console.error(e);
       }
     }
