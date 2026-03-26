@@ -4,7 +4,7 @@
 // Playhead: draggable by handle; click empty lane area to seek
 // Quick-split button: cuts ALL items across tracks at playhead
 // ============================================================
-import { useRef, useState, useCallback, useMemo, useEffect } from 'react';
+import { useRef, useState, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
 import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors, Plus } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
@@ -111,9 +111,18 @@ export function Timeline({
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────
-  const pinchRef = useRef<{ dist: number } | null>(null);
-  const zoomRef  = useRef(zoom);
+  const pinchRef        = useRef<{ dist: number; anchorX: number } | null>(null);
+  const zoomRef         = useRef(zoom);
+  const pendingScrollRef = useRef<number | null>(null);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  // Apply scroll correction after React commits the new zoom (no visual flash)
+  useLayoutEffect(() => {
+    if (pendingScrollRef.current !== null && scrollRef.current) {
+      scrollRef.current.scrollLeft = Math.max(0, pendingScrollRef.current);
+      pendingScrollRef.current = null;
+    }
+  }, [zoom]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -123,7 +132,11 @@ export function Timeline({
       if (e.touches.length === 2) {
         const dx = e.touches[1].clientX - e.touches[0].clientX;
         const dy = e.touches[1].clientY - e.touches[0].clientY;
-        pinchRef.current = { dist: Math.hypot(dx, dy) };
+        // anchorX: midpoint of fingers relative to the scrollable content area (label col = 160px)
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const rect = el.getBoundingClientRect();
+        const anchorX = midX - rect.left - 160;
+        pinchRef.current = { dist: Math.hypot(dx, dy), anchorX };
       } else {
         pinchRef.current = null;
       }
@@ -139,8 +152,12 @@ export function Timeline({
       const ratio = newDist / pinchRef.current.dist;
       pinchRef.current.dist = newDist;
 
-      const newZoom = Math.min(300, Math.max(20, Math.round(zoomRef.current * ratio)));
-      if (newZoom !== zoomRef.current) {
+      const oldZoom = zoomRef.current;
+      const newZoom = Math.min(300, Math.max(20, Math.round(oldZoom * ratio)));
+      if (newZoom !== oldZoom) {
+        const { anchorX } = pinchRef.current;
+        // Keep the anchor time fixed: newScrollLeft = (anchorX + scrollLeft) * ratio - anchorX
+        pendingScrollRef.current = (anchorX + el.scrollLeft) * (newZoom / oldZoom) - anchorX;
         zoomRef.current = newZoom;
         onZoomChange?.(newZoom);
       }
