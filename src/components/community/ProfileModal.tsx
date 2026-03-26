@@ -33,6 +33,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
   const [friendshipId, setFriendshipId] = useState<string | null>(null);
   const [friendCount, setFriendCount] = useState(0);
   const [isReporting, setIsReporting] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
+  const [reportReason, setReportReason] = useState('');
   const [showChat, setShowChat] = useState(false);
 
   useEffect(() => {
@@ -109,21 +111,25 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
     }
   };
 
-  const handleReport = async () => {
+  const handleReport = () => {
     if (!currentUserId) return;
-    if (confirm('Tem certeza que deseja denunciar este usuário? Administradores irão analisar o caso.')) {
-      setIsReporting(true);
-      const { error } = await supabase
-        .from('reports')
-        .insert({ reporter_id: currentUserId, reported_id: profile.user_id, reason: 'Denúncia pela comunidade' });
-      
-      setIsReporting(false);
-      if (error) {
-        if (error.code === '23505') toast.error('Você já denunciou este usuário!');
-        else toast.error('Erro ao enviar denúncia');
-      } else {
-        toast.success('Denúncia enviada e registrada!');
-      }
+    setReportReason('');
+    setShowReportDialog(true);
+  };
+
+  const submitReport = async () => {
+    if (reportReason.trim().length < 150) return;
+    setIsReporting(true);
+    const { error } = await supabase
+      .from('reports')
+      .insert({ reporter_id: currentUserId, reported_id: profile.user_id, reason: reportReason.trim() });
+    setIsReporting(false);
+    if (error) {
+      if (error.code === '23505') toast.error('Você já denunciou este usuário!');
+      else toast.error('Erro ao enviar denúncia');
+    } else {
+      toast.success('Denúncia enviada e registrada!');
+      setShowReportDialog(false);
     }
   };
 
@@ -137,6 +143,51 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, currentUserId, onC
         onClose={() => setShowChat(false)}
       />
     )}
+
+    {/* Dialog de denúncia */}
+    {showReportDialog && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm pointer-events-auto" onClick={() => setShowReportDialog(false)}>
+        <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-1">
+            <Flag className="w-4 h-4 text-red-500" />
+            <h3 className="font-semibold text-foreground">Denunciar usuário</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Explique detalhadamente o motivo da denúncia. <span className="text-foreground font-medium">Mínimo 150 caracteres.</span>
+          </p>
+          <textarea
+            className="w-full bg-muted border border-border rounded-xl p-3 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-red-500/50 placeholder:text-muted-foreground"
+            rows={5}
+            placeholder="Descreva o ocorrido com detalhes suficientes para que os administradores possam analisar o caso..."
+            value={reportReason}
+            onChange={e => setReportReason(e.target.value)}
+            maxLength={1000}
+          />
+          <div className="flex justify-between items-center mt-1 mb-4">
+            <span className={`text-xs font-medium ${reportReason.trim().length < 150 ? 'text-red-400' : 'text-green-400'}`}>
+              {reportReason.trim().length}/150 caracteres mínimos
+            </span>
+            <span className="text-xs text-muted-foreground">{reportReason.length}/1000</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowReportDialog(false)}
+              className="flex-1 py-2 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={submitReport}
+              disabled={isReporting || reportReason.trim().length < 150}
+              className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+            >
+              {isReporting ? 'Enviando...' : 'Enviar denúncia'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm shadow-2xl pointer-events-auto" onClick={onClose}>
       <div 
         className="bg-card border border-border p-6 rounded-2xl w-full max-w-sm flex flex-col items-center animate-in zoom-in-95 duration-200 shadow-2xl relative"
