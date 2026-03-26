@@ -8,7 +8,6 @@ interface SubtitleModalProps {
   videoItem: TrackItem | null;       // clip de vídeo selecionado ou primeiro da timeline
   mediaFile: MediaFile | null;        // arquivo correspondente ao videoItem
   userId: string;
-  apiKey: string;
   onGenerate: (segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle) => void;
   onClose: () => void;
 }
@@ -52,7 +51,7 @@ const LANGUAGES = [
   { code: 'es', label: 'Español' },
 ];
 
-export function SubtitleModal({ videoItem, mediaFile, userId, apiKey, onGenerate, onClose }: SubtitleModalProps) {
+export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClose }: SubtitleModalProps) {
   const { generating, statusLabel, generate, getMonthlyUsed, MONTHLY_LIMIT_SECONDS } = useSubtitleGeneration();
   const [style, setStyle] = useState<SubtitleStyle>('classic');
   const [language, setLanguage] = useState('pt');
@@ -73,7 +72,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, apiKey, onGenerate
   const handleGenerate = async () => {
     if (!videoItem || !mediaFile) return;
     setError('');
-    const result = await generate({ videoFile: mediaFile.file, clipDurationSec: clipDuration, language, userId, apiKey });
+    const result = await generate({ videoFile: mediaFile.file, clipDurationSec: clipDuration, language, userId });
     if (result.error) {
       setError(result.error);
       return;

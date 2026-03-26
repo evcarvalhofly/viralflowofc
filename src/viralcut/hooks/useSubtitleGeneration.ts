@@ -21,12 +21,12 @@ function encodeWAV(samples: Float32Array, sampleRate: number): Blob {
   str(8, 'WAVE');
   str(12, 'fmt ');
   view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);    // PCM
-  view.setUint16(22, 1, true);    // mono
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true); // byteRate
-  view.setUint16(32, 2, true);    // blockAlign
-  view.setUint16(34, 16, true);   // bitsPerSample
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
   str(36, 'data');
   view.setUint32(40, samples.length * 2, true);
   let off = 44;
@@ -40,7 +40,7 @@ function encodeWAV(samples: Float32Array, sampleRate: number): Blob {
 
 /**
  * Extrai áudio do arquivo de vídeo, reamostrado para 16kHz mono WAV.
- * Isso reduz o tamanho significativamente (ex: vídeo 100MB → ~10MB de áudio).
+ * Reduz o tamanho para envio (ex: vídeo 100MB → ~10MB de áudio).
  */
 async function extractAudioWAV(file: File): Promise<Blob> {
   const arrayBuffer = await file.arrayBuffer();
@@ -73,9 +73,8 @@ export function useSubtitleGeneration() {
     clipDurationSec: number;
     language: string;
     userId: string;
-    apiKey: string;
   }): Promise<{ segments: SubtitleSegment[]; error?: string }> => {
-    const { videoFile, clipDurationSec, language, userId, apiKey } = opts;
+    const { videoFile, clipDurationSec, language, userId } = opts;
 
     // Verifica limite mensal
     const used = await getMonthlyUsed(userId);
@@ -87,46 +86,54 @@ export function useSubtitleGeneration() {
 
     setGenerating(true);
     try {
-      // Prefere enviar arquivo direto se pequeno o suficiente (< 24MB)
       let audioPayload: Blob;
       let fileName: string;
+
       if (videoFile.size < 24 * 1024 * 1024) {
+        // Arquivo pequeno: envia direto
         audioPayload = videoFile;
         fileName = videoFile.name;
         setStatusLabel('Enviando para transcrição...');
       } else {
+        // Arquivo grande: extrai e reamostra áudio para 16kHz WAV
         setStatusLabel('Extraindo áudio...');
         audioPayload = await extractAudioWAV(videoFile);
         fileName = 'audio.wav';
         setStatusLabel('Transcrevendo com Whisper...');
       }
 
-      const formData = new FormData();
-      formData.append('file', audioPayload, fileName);
-      formData.append('model', 'whisper-1');
-      formData.append('language', language);
-      formData.append('response_format', 'verbose_json');
-      formData.append('timestamp_granularities[]', 'segment');
+      // Chama a Edge Function (a chave OpenAI fica segura no servidor)
+      const form = new FormData();
+      form.append('audio', audioPayload, fileName);
+      form.append('language', language);
 
-      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: formData,
+        headers: {
+          Authorization: `Bearer ${session?.access_token ?? supabaseKey}`,
+          apikey: supabaseKey,
+        },
+        body: form,
       });
 
+      const result = await res.json();
+
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error?.message ?? `Erro HTTP ${res.status}`);
+        throw new Error(result?.error ?? `Erro HTTP ${res.status}`);
       }
 
-      const data = await res.json();
-      const segments: SubtitleSegment[] = (data.segments ?? []).map((s: any) => ({
+      const segments: SubtitleSegment[] = (result.segments ?? []).map((s: any) => ({
         start: s.start,
         end: s.end,
         text: s.text.trim(),
       }));
 
-      // Registra uso no banco (não bloqueia em caso de falha)
+      // Registra uso (não bloqueia em caso de falha)
       (supabase as any)
         .rpc('increment_subtitle_usage', { p_user_id: userId, p_seconds: Math.ceil(clipDurationSec) })
         .catch(() => {});

@@ -124,8 +124,6 @@ function calcDuration(tracks: Track[]): number {
 
 type MobileTab = 'editar' | 'audio' | 'texto' | 'camada' | 'midia';
 
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string ?? '';
-
 const ViralCut = () => {
   const isMobile = useIsMobile();
   const { user } = useAuth();
@@ -1094,7 +1092,6 @@ const ViralCut = () => {
           videoItem={subtitleVideoItem}
           mediaFile={subtitleMediaFile}
           userId={user?.id ?? ''}
-          apiKey={OPENAI_API_KEY}
           onGenerate={handleAddSubtitles}
           onClose={() => setShowSubtitleModal(false)}
         />
