@@ -620,23 +620,6 @@ const ViralCut = () => {
     }, { pushHistory: true });
   }, [updateProject]);
 
-  // Clipe de vídeo para legendas: item selecionado (se for vídeo) ou primeiro da timeline
-  const subtitleVideoItem = useMemo(() => {
-    if (selectedItem?.type === 'video') return selectedItem;
-    for (const t of project.tracks) {
-      if (t.type === 'video' && !t.muted) {
-        const item = t.items[0];
-        if (item) return item;
-      }
-    }
-    return null;
-  }, [selectedItem, project.tracks]);
-
-  const subtitleMediaFile = useMemo(
-    () => subtitleVideoItem ? media.find((m) => m.id === subtitleVideoItem.mediaId) ?? null : null,
-    [subtitleVideoItem, media]
-  );
-
   const handleSplitAllAtPlayhead = useCallback(() => {
     const t = currentTime;
     updateProject((p) => {
@@ -721,6 +704,23 @@ const ViralCut = () => {
     if (isMobile) { setMobileTab('editar'); setShowMobilePanel(true); }
     else { setShowProperties(true); }
   }, [isMobile]);
+
+  // Clipe de vídeo para legendas: item selecionado (se for vídeo) ou primeiro da timeline
+  const subtitleVideoItem = useMemo(() => {
+    if (selectedItem?.type === 'video') return selectedItem;
+    for (const t of project.tracks) {
+      if (t.type === 'video' && !t.muted) {
+        const item = t.items[0];
+        if (item) return item;
+      }
+    }
+    return null;
+  }, [selectedItem, project.tracks]);
+
+  const subtitleMediaFile = useMemo(
+    () => subtitleVideoItem ? media.find((m) => m.id === subtitleVideoItem.mediaId) ?? null : null,
+    [subtitleVideoItem, media]
+  );
 
   // ── Mobile: no media yet ──────────────────────────────────
   if (isMobile && !hasMedia) {
