@@ -25,7 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers,
-  Upload, Plus, Wand2, X, ZoomIn, ZoomOut
+  Upload, Plus, Wand2, X, ZoomIn, ZoomOut, Captions
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -130,6 +130,7 @@ const ViralCut = () => {
   const importRef = useRef<HTMLInputElement>(null);
   const importJsonRef = useRef<HTMLInputElement>(null);
   const autoCutImportRef = useRef<HTMLInputElement>(null);
+  const subtitleImportRef = useRef<HTMLInputElement>(null);
   const splitAllRef = useRef<(() => void) | null>(null);
 
   // ── Core project state ────────────────────────────────────
@@ -765,12 +766,40 @@ const ViralCut = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Remove silêncios e pausas do vídeo</p>
             </div>
           </button>
+          <button
+            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-violet-500/40 bg-violet-500/5 hover:bg-violet-500/10 hover:border-violet-500/60 transition-all px-5 py-4"
+            onClick={() => subtitleImportRef.current?.click()}
+          >
+            <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center shrink-0">
+              <Captions className="h-5 w-5 text-violet-400" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-foreground">+ Legendas Automáticas</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Gerado por IA com Whisper</p>
+            </div>
+          </button>
         </div>
         <input ref={importRef} type="file" accept="video/*,audio/*,image/*" multiple className="hidden"
           onChange={(e) => e.target.files && handleImport(e.target.files)} />
         <input ref={autoCutImportRef} type="file" accept="video/*" className="hidden"
           onChange={(e) => e.target.files && handleAutoCutImport(e.target.files)} />
+        <input ref={subtitleImportRef} type="file" accept="video/*" className="hidden"
+          onChange={async (e) => {
+            if (e.target.files) {
+              await handleImport(e.target.files);
+              setShowSubtitleModal(true);
+            }
+          }} />
         <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
+        {showSubtitleModal && (
+          <SubtitleModal
+            videoItem={subtitleVideoItem}
+            mediaFile={subtitleMediaFile}
+            userId={user?.id ?? ''}
+            onGenerate={handleAddSubtitles}
+            onClose={() => setShowSubtitleModal(false)}
+          />
+        )}
       </div>
     );
   }
@@ -951,10 +980,26 @@ const ViralCut = () => {
               <Wand2 className="h-5 w-5" />
               <span className="text-[10px] font-medium">Auto</span>
             </button>
+            <button
+              className={cn('flex-1 flex flex-col items-center justify-center gap-1 transition-colors',
+                showSubtitleModal ? 'text-violet-400' : 'text-muted-foreground')}
+              onClick={() => setShowSubtitleModal(true)}>
+              <Captions className="h-5 w-5" />
+              <span className="text-[10px] font-medium">Legendas</span>
+            </button>
           </div>
         </div>
 
         <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
+        {showSubtitleModal && (
+          <SubtitleModal
+            videoItem={subtitleVideoItem}
+            mediaFile={subtitleMediaFile}
+            userId={user?.id ?? ''}
+            onGenerate={handleAddSubtitles}
+            onClose={() => setShowSubtitleModal(false)}
+          />
+        )}
       </div>
     );
   }
