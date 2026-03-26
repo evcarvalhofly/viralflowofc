@@ -134,9 +134,9 @@ export function useSubtitleGeneration() {
       }));
 
       // Registra uso (não bloqueia em caso de falha)
-      (supabase as any)
-        .rpc('increment_subtitle_usage', { p_user_id: userId, p_seconds: Math.ceil(clipDurationSec) })
-        .catch(() => {});
+      Promise.resolve(
+        (supabase as any).rpc('increment_subtitle_usage', { p_user_id: userId, p_seconds: Math.ceil(clipDurationSec) })
+      ).catch(() => {});
 
       return { segments };
     } catch (e: any) {
