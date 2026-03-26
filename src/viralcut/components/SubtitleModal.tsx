@@ -8,7 +8,7 @@ interface SubtitleModalProps {
   videoItem: TrackItem | null;       // clip de vídeo selecionado ou primeiro da timeline
   mediaFile: MediaFile | null;        // arquivo correspondente ao videoItem
   userId: string;
-  onGenerate: (segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle) => void;
+  onGenerate: (segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number) => void;
   onClose: () => void;
 }
 
@@ -55,6 +55,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
   const { generating, statusLabel, generate, getMonthlyUsed, MONTHLY_LIMIT_SECONDS } = useSubtitleGeneration();
   const [style, setStyle] = useState<SubtitleStyle>('classic');
   const [language, setLanguage] = useState('pt');
+  const [maxWords, setMaxWords] = useState(3);
   const [error, setError] = useState('');
   const [monthlyUsed, setMonthlyUsed] = useState(0);
 
@@ -77,7 +78,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
       setError(result.error);
       return;
     }
-    onGenerate(result.segments, videoItem, style);
+    onGenerate(result.segments, videoItem, style, maxWords);
     onClose();
   };
 
@@ -147,6 +148,26 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
                 <option key={l.code} value={l.code}>{l.label}</option>
               ))}
             </select>
+          </div>
+
+          {/* Palavras por legenda */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Palavras por legenda</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 2, 3].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setMaxWords(n)}
+                  className={`py-2 rounded-xl border text-xs font-medium transition-all ${
+                    maxWords === n
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border bg-muted text-muted-foreground hover:border-primary/50'
+                  }`}
+                >
+                  {n} {n === 1 ? 'palavra' : 'palavras'}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Estilo */}

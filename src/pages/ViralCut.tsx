@@ -598,7 +598,7 @@ const ViralCut = () => {
     }));
   };
 
-  const handleAddSubtitles = useCallback((segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle) => {
+  const handleAddSubtitles = useCallback((segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number) => {
     updateProject((p) => {
       // Cria ou reutiliza trilha "Legendas"
       let subtitleTrack = p.tracks.find((t) => t.type === 'text' && t.items.some((i) => i.name.startsWith('Legenda')));
@@ -609,7 +609,7 @@ const ViralCut = () => {
       }
       const styleDetails = SUBTITLE_TEXT_DETAILS[style];
       // Divide segmentos longos em até 3 palavras por legenda
-      const newItems: TrackItem[] = segments.flatMap(seg => splitByWords(seg, 3))
+      const newItems: TrackItem[] = segments.flatMap(seg => splitByWords(seg, maxWords))
         .map((seg) => {
           // Converte timestamp do arquivo de mídia para posição na timeline
           const start = videoItem.startTime + (seg.start - videoItem.mediaStart);
