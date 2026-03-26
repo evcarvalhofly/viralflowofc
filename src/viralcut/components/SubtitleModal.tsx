@@ -12,37 +12,15 @@ interface SubtitleModalProps {
   onClose: () => void;
 }
 
-const STYLE_OPTIONS: { id: SubtitleStyle; label: string; desc: string; preview: React.ReactNode }[] = [
-  {
-    id: 'classic',
-    label: 'Clássico',
-    desc: 'Fundo escuro + texto branco',
-    preview: (
-      <span className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'rgba(0,0,0,0.75)' }}>
-        Exemplo
-      </span>
-    ),
-  },
-  {
-    id: 'minimal',
-    label: 'Minimal',
-    desc: 'Texto branco com sombra',
-    preview: (
-      <span className="px-2 py-0.5 text-xs font-bold text-white" style={{ textShadow: '1px 1px 4px #000, -1px -1px 4px #000' }}>
-        Exemplo
-      </span>
-    ),
-  },
-  {
-    id: 'viral',
-    label: 'Viral',
-    desc: 'Amarelo + fundo escuro',
-    preview: (
-      <span className="px-2 py-0.5 rounded text-xs font-bold" style={{ color: '#facc15', background: 'rgba(0,0,0,0.8)' }}>
-        Exemplo
-      </span>
-    ),
-  },
+const STYLE_OPTIONS: { id: SubtitleStyle; label: string; preview: React.CSSProperties }[] = [
+  { id: 'classic', label: 'Clássico',  preview: { color: '#ffffff', background: 'rgba(0,0,0,0.75)', fontFamily: 'Inter, sans-serif' } },
+  { id: 'minimal', label: 'Minimal',   preview: { color: '#ffffff', background: 'transparent',       fontFamily: 'Inter, sans-serif', textShadow: '0 0 6px #000, 1px 1px 3px #000' } },
+  { id: 'viral',   label: 'Viral',     preview: { color: '#facc15', background: 'rgba(0,0,0,0.82)',  fontFamily: 'Inter, sans-serif' } },
+  { id: 'bold',    label: 'Bold',      preview: { color: '#ffffff', background: 'transparent',       fontFamily: '"Anton", Impact, sans-serif', WebkitTextStroke: '1.5px #000' } },
+  { id: 'neon',    label: 'Neon',      preview: { color: '#00f5ff', background: 'transparent',       fontFamily: 'Inter, sans-serif', textShadow: '0 0 8px #00f5ff, 0 0 14px #00f5ff' } },
+  { id: 'cinema',  label: 'Cinema',    preview: { color: '#ffffff', background: 'rgba(0,0,0,0.55)',  fontFamily: 'Georgia, serif', fontSize: '10px' } },
+  { id: 'karaoke', label: 'Karaoke',   preview: { color: '#ffffff', background: 'rgba(234,179,8,0.9)', fontFamily: '"Bebas Neue", sans-serif' } },
+  { id: 'fire',    label: 'Fire',      preview: { color: '#ffffff', background: 'rgba(220,38,38,0.88)', fontFamily: '"Oswald", sans-serif' } },
 ];
 
 const LANGUAGES = [
@@ -173,19 +151,23 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
           {/* Estilo */}
           <div>
             <label className="text-xs font-medium text-muted-foreground block mb-1.5">Estilo da legenda</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {STYLE_OPTIONS.map(s => (
                 <button
                   key={s.id}
                   onClick={() => setStyle(s.id)}
-                  className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border text-xs transition-all ${
+                  className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all ${
                     style === s.id
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border bg-muted text-muted-foreground hover:border-primary/50'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border bg-muted hover:border-primary/50'
                   }`}
                 >
-                  <div className="h-7 flex items-center">{s.preview}</div>
-                  <span className="font-medium">{s.label}</span>
+                  <div className="w-full h-8 rounded-lg flex items-center justify-center" style={{ background: s.preview.background ?? 'transparent' }}>
+                    <span className="text-xs font-bold px-1.5" style={{ ...s.preview, background: undefined, fontSize: s.preview.fontSize ?? '12px' }}>
+                      Exemplo
+                    </span>
+                  </div>
+                  <span className={`text-xs font-medium ${style === s.id ? 'text-foreground' : 'text-muted-foreground'}`}>{s.label}</span>
                 </button>
               ))}
             </div>

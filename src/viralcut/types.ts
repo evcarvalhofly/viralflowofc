@@ -43,6 +43,8 @@ export interface TextDetails {
   posX: number;
   posY: number;
   width: number;
+  strokeWidth?: number;   // text outline (webkit-text-stroke)
+  strokeColor?: string;
 }
 
 export interface VideoDetails {

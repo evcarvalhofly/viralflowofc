@@ -9,7 +9,7 @@ export interface SubtitleSegment {
   text: string;
 }
 
-export type SubtitleStyle = 'classic' | 'minimal' | 'viral';
+export type SubtitleStyle = 'classic' | 'minimal' | 'viral' | 'bold' | 'neon' | 'cinema' | 'karaoke' | 'fire';
 
 /** Encode Float32Array mono como WAV Blob (16-bit PCM) */
 function encodeWAV(samples: Float32Array, sampleRate: number): Blob {

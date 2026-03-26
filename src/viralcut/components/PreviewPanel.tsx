@@ -798,8 +798,20 @@ export function PreviewPanel({
                   borderWidth: td.borderWidth,
                   borderStyle: td.borderWidth > 0 ? 'solid' : 'none',
                   borderColor: td.borderColor,
+                  WebkitTextStroke: td.strokeWidth ? `${td.strokeWidth}px ${td.strokeColor ?? '#000000'}` : undefined,
                   pointerEvents: 'none',
                   lineHeight: 1.35,
+                  animation: (() => {
+                    const map: Partial<Record<string, string>> = {
+                      fadeIn:     'vc-fadeIn 0.22s ease forwards',
+                      slideUp:    'vc-slideUp 0.2s ease forwards',
+                      slideDown:  'vc-slideDown 0.2s ease forwards',
+                      slideLeft:  'vc-slideLeft 0.2s ease forwards',
+                      slideRight: 'vc-slideRight 0.2s ease forwards',
+                      zoomIn:     'vc-zoomIn 0.2s ease forwards',
+                    };
+                    return item.animationIn ? (map[item.animationIn] ?? undefined) : undefined;
+                  })(),
                 }}
               >
                 {td.text}
