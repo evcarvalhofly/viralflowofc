@@ -32,6 +32,12 @@ function fmt(s: number) {
   return `${m}:${String(sec).padStart(2, '0')}.${ms}`;
 }
 
+/** Seeks as fast as possible: keyframe-accurate via fastSeek, falls back to exact. */
+function safeSeek(v: HTMLVideoElement, t: number) {
+  if ('fastSeek' in v) (v as any).fastSeek(t);
+  else v.currentTime = t;
+}
+
 function buildFilter(brightness = 1, contrast = 1, saturation = 1) {
   if (brightness === 1 && contrast === 1 && saturation === 1) return 'none';
   return `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`;
@@ -314,6 +320,17 @@ export function PreviewPanel({
   const getPreloadVideo = useCallback(() =>
     activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current, []);
 
+  // ── Stable refs for RAF access (avoid stale closures / React state reads) ─
+  // These refs are always current because the sync effect runs after every render.
+  const activeVideoItemRef = useRef<typeof activeVideoItem>(null as any);
+  const nextVideoItemRef   = useRef<typeof nextVideoItem>(null as any);
+  const isPlayingRef       = useRef(isPlaying);
+  const onTimeChangeRef    = useRef(onTimeChange);
+  const onPlayPauseRef     = useRef(onPlayPause);
+  const durationRef        = useRef(duration);
+  const mutedRef           = useRef(muted);
+  const volumeRef          = useRef(volume);
+
   // ── Derived active items ───────────────────────────────────
   const activeVideoTracks = useMemo(
     () => tracks.filter((t) => t.type === 'video' && !t.muted),
@@ -378,6 +395,18 @@ export function PreviewPanel({
     [tracks, currentTime, media]
   );
 
+  // Sync all playback refs after every render — refs never cause re-renders
+  useEffect(() => {
+    activeVideoItemRef.current = activeVideoItem;
+    nextVideoItemRef.current   = nextVideoItem;
+    isPlayingRef.current       = isPlaying;
+    onTimeChangeRef.current    = onTimeChange;
+    onPlayPauseRef.current     = onPlayPause;
+    durationRef.current        = duration;
+    mutedRef.current           = muted;
+    volumeRef.current          = volume;
+  });
+
   const getTrackId = useCallback((itemId: string) => {
     return tracks.find((t) => t.items.some((i) => i.id === itemId))?.id ?? '';
   }, [tracks]);
@@ -394,8 +423,8 @@ export function PreviewPanel({
   }, [activeVideoItem, muted, volume, getActiveVideo]);
 
   // ── Draw a frame from the ACTIVE video slot ────────────────
-  // Uses "last valid frame" strategy: if video isn't ready yet,
-  // keep the canvas as-is (hold last frame) instead of going black.
+  // Reads from activeVideoItemRef (not state) so the RAF loop always
+  // draws with the latest item even before React re-renders.
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
     const v = getActiveVideo();
@@ -403,10 +432,11 @@ export function PreviewPanel({
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    if (v && v.readyState >= 2 && activeVideoItem?.mediaFile && v.videoWidth > 0) {
+    const curItem = activeVideoItemRef.current;
+    if (v && v.readyState >= 2 && curItem?.mediaFile && v.videoWidth > 0) {
       // Valid frame available — draw it
-      const vd = activeVideoItem.item.videoDetails;
-      const mf = activeVideoItem.mediaFile;
+      const vd = curItem.item.videoDetails;
+      const mf = curItem.mediaFile;
       const vW = mf?.width || v.videoWidth;
       const vH = mf?.height || v.videoHeight;
       ctx.fillStyle = '#000';
@@ -426,21 +456,83 @@ export function PreviewPanel({
       ctx.drawImage(v, dx, dy, dw, dh);
       ctx.restore();
       lastValidFrameRef.current = true;
-    } else if (!activeVideoItem) {
+    } else if (!curItem) {
       // Genuine gap in timeline — show black
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       lastValidFrameRef.current = false;
     }
     // else: video not ready yet → do NOT clear canvas (hold last valid frame)
-  }, [activeVideoItem, getActiveVideo]);
+  }, [getActiveVideo]); // stable — reads activeVideoItemRef at call time, not from closure
 
-  // ── RAF render loop ────────────────────────────────────────
+  // ── RAF render loop + clip boundary detection ──────────────
+  // During playback, clip transitions are handled HERE (inside the browser's
+  // animation frame) — not through React effects. This eliminates the
+  // 2-3 frame latency that causes stutter at fast cuts.
   useEffect(() => {
     const loop = () => {
+      // ── Clip boundary detection (playback only) ─────────────
+      if (isPlayingRef.current) {
+        const v = getActiveVideo();
+        const curItem = activeVideoItemRef.current;
+
+        if (v && curItem && v.readyState >= 2) {
+          // Detect end-of-clip ~20ms early (1 frame at 50fps)
+          if (v.currentTime >= curItem.item.mediaEnd - 0.020) {
+            const next = nextVideoItemRef.current;
+
+            if (next?.item && next.mediaFile) {
+              const preload  = preloadRef.current;
+              const preloadV = getPreloadVideo();
+
+              if (preload?.itemId === next.item.id && preload.ready && preloadV) {
+                // ✅ Instant slot swap — preload was ready, zero seek delay
+                activeSlotRef.current  = activeSlotRef.current === 'A' ? 'B' : 'A';
+                activeItemIdRef.current = next.item.id;
+                preloadRef.current     = null;
+                preloadV.playbackRate  = next.item.videoDetails?.playbackRate ?? 1;
+                preloadV.volume        = Math.min(1, next.item.videoDetails?.volume ?? 1)
+                  * (mutedRef.current ? 0 : volumeRef.current);
+                preloadV.play().catch(() => {});
+                v.pause();
+              } else if (v.src === next.mediaFile.url) {
+                // ⚡ Same source file (auto-cut) — fast seek within playing video
+                safeSeek(v, next.item.mediaStart);
+                activeItemIdRef.current = next.item.id;
+              } else {
+                // 🔄 Different source, preload not ready — load into active slot
+                v.pause();
+                activeItemIdRef.current = next.item.id;
+                v.src = next.mediaFile.url;
+                v.preload = 'auto';
+                v.load();
+                v.oncanplay = () => {
+                  v.oncanplay = null;
+                  safeSeek(v, next.item.mediaStart);
+                  if (isPlayingRef.current) v.play().catch(() => {});
+                };
+              }
+
+              // Update refs immediately — next RAF frame uses new item without React
+              activeVideoItemRef.current = next;
+              nextVideoItemRef.current   = null; // refreshed on next React render
+              onTimeChangeRef.current(next.item.startTime);
+
+            } else if (!next) {
+              // End of timeline — stop playback
+              isPlayingRef.current = false; // prevent double-toggle
+              onTimeChangeRef.current(durationRef.current);
+              onPlayPauseRef.current();
+            }
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────
+
       drawFrame();
       rafRef.current = requestAnimationFrame(loop);
     };
+
     if (isPlaying) {
       rafRef.current = requestAnimationFrame(loop);
     } else {
@@ -449,17 +541,18 @@ export function PreviewPanel({
       drawFrame();
     }
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [isPlaying, drawFrame]);
+  }, [isPlaying, drawFrame, getActiveVideo, getPreloadVideo]);
 
   useEffect(() => {
     if (!isPlaying) drawFrame();
   }, [currentTime, isPlaying, drawFrame]);
 
-  // ── Core double-buffer sync ────────────────────────────────
-  // On every currentTime change, check if we need to:
-  //   a) Swap to the preloaded slot (instant, no black flash)
-  //   b) Load + seek in the inactive slot while active plays
+  // ── Core double-buffer sync (scrubbing only) ───────────────
+  // During playback, the RAF loop handles clip transitions with zero React latency.
+  // This effect only runs while paused to handle scrubbing seeks.
   useEffect(() => {
+    if (isPlaying) return; // RAF handles this during playback
+
     const mf = activeVideoItem?.mediaFile;
 
     if (!mf) {
@@ -502,9 +595,9 @@ export function PreviewPanel({
       activeItemIdRef.current = item.id;
       preloadRef.current = null;
 
-      // Sync to exact media time (it may have drifted slightly during preload)
-      if (Math.abs(preloadV.currentTime - mediaTime) > 0.15) {
-        preloadV.currentTime = mediaTime;
+      // Sync to exact media time only if significantly off (wider tolerance = fewer seeks)
+      if (Math.abs(preloadV.currentTime - mediaTime) > 0.25) {
+        safeSeek(preloadV, mediaTime);
       }
       applyVideoProps();
       if (isPlaying) preloadV.play().catch(() => {});
@@ -526,12 +619,13 @@ export function PreviewPanel({
         v.load();
         v.oncanplay = () => {
           v.oncanplay = null;
-          v.currentTime = mediaTime;
+          safeSeek(v, mediaTime);
           applyVideoProps();
           if (isPlaying) v.play().catch(() => {});
         };
       } else {
-        v.currentTime = mediaTime;
+        // Same source file (e.g. auto-cut clips) — fast seek to new in-point
+        safeSeek(v, mediaTime);
         applyVideoProps();
         if (isPlaying) v.play().catch(() => {});
       }
@@ -542,8 +636,8 @@ export function PreviewPanel({
   useEffect(() => { applyVideoProps(); }, [applyVideoProps]);
 
   // ── Background preloading of NEXT clip ────────────────────
-  // Start preloading the next clip as soon as we enter any clip.
-  // Also refresh every tick when < 4s left (bigger window = fewer black flashes).
+  // Starts as soon as we know the next clip — no throttle so short clips (< 1s)
+  // still get preloaded in time. fastSeek makes the inactive-slot seek ~10× faster.
   useEffect(() => {
     if (!nextVideoItem) return;
 
@@ -556,19 +650,13 @@ export function PreviewPanel({
     // Only start if not already preloaded/preloading for this clip
     if (preloadRef.current?.itemId === nextItem.id) return;
 
-    // Throttle: only start when we're reasonably close (within 4s)
-    if (activeVideoItem) {
-      const timeLeft = activeVideoItem.item.endTime - currentTime;
-      if (timeLeft > 4) return;
-    }
-
     const pv = getPreloadVideo();
     if (!pv) return;
 
     preloadRef.current = { itemId: nextItem.id, url: nextMf.url, mediaTime: targetMediaTime, ready: false };
 
     const doPreload = () => {
-      pv.currentTime = targetMediaTime;
+      safeSeek(pv, targetMediaTime);
       const onSeeked = () => {
         pv.removeEventListener('seeked', onSeeked);
         if (preloadRef.current?.itemId === nextItem.id) {
@@ -608,7 +696,7 @@ export function PreviewPanel({
     preloadRef.current = { itemId: nextItem.id, url: nextMf.url, mediaTime: nextItem.mediaStart, ready: false };
 
     const doPreload = () => {
-      pv.currentTime = nextItem.mediaStart;
+      safeSeek(pv, nextItem.mediaStart);
       const onSeeked = () => {
         pv.removeEventListener('seeked', onSeeked);
         if (preloadRef.current?.itemId === nextItem.id) preloadRef.current.ready = true;
