@@ -1,7 +1,7 @@
 // ============================================================
 // Toolbar – Top bar with project name, zoom, export, save
 // ============================================================
-import { Scissors, Download, Undo2, Redo2, Edit2, Check, Save, FileDown, FileUp, Captions } from 'lucide-react';
+import { Scissors, Download, Undo2, Redo2, Edit2, Check, Save, FileDown, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
@@ -13,7 +13,6 @@ interface ToolbarProps {
   canUndo?: boolean;
   canRedo?: boolean;
   onExport: () => void;
-  onSubtitles?: () => void;
   onSave?: () => void;
   onExportJson?: () => void;
   onImportJson?: () => void;
@@ -27,7 +26,6 @@ export function Toolbar({
   canUndo,
   canRedo,
   onExport,
-  onSubtitles,
   onSave,
   onExportJson,
   onImportJson,
@@ -131,18 +129,6 @@ export function Toolbar({
           <Redo2 className="h-3.5 w-3.5" />
         </button>
       </div>
-
-      {/* Subtitles */}
-      {onSubtitles && (
-        <button
-          className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors text-xs shrink-0"
-          onClick={onSubtitles}
-          title="Gerar legendas automáticas"
-        >
-          <Captions className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Legendas</span>
-        </button>
-      )}
 
       {/* Export */}
       <Button

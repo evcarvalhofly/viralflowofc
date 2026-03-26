@@ -1087,7 +1087,6 @@ const ViralCut = () => {
         canUndo={canUndo}
         canRedo={canRedo}
         onExport={() => { setExportState({ status: 'idle', progress: 0, label: '' }); setExportOpen(true); }}
-        onSubtitles={hasMedia ? () => setShowSubtitleModal(true) : undefined}
         onSave={persistence.saveNow}
         onExportJson={persistence.exportJson}
         onImportJson={() => importJsonRef.current?.click()}
@@ -1150,13 +1149,26 @@ const ViralCut = () => {
             Espaço = play/pause · Del = deletar · Arrastar borda = cortar
           </span>
           <div className="flex-1 hidden sm:block lg:hidden" />
-          <button
-            className={cn('flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors',
-              showAutoCut ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' : 'text-muted-foreground hover:text-foreground border border-transparent')}
-            onClick={() => setShowAutoCut((v) => !v)}>
-            <Wand2 className="h-3 w-3" />
-            Auto Corte
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              className={cn('flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0',
+                showAutoCut
+                  ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/40'
+                  : 'bg-amber-500/15 text-amber-400 border border-amber-500/40 hover:bg-amber-500/25 hover:text-amber-300')}
+              onClick={() => setShowAutoCut((v) => !v)}>
+              <Wand2 className="h-3.5 w-3.5" />
+              Auto Corte
+            </button>
+            <button
+              className={cn('flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0',
+                showSubtitleModal
+                  ? 'bg-violet-500 text-white shadow-sm shadow-violet-500/40'
+                  : 'bg-violet-500/15 text-violet-400 border border-violet-500/40 hover:bg-violet-500/25 hover:text-violet-300')}
+              onClick={() => hasMedia && setShowSubtitleModal(true)}>
+              <Captions className="h-3.5 w-3.5" />
+              Legendas
+            </button>
+          </div>
           <button
             className={cn('p-1 rounded transition-colors text-muted-foreground hover:text-foreground', showMedia && 'text-primary')}
             onClick={() => setShowMedia((v) => !v)}>
