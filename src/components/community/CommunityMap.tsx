@@ -232,10 +232,45 @@ const ShoppingMall = React.memo(({ onClick }: { onClick: () => void }) => (
 ));
 
 const Car = React.memo(({ route, color, delay }: { route: string; color: string; delay: string }) => {
-  const bgColors: Record<string, string> = { red:'#ef4444', blue:'#3b82f6', slate:'#334155', yellow:'#facc15', neutral:'#17262b', green:'#22c55e', orange:'#f97316' };
+  const palette: Record<string, { body: string; dark: string }> = {
+    red:     { body: '#ef4444', dark: '#991b1b' },
+    blue:    { body: '#3b82f6', dark: '#1d4ed8' },
+    slate:   { body: '#94a3b8', dark: '#475569' },
+    yellow:  { body: '#facc15', dark: '#a16207' },
+    neutral: { body: '#64748b', dark: '#1e293b' },
+    green:   { body: '#22c55e', dark: '#15803d' },
+    orange:  { body: '#f97316', dark: '#c2410c' },
+  };
+  const { body, dark } = palette[color] ?? palette.slate;
   return (
-    <div className="absolute pointer-events-none opacity-90" style={{ left: 0, top: 0, animation: `${route} 18s linear infinite`, animationDelay: delay }}>
-      <div className="rounded-[3px]" style={{ backgroundColor: bgColors[color] ?? '#1e293b', width: 22, height: 11, transform: 'translate(-50%, -50%)' }} />
+    <div className="absolute pointer-events-none" style={{ left: 0, top: 0, animation: `${route} 18s linear infinite`, animationDelay: delay }}>
+      <svg width="36" height="20" viewBox="0 0 36 20" style={{ transform: 'translate(-50%, -50%)', overflow: 'visible' }}>
+        {/* Rodas traseiras */}
+        <rect x="2" y="1"  width="8" height="5" rx="1.5" fill="#111827" />
+        <rect x="2" y="14" width="8" height="5" rx="1.5" fill="#111827" />
+        {/* Rodas dianteiras */}
+        <rect x="26" y="1"  width="8" height="5" rx="1.5" fill="#111827" />
+        <rect x="26" y="14" width="8" height="5" rx="1.5" fill="#111827" />
+        {/* Aro das rodas */}
+        <rect x="3.5" y="1.8"  width="5" height="3.4" rx="1" fill="#374151" />
+        <rect x="3.5" y="14.8" width="5" height="3.4" rx="1" fill="#374151" />
+        <rect x="27.5" y="1.8"  width="5" height="3.4" rx="1" fill="#374151" />
+        <rect x="27.5" y="14.8" width="5" height="3.4" rx="1" fill="#374151" />
+        {/* Carroceria */}
+        <rect x="5" y="2" width="26" height="16" rx="3.5" fill={body} />
+        {/* Cabine / teto */}
+        <rect x="11" y="4" width="13" height="12" rx="2" fill={dark} />
+        {/* Para-brisa dianteiro */}
+        <rect x="22" y="4.5" width="6" height="5" rx="1" fill="rgba(186,230,253,0.75)" />
+        {/* Vidro traseiro */}
+        <rect x="8"  y="4.5" width="4" height="5" rx="1" fill="rgba(186,230,253,0.5)" />
+        {/* Faróis dianteiros */}
+        <rect x="30" y="3.5" width="2.5" height="3"   rx="0.8" fill="#fef9c3" opacity="0.95" />
+        <rect x="30" y="13.5" width="2.5" height="3"  rx="0.8" fill="#fef9c3" opacity="0.95" />
+        {/* Lanternas traseiras */}
+        <rect x="3.5" y="3.5"  width="2" height="2.5" rx="0.6" fill="#fca5a5" opacity="0.9" />
+        <rect x="3.5" y="14"   width="2" height="2.5" rx="0.6" fill="#fca5a5" opacity="0.9" />
+      </svg>
     </div>
   );
 });
