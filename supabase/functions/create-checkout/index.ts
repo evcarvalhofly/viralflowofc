@@ -21,7 +21,9 @@ Deno.serve(async (req) => {
     if (parts.length !== 3) {
       return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 401, headers: corsHeaders });
     }
-    const payload = JSON.parse(atob(parts[1]));
+    // JWT usa base64url — converte para base64 padrão antes de decodificar
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(base64));
     const userId     = payload.sub as string;
     const userEmail  = payload.email as string;
 
