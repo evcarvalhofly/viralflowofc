@@ -48,7 +48,6 @@ Deno.serve(async (req) => {
     let backUrl: string;
 
     if (isGuest) {
-      // Create a checkout session record
       const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
       const { data: session, error: sessionError } = await admin
         .from('checkout_sessions')
@@ -57,14 +56,16 @@ Deno.serve(async (req) => {
         .single();
 
       if (sessionError || !session) {
-        console.error('checkout_sessions insert error:', sessionError);
+        console.error('checkout_sessions insert error:', JSON.stringify(sessionError));
         return new Response(JSON.stringify({ error: 'Erro ao criar sessão de checkout' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
       externalReference = session.id;
-      backUrl           = `${origin}/auth?checkout=success`;
+      // Placeholder — o email real é capturado pelo webhook após o pagamento via payer_email do MP
+      userEmail = 'guest@viralflow.app';
+      backUrl   = `${origin}/auth?checkout=success`;
       console.log('Guest checkout session:', session.id, '| ref_code:', refCode);
     } else {
       externalReference = userId!;
@@ -75,12 +76,12 @@ Deno.serve(async (req) => {
     const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
       method: 'POST',
       headers: {
-        'Authorization':  `Bearer ${MP_ACCESS_TOKEN}`,
-        'Content-Type':   'application/json',
+        'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
       },
       body: JSON.stringify({
         reason:             'ViralFlow PRO',
-        payer_email:        userEmail ?? undefined,
+        payer_email:        userEmail,
         back_url:           backUrl,
         notification_url:   'https://dzgotqyikomtapcgdgff.supabase.co/functions/v1/mp-webhook',
         external_reference: externalReference,
@@ -97,6 +98,7 @@ Deno.serve(async (req) => {
     console.log('MP response status:', mpRes.status, '| id:', mpData.id);
 
     if (!mpRes.ok || !mpData.init_point) {
+      console.error('MP error:', JSON.stringify(mpData));
       return new Response(
         JSON.stringify({ error: mpData?.message ?? mpData?.cause ?? 'Erro ao criar assinatura no MercadoPago' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
