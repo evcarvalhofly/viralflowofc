@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { attributeReferral } from "@/hooks/useAffiliateTracking";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +25,7 @@ const Auth = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data: signUpData, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -33,6 +34,9 @@ const Auth = () => {
           },
         });
         if (error) throw error;
+        if (signUpData.user?.id) {
+          attributeReferral(signUpData.user.id);
+        }
         toast({
           title: "Conta criada!",
           description: "Verifique seu email para confirmar o cadastro.",

@@ -70,11 +70,77 @@ Deno.serve(async (req) => {
       .from('profiles')
       .update({
         subscription_status:   subscriptionStatus,
-        stripe_subscription_id: preapprovalId, // reutilizamos a coluna para guardar o ID do MP
+        stripe_subscription_id: preapprovalId,
       })
       .eq('user_id', userId);
 
     console.log('Perfil atualizado:', userId, '->', subscriptionStatus);
+
+    // === COMISSÕES DE AFILIADOS ===
+    if (subscriptionStatus === 'active') {
+      const { data: referral } = await admin
+        .from('referrals')
+        .select('id, affiliate_id, status')
+        .eq('referred_user_id', userId)
+        .neq('status', 'cancelled')
+        .maybeSingle();
+
+      if (referral) {
+        const { data: affiliate } = await admin
+          .from('affiliates')
+          .select('id, commission_rate, referred_by_affiliate_id')
+          .eq('id', referral.affiliate_id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (affiliate) {
+          const PRICE = 37.90;
+          const isInitial = referral.status === 'pending';
+          const commType = isInitial ? 'initial' : 'recurring';
+          const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+          const periodStart = new Date().toISOString();
+
+          const level1Amount = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
+
+          await admin.from('commissions').insert({
+            affiliate_id:    affiliate.id,
+            subscription_id: preapprovalId,
+            referral_id:     referral.id,
+            type:            commType,
+            amount:          level1Amount,
+            status:          'pending',
+            available_after: availableAfter,
+            level:           1,
+            period_start:    periodStart,
+          });
+
+          if (isInitial) {
+            await admin
+              .from('referrals')
+              .update({ status: 'converted', converted_at: periodStart })
+              .eq('id', referral.id);
+          }
+
+          // MLM nível 2 — quem indicou o afiliado recebe 10% fixo
+          if (affiliate.referred_by_affiliate_id) {
+            const level2Amount = parseFloat((0.10 * PRICE).toFixed(2));
+            await admin.from('commissions').insert({
+              affiliate_id:    affiliate.referred_by_affiliate_id,
+              subscription_id: preapprovalId,
+              referral_id:     referral.id,
+              type:            commType,
+              amount:          level2Amount,
+              status:          'pending',
+              available_after: availableAfter,
+              level:           2,
+              period_start:    periodStart,
+            });
+          }
+
+          console.log('Comissão criada para afiliado:', affiliate.id, '| valor:', level1Amount, '| tipo:', commType);
+        }
+      }
+    }
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
