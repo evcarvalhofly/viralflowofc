@@ -13,7 +13,6 @@ Deno.serve(async (req) => {
     }
 
     const MP_ACCESS_TOKEN = Deno.env.get('MP_ACCESS_TOKEN')!;
-    const MP_PLAN_ID      = Deno.env.get('MP_PLAN_ID')!;
 
     // O gateway do Supabase já valida o JWT — decodificamos direto para pegar user_id e email
     const token = authHeader.replace('Bearer ', '');
@@ -33,7 +32,7 @@ Deno.serve(async (req) => {
 
     const origin = req.headers.get('origin') ?? 'https://viralflowofc.lovable.app';
 
-    // Cria assinatura no MercadoPago
+    // Cria assinatura no MercadoPago (auto_recurring — sem card_token_id obrigatório)
     const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
       method: 'POST',
       headers: {
@@ -41,13 +40,17 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        preapproval_plan_id: MP_PLAN_ID,
-        reason:              'ViralFlow PRO',
-        payer_email:         userEmail,
-        back_url:            `${origin}/?checkout=success`,
-        notification_url:    'https://dzgotqyikomtapcgdgff.supabase.co/functions/v1/mp-webhook',
-        external_reference:  userId,
-        status:              'pending',
+        reason:             'ViralFlow PRO',
+        payer_email:        userEmail,
+        back_url:           `${origin}/?checkout=success`,
+        notification_url:   'https://dzgotqyikomtapcgdgff.supabase.co/functions/v1/mp-webhook',
+        external_reference: userId,
+        auto_recurring: {
+          frequency:          1,
+          frequency_type:     'months',
+          transaction_amount: 37.90,
+          currency_id:        'BRL',
+        },
       }),
     });
 
