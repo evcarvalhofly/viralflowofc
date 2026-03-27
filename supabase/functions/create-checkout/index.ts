@@ -1,4 +1,4 @@
-import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
+import Stripe from 'npm:stripe@14.21.0';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -11,22 +11,39 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: corsHeaders });
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: corsHeaders });
+    }
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Pega o usuário autenticado
-    const { data: { user }, error: userError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-    if (userError || !user) return new Response(JSON.stringify({ error: 'Usuário inválido' }), { status: 401, headers: corsHeaders });
+    // Valida o usuário pelo JWT
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
 
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
-    const priceId = Deno.env.get('STRIPE_PRICE_ID')!;
-    const { success_url, cancel_url } = await req.json().catch(() => ({}));
+    if (userError || !user) {
+      console.error('Auth error:', userError);
+      return new Response(JSON.stringify({ error: 'Usuário inválido' }), { status: 401, headers: corsHeaders });
+    }
 
-    // Verifica se já tem customer Stripe
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+    const priceId   = Deno.env.get('STRIPE_PRICE_ID');
+
+    if (!stripeKey || !priceId) {
+      console.error('Missing env vars — STRIPE_SECRET_KEY or STRIPE_PRICE_ID not set');
+      return new Response(JSON.stringify({ error: 'Configuração interna ausente' }), { status: 500, headers: corsHeaders });
+    }
+
+    const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16' });
+
+    let body: { success_url?: string; cancel_url?: string } = {};
+    try { body = await req.json(); } catch { /* body opcional */ }
+
+    // Busca/cria customer Stripe
     const { data: profile } = await supabase
       .from('profiles')
       .select('stripe_customer_id, display_name')
@@ -45,20 +62,30 @@ Deno.serve(async (req) => {
       await supabase.from('profiles').update({ stripe_customer_id: customerId }).eq('user_id', user.id);
     }
 
+    const origin = req.headers.get('origin') ?? 'https://viralflowofc.lovable.app';
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: success_url ?? `${req.headers.get('origin') ?? 'https://viralflowofc.lovable.app'}/?checkout=success`,
-      cancel_url:  cancel_url  ?? `${req.headers.get('origin') ?? 'https://viralflowofc.lovable.app'}/?checkout=cancel`,
+      success_url: body.success_url ?? `${origin}/?checkout=success`,
+      cancel_url:  body.cancel_url  ?? `${origin}/planopro`,
       metadata: { user_id: user.id },
       subscription_data: { metadata: { user_id: user.id } },
       locale: 'pt-BR',
     });
 
-    return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    console.log('Checkout session created:', session.id, 'for user:', user.id);
+
+    return new Response(
+      JSON.stringify({ url: session.url }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (err) {
-    console.error('create-checkout error:', err);
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: corsHeaders });
+    console.error('create-checkout unhandled error:', err);
+    return new Response(
+      JSON.stringify({ error: String(err) }),
+      { status: 500, headers: corsHeaders }
+    );
   }
 });

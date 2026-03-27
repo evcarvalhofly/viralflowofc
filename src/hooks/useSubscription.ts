@@ -65,7 +65,8 @@ export function useSubscription() {
 
     if (error) {
       console.error('Checkout error:', error);
-      toast.error('Erro ao iniciar pagamento', { description: 'Tente novamente em instantes.' });
+      const msg = typeof error === 'object' && 'message' in error ? String((error as { message: string }).message) : String(error);
+      toast.error('Erro ao iniciar pagamento', { description: msg || 'Tente novamente em instantes.' });
       return;
     }
 
