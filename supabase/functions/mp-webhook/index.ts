@@ -15,12 +15,10 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-    // MP envia como query params ou body JSON
     const url    = new URL(req.url);
     const type   = url.searchParams.get('type') ?? '';
     const dataId = url.searchParams.get('data.id') ?? '';
 
-    // Também aceita body JSON
     let bodyId = '';
     try {
       const body = await req.json();
@@ -31,7 +29,6 @@ Deno.serve(async (req) => {
 
     console.log('MP webhook recebido — type:', type, 'id:', preapprovalId);
 
-    // Só processa eventos de preapproval (assinatura)
     if (type !== 'preapproval' && !preapprovalId) {
       return new Response('ok', { headers: corsHeaders });
     }
@@ -50,26 +47,69 @@ Deno.serve(async (req) => {
       return new Response('error', { status: 500, headers: corsHeaders });
     }
 
-    const preapproval = await mpRes.json();
-    const userId      = preapproval.external_reference;
-    const mpStatus    = preapproval.status; // authorized | paused | cancelled | pending
+    const preapproval    = await mpRes.json();
+    const externalRef    = preapproval.external_reference;
+    const mpStatus       = preapproval.status;
+    const mpPayerId      = String(preapproval.payer_id ?? '');
 
-    console.log('Preapproval status:', mpStatus, '| user:', userId);
+    console.log('Preapproval status:', mpStatus, '| external_ref:', externalRef);
 
-    if (!userId) {
+    if (!externalRef) {
       return new Response('ok', { headers: corsHeaders });
     }
 
-    // Mapeia status do MP para status interno
+    // ── Detecta se é sessão guest (checkout_sessions) ou usuário logado ──────────
+    const { data: guestSession } = await admin
+      .from('checkout_sessions')
+      .select('id, ref_code, status')
+      .eq('id', externalRef)
+      .maybeSingle();
+
+    if (guestSession) {
+      // ── FLUXO GUEST: atualiza checkout_session com email do pagador ────────────
+      if (mpStatus !== 'authorized') {
+        console.log('Guest session — status not authorized, skipping:', mpStatus);
+        return new Response('ok', { headers: corsHeaders });
+      }
+
+      // Tenta obter email do pagador
+      let payerEmail: string | null = preapproval.payer_email ?? null;
+
+      if (!payerEmail && mpPayerId) {
+        // Fallback: busca via customers API do MP
+        const custRes = await fetch(`https://api.mercadopago.com/v1/customers/${mpPayerId}`, {
+          headers: { 'Authorization': `Bearer ${MP_ACCESS_TOKEN}` },
+        });
+        if (custRes.ok) {
+          const custData = await custRes.json();
+          payerEmail = custData.email ?? null;
+        }
+        console.log('Payer email from customers API:', payerEmail);
+      }
+
+      await admin.from('checkout_sessions').update({
+        mp_preapproval_id: preapprovalId,
+        payer_email:       payerEmail,
+        payer_id:          mpPayerId,
+        status:            'paid',
+      }).eq('id', guestSession.id);
+
+      console.log('Guest session updated — email:', payerEmail, '| session:', guestSession.id);
+      return new Response('ok', { headers: corsHeaders });
+    }
+
+    // ── FLUXO USUÁRIO LOGADO (external_ref = userId) ──────────────────────────────
+    const userId = externalRef;
+
     const subscriptionStatus =
       mpStatus === 'authorized' ? 'active' :
-      mpStatus === 'paused'     ? 'active' : // paused ainda tem acesso
+      mpStatus === 'paused'     ? 'active' :
       'free';
 
     await admin
       .from('profiles')
       .update({
-        subscription_status:   subscriptionStatus,
+        subscription_status:    subscriptionStatus,
         stripe_subscription_id: preapprovalId,
       })
       .eq('user_id', userId);
@@ -94,13 +134,12 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (affiliate) {
-          const PRICE = 37.90;
-          const isInitial = referral.status === 'pending';
-          const commType = isInitial ? 'initial' : 'recurring';
+          const PRICE        = 37.90;
+          const isInitial    = referral.status === 'pending';
+          const commType     = isInitial ? 'initial' : 'recurring';
           const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-          const periodStart = new Date().toISOString();
-
-          const commAmount = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
+          const periodStart  = new Date().toISOString();
+          const commAmount   = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
 
           await admin.from('commissions').insert({
             affiliate_id:    affiliate.id,

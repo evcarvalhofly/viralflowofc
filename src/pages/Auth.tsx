@@ -6,10 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Zap } from "lucide-react";
+import { Zap, CheckCircle2 } from "lucide-react";
+
+const fromCheckout = new URLSearchParams(window.location.search).get('checkout') === 'success';
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(!fromCheckout); // se veio do checkout → mostra cadastro
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -34,13 +36,28 @@ const Auth = () => {
           },
         });
         if (error) throw error;
+
         if (signUpData.user?.id) {
-          attributeReferral(signUpData.user.id);
+          // Verifica se há checkout pendente (fluxo guest: pagou antes de criar conta)
+          const { data: checkoutResult } = await (supabase as any).rpc('activate_pending_checkout', {
+            p_user_id:    signUpData.user.id,
+            p_user_email: email,
+          });
+
+          if (checkoutResult?.activated) {
+            toast({
+              title: "Assinatura ativada!",
+              description: "Seu plano PRO está ativo. Bem-vindo ao ViralFlow!",
+            });
+          } else {
+            // Fluxo normal: atribui afiliado do localStorage
+            attributeReferral(signUpData.user.id);
+            toast({
+              title: "Conta criada!",
+              description: "Verifique seu email para confirmar o cadastro.",
+            });
+          }
         }
-        toast({
-          title: "Conta criada!",
-          description: "Verifique seu email para confirmar o cadastro.",
-        });
       }
     } catch (error: any) {
       toast({
@@ -65,6 +82,16 @@ const Auth = () => {
             Crie conteúdo viral com inteligência artificial
           </p>
         </div>
+
+        {fromCheckout && (
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-400">Pagamento confirmado!</p>
+              <p className="text-xs text-muted-foreground">Crie sua conta abaixo para acessar o ViralFlow PRO.</p>
+            </div>
+          </div>
+        )}
 
         <Card>
           <CardHeader>

@@ -50,10 +50,14 @@ export function useSubscription() {
 
   const startCheckout = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { window.location.href = '/auth'; return; }
+
+    // Guest checkout — sem login, passa ref_code do localStorage
+    const refCode = !session
+      ? (localStorage.getItem('vf_ref') ?? null)
+      : null;
 
     const { data, error } = await supabase.functions.invoke('create-checkout', {
-      body: {},
+      body: { ref_code: refCode },
     });
 
     if (error) {
