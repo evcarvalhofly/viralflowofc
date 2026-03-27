@@ -41,7 +41,7 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   // Rastreia cliques em links de afiliado (?ref=CODIGO na URL)
   useAffiliateTracking();
 
-  // Trata retorno do Stripe Checkout (?checkout=success/cancel)
+  // Trata retorno do Checkout (?checkout=success/cancel)
   useCheckoutReturn();
 
   // Mostra modal de permissão de notificações quando usuário logado e permissão não concedida

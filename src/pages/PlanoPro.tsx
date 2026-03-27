@@ -85,7 +85,7 @@ export default function PlanoPro() {
               )}
             </button>
             <p className="text-center text-[11px] text-muted-foreground mt-3">
-              Pagamento 100% seguro via Stripe
+              Pagamento 100% seguro via MercadoPago
             </p>
           </div>
         </div>

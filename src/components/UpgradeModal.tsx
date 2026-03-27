@@ -82,7 +82,7 @@ export function UpgradeModal({ open, onClose }: Props) {
             )}
           </button>
           <p className="text-center text-[11px] text-muted-foreground mt-3">
-            Pagamento seguro via Stripe · Cancele quando quiser
+            Pagamento seguro via MercadoPago · Cancele quando quiser
           </p>
         </div>
       </div>
