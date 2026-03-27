@@ -23,6 +23,7 @@ import { NotificationPermissionModal } from "./components/NotificationPermission
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useBackgroundNotifications } from "./hooks/useBackgroundNotifications";
 import { useAffiliateTracking } from "./hooks/useAffiliateTracking";
+import { useCheckoutReturn } from "./hooks/useCheckoutReturn";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,9 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
 
   // Rastreia cliques em links de afiliado (?ref=CODIGO na URL)
   useAffiliateTracking();
+
+  // Trata retorno do Stripe Checkout (?checkout=success/cancel)
+  useCheckoutReturn();
 
   // Mostra modal de permissão de notificações quando usuário logado e permissão não concedida
   useEffect(() => {
