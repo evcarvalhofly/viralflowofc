@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Zap, Check, Loader2, ArrowRight, Sparkles, Type, Scissors, MessageSquare, BarChart2, Users, Video, Layers, Share2 } from 'lucide-react';
+import { Zap, Check, Loader2, ArrowRight, Sparkles, Type, Scissors, MessageSquare, BarChart2, Users, Video, Layers, Share2, Mail } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useAuth } from '@/contexts/AuthContext';
+import { Input } from '@/components/ui/input';
 
 const FEATURES = [
   { icon: Scissors,     label: 'ViralCut — Editor de vídeo com IA' },
@@ -15,12 +17,19 @@ const FEATURES = [
 ];
 
 export default function PlanoPro() {
+  const { user } = useAuth();
   const { startCheckout } = useSubscription();
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [emailStep, setEmailStep] = useState(false);
+
+  const isGuest = !user;
 
   const handleCheckout = async () => {
+    if (isGuest && !emailStep) { setEmailStep(true); return; }
+    if (isGuest && !email.trim()) return;
     setLoading(true);
-    await startCheckout();
+    await startCheckout(isGuest ? email.trim() : undefined);
     setLoading(false);
   };
 
@@ -75,19 +84,41 @@ export default function PlanoPro() {
           </div>
 
           {/* CTA */}
-          <div className="px-5 pb-5">
+          <div className="px-5 pb-5 space-y-3">
+            {emailStep && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Mail className="h-4 w-4 text-violet-400 shrink-0" />
+                  <span>Qual email você usará para acessar o ViralFlow?</span>
+                </div>
+                <Input
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleCheckout()}
+                  autoFocus
+                  className="bg-background"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Após o pagamento, crie sua conta com este email para ativar o PRO automaticamente.
+                </p>
+              </div>
+            )}
             <button
               onClick={handleCheckout}
-              disabled={loading}
+              disabled={loading || (emailStep && !email.trim())}
               className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold text-sm transition-all shadow-lg shadow-violet-500/30 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Redirecionando para o pagamento...</>
+              ) : emailStep ? (
+                <>Continuar para pagamento <ArrowRight className="h-4 w-4" /></>
               ) : (
                 <>Assinar agora por R$37,90/mês <ArrowRight className="h-4 w-4" /></>
               )}
             </button>
-            <p className="text-center text-[11px] text-muted-foreground mt-3">
+            <p className="text-center text-[11px] text-muted-foreground">
               Pagamento 100% seguro via MercadoPago
             </p>
           </div>

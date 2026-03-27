@@ -48,16 +48,14 @@ export function useSubscription() {
 
   const isPro = status === 'active' || user?.email === 'evcarvalhodev@gmail.com';
 
-  const startCheckout = async () => {
+  const startCheckout = async (guestEmail?: string) => {
     const { data: { session } } = await supabase.auth.getSession();
 
-    // Guest checkout — sem login, passa ref_code do localStorage
-    const refCode = !session
-      ? (localStorage.getItem('vf_ref') ?? null)
-      : null;
+    const isGuest = !session;
+    const refCode = isGuest ? (localStorage.getItem('vf_ref') ?? null) : null;
 
     const { data, error } = await supabase.functions.invoke('create-checkout', {
-      body: { ref_code: refCode },
+      body: { ref_code: refCode, email: isGuest ? (guestEmail ?? null) : null },
     });
 
     if (error) {

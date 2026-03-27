@@ -15,11 +15,13 @@ Deno.serve(async (req) => {
 
     const origin = req.headers.get('origin') ?? 'https://viralflowofc.lovable.app';
 
-    // Parse body (ref_code optional for guest flow)
+    // Parse body
     let refCode: string | null = null;
+    let bodyEmail: string | null = null;
     try {
       const body = await req.json();
-      refCode = body?.ref_code ?? null;
+      refCode    = body?.ref_code ?? null;
+      bodyEmail  = body?.email    ?? null;
     } catch { /* no body */ }
 
     // Determine if logged-in user or guest via JWT role
@@ -51,7 +53,7 @@ Deno.serve(async (req) => {
       const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
       const { data: session, error: sessionError } = await admin
         .from('checkout_sessions')
-        .insert({ ref_code: refCode, status: 'created' })
+        .insert({ ref_code: refCode, status: 'created', payer_email: bodyEmail ?? null })
         .select('id')
         .single();
 
@@ -63,8 +65,7 @@ Deno.serve(async (req) => {
       }
 
       externalReference = session.id;
-      // Placeholder — o email real é capturado pelo webhook após o pagamento via payer_email do MP
-      userEmail = 'guest@viralflow.app';
+      userEmail = bodyEmail ?? 'guest@viralflow.app';
       backUrl   = `${origin}/auth?checkout=success`;
       console.log('Guest checkout session:', session.id, '| ref_code:', refCode);
     } else {
