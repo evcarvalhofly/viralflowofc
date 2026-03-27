@@ -21,6 +21,7 @@ export interface Affiliate {
   referred_by_affiliate_id: string | null;
   email: string | null;
   whatsapp: string | null;
+  pix_key: string | null;
   created_at: string;
 }
 

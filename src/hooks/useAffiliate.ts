@@ -219,7 +219,7 @@ export const useAffiliate = () => {
 
   // ─── Cadastro como afiliado ──────────────────────────────────────────────────
 
-  const register = useCallback(async (whatsapp?: string): Promise<{ error?: string }> => {
+  const register = useCallback(async (whatsapp?: string, pixKey?: string): Promise<{ error?: string }> => {
     if (!user || registering) return { error: 'Não autorizado' };
     setRegistering(true);
 
@@ -258,6 +258,7 @@ export const useAffiliate = () => {
         referred_by_affiliate_id: referredByAffiliateId,
         email: user.email ?? null,
         whatsapp: whatsapp?.trim() || null,
+        pix_key: pixKey?.trim() || null,
       })
       .select()
       .maybeSingle();

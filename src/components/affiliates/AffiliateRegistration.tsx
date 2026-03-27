@@ -17,7 +17,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 
 interface Props {
-  onRegister: (whatsapp: string) => Promise<{ error?: string }>;
+  onRegister: (whatsapp: string, pixKey: string) => Promise<{ error?: string }>;
   registering: boolean;
 }
 
@@ -58,14 +58,19 @@ const AffiliateRegistration = ({ onRegister, registering }: Props) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [whatsapp, setWhatsapp] = useState('');
+  const [pixKey, setPixKey] = useState('');
 
   const handleRegister = async () => {
     if (!whatsapp.trim()) {
       toast({ title: 'Informe seu WhatsApp', variant: 'destructive' });
       return;
     }
+    if (!pixKey.trim()) {
+      toast({ title: 'Informe sua chave PIX', variant: 'destructive' });
+      return;
+    }
     setLoading(true);
-    const result = await onRegister(whatsapp);
+    const result = await onRegister(whatsapp, pixKey);
     setLoading(false);
 
     if (result.error) {
@@ -144,8 +149,18 @@ const AffiliateRegistration = ({ onRegister, registering }: Props) => {
               value={whatsapp}
               onChange={e => setWhatsapp(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="pixKey" className="text-sm">Chave PIX para receber comissões</Label>
+            <Input
+              id="pixKey"
+              placeholder="CPF, e-mail, telefone ou chave aleatória"
+              value={pixKey}
+              onChange={e => setPixKey(e.target.value)}
+            />
             <p className="text-[11px] text-muted-foreground">
-              Usado para envio do pagamento das comissões
+              Usada para transferir suas comissões via PIX
             </p>
           </div>
 

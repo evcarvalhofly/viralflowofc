@@ -2,7 +2,7 @@
  * AdminAffiliatePanel
  *
  * Painel exclusivo para o administrador (evcarvalhodev@gmail.com).
- * Exibe todos os afiliados e gerencia pedidos de saque.
+ * Abas: Saques | Afiliados | Ranking
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -21,15 +21,21 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, ArrowDownToLine, CheckCircle2, ShieldAlert, MessageCircle } from 'lucide-react';
+import {
+  Users, ArrowDownToLine, CheckCircle2, ShieldAlert, MessageCircle, Trophy, Medal,
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Affiliate, WithdrawalRequest } from '@/types/affiliates';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
 
+interface AffiliateWithSales extends Affiliate {
+  sales: number;
+}
+
 interface WithdrawalWithAffiliate extends WithdrawalRequest {
-  affiliate?: Pick<Affiliate, 'ref_code' | 'email' | 'whatsapp'>;
+  affiliate?: Pick<Affiliate, 'ref_code' | 'email' | 'whatsapp' | 'pix_key'>;
 }
 
 const fmt = (val: number) =>
@@ -41,10 +47,12 @@ const fmtDate = (iso: string) =>
     hour: '2-digit', minute: '2-digit',
   });
 
+const MEDAL_COLORS = ['text-yellow-400', 'text-slate-300', 'text-amber-600'];
+
 const AdminAffiliatePanel = () => {
   const { toast } = useToast();
 
-  const [affiliates, setAffiliates] = useState<Affiliate[]>([]);
+  const [affiliates, setAffiliates] = useState<AffiliateWithSales[]>([]);
   const [affiliatesLoading, setAffiliatesLoading] = useState(true);
 
   const [withdrawals, setWithdrawals] = useState<WithdrawalWithAffiliate[]>([]);
@@ -58,11 +66,24 @@ const AdminAffiliatePanel = () => {
 
   const fetchAffiliates = useCallback(async () => {
     setAffiliatesLoading(true);
-    const { data } = await db
-      .from('affiliates')
-      .select('*')
-      .order('created_at', { ascending: false });
-    setAffiliates((data ?? []) as Affiliate[]);
+
+    const [{ data: affs }, { data: refs }] = await Promise.all([
+      db.from('affiliates').select('*').order('created_at', { ascending: false }),
+      db.from('referrals').select('affiliate_id').eq('status', 'converted'),
+    ]);
+
+    // Conta vendas por afiliado
+    const salesMap = new Map<string, number>();
+    for (const r of (refs ?? [])) {
+      salesMap.set(r.affiliate_id, (salesMap.get(r.affiliate_id) ?? 0) + 1);
+    }
+
+    const enriched = ((affs ?? []) as Affiliate[]).map(a => ({
+      ...a,
+      sales: salesMap.get(a.id) ?? 0,
+    }));
+
+    setAffiliates(enriched);
     setAffiliatesLoading(false);
   }, []);
 
@@ -75,20 +96,18 @@ const AdminAffiliatePanel = () => {
 
     const list = (data ?? []) as WithdrawalRequest[];
 
-    // Busca dados dos afiliados para enriquecer
     const affiliateIds = [...new Set(list.map(w => w.affiliate_id))];
     if (affiliateIds.length > 0) {
       const { data: affs } = await db
         .from('affiliates')
-        .select('id, ref_code, email, whatsapp')
+        .select('id, ref_code, email, whatsapp, pix_key')
         .in('id', affiliateIds);
 
       const affMap = new Map((affs ?? []).map((a: Affiliate) => [a.id, a]));
-      const enriched = list.map(w => ({
+      setWithdrawals(list.map(w => ({
         ...w,
-        affiliate: affMap.get(w.affiliate_id) as Pick<Affiliate, 'ref_code' | 'email' | 'whatsapp'> | undefined,
-      }));
-      setWithdrawals(enriched);
+        affiliate: affMap.get(w.affiliate_id) as Pick<Affiliate, 'ref_code' | 'email' | 'whatsapp' | 'pix_key'> | undefined,
+      })));
     } else {
       setWithdrawals(list);
     }
@@ -116,7 +135,6 @@ const AdminAffiliatePanel = () => {
       return;
     }
 
-    // Marca comissões disponíveis do afiliado como pagas (até o valor do saque)
     await db
       .from('commissions')
       .update({ status: 'paid', paid_at: new Date().toISOString() })
@@ -131,12 +149,17 @@ const AdminAffiliatePanel = () => {
   };
 
   const pendingWithdrawals = withdrawals.filter(w => w.status === 'pending');
+
   const filteredAffiliates = affiliates.filter(a =>
     !search ||
     a.ref_code.toLowerCase().includes(search.toLowerCase()) ||
     (a.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
     (a.whatsapp ?? '').includes(search)
   );
+
+  const ranking = [...affiliates]
+    .sort((a, b) => b.sales - a.sales)
+    .filter(a => a.sales > 0);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -161,7 +184,7 @@ const AdminAffiliatePanel = () => {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4">
           <Tabs defaultValue="withdrawals">
-            <TabsList className="w-full grid grid-cols-2 h-9 mb-5 bg-card/50">
+            <TabsList className="w-full grid grid-cols-3 h-9 mb-5 bg-card/50">
               <TabsTrigger value="withdrawals" className="text-xs gap-1.5">
                 <ArrowDownToLine className="h-3.5 w-3.5 hidden sm:block" />
                 Saques
@@ -174,6 +197,10 @@ const AdminAffiliatePanel = () => {
               <TabsTrigger value="affiliates" className="text-xs gap-1.5">
                 <Users className="h-3.5 w-3.5 hidden sm:block" />
                 Afiliados ({affiliates.length})
+              </TabsTrigger>
+              <TabsTrigger value="ranking" className="text-xs gap-1.5">
+                <Trophy className="h-3.5 w-3.5 hidden sm:block" />
+                Ranking
               </TabsTrigger>
             </TabsList>
 
@@ -294,7 +321,8 @@ const AdminAffiliatePanel = () => {
                             <TableHead className="text-xs">Código</TableHead>
                             <TableHead className="text-xs">Email</TableHead>
                             <TableHead className="text-xs">WhatsApp</TableHead>
-                            <TableHead className="text-xs text-center">Comissão</TableHead>
+                            <TableHead className="text-xs">Chave PIX</TableHead>
+                            <TableHead className="text-xs text-center">Vendas</TableHead>
                             <TableHead className="text-xs">Status</TableHead>
                             <TableHead className="text-xs">Cadastro</TableHead>
                           </TableRow>
@@ -317,8 +345,13 @@ const AdminAffiliatePanel = () => {
                                   </a>
                                 ) : '—'}
                               </TableCell>
-                              <TableCell className="text-center font-bold text-emerald-400 text-xs">
-                                {a.commission_rate}%
+                              <TableCell className="text-xs font-mono text-muted-foreground max-w-[130px] truncate">
+                                {a.pix_key ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className={`font-bold text-sm ${a.sales > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                                  {a.sales}
+                                </span>
                               </TableCell>
                               <TableCell>
                                 <Badge
@@ -335,6 +368,62 @@ const AdminAffiliatePanel = () => {
                           ))}
                         </TableBody>
                       </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* ── Ranking ─────────────────────────────────────────────────────── */}
+            <TabsContent value="ranking" className="mt-0">
+              <Card className="bg-card/50 border-border/60">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-yellow-400" />
+                    Ranking de vendas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {affiliatesLoading ? (
+                    <div className="p-4 space-y-3">
+                      {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                    </div>
+                  ) : ranking.length === 0 ? (
+                    <div className="py-10 text-center text-muted-foreground text-sm">
+                      <Trophy className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                      <p>Nenhuma venda registrada ainda.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/30">
+                      {ranking.map((a, i) => (
+                        <div key={a.id} className="flex items-center gap-4 px-5 py-3.5">
+                          <div className="w-7 flex items-center justify-center">
+                            {i < 3 ? (
+                              <Medal className={`h-5 w-5 ${MEDAL_COLORS[i]}`} />
+                            ) : (
+                              <span className="text-sm font-bold text-muted-foreground">{i + 1}</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-mono text-sm text-purple-300">{a.ref_code}</div>
+                            <div className="text-xs text-muted-foreground truncate">{a.email ?? '—'}</div>
+                          </div>
+                          {a.whatsapp && (
+                            <a
+                              href={`https://wa.me/55${a.whatsapp.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-emerald-400 hover:text-emerald-300"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </a>
+                          )}
+                          <div className="text-right">
+                            <div className="text-xl font-black text-emerald-400">{a.sales}</div>
+                            <div className="text-[10px] text-muted-foreground">venda{a.sales !== 1 ? 's' : ''}</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </CardContent>

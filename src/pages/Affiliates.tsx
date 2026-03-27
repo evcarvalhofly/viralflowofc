@@ -70,7 +70,7 @@ const Affiliates = () => {
   if (!affiliate) {
     return (
       <AffiliateRegistration
-        onRegister={(whatsapp) => register(whatsapp)}
+        onRegister={(whatsapp, pixKey) => register(whatsapp, pixKey)}
         registering={registering}
       />
     );
