@@ -1,5 +1,3 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -14,17 +12,20 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: corsHeaders });
     }
 
-    const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
-    const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const MP_ACCESS_TOKEN      = Deno.env.get('MP_ACCESS_TOKEN')!;
-    const MP_PLAN_ID           = Deno.env.get('MP_PLAN_ID')!;
+    const MP_ACCESS_TOKEN = Deno.env.get('MP_ACCESS_TOKEN')!;
+    const MP_PLAN_ID      = Deno.env.get('MP_PLAN_ID')!;
 
-    // Valida sessão do usuário
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
-    if (authError || !user) {
+    // O gateway do Supabase já valida o JWT — decodificamos direto para pegar user_id e email
+    const token = authHeader.replace('Bearer ', '');
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 401, headers: corsHeaders });
+    }
+    const payload = JSON.parse(atob(parts[1]));
+    const userId     = payload.sub as string;
+    const userEmail  = payload.email as string;
+
+    if (!userId) {
       return new Response(JSON.stringify({ error: 'Sessão inválida' }), { status: 401, headers: corsHeaders });
     }
 
@@ -40,10 +41,10 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         preapproval_plan_id: MP_PLAN_ID,
         reason:              'ViralFlow PRO',
-        payer_email:         user.email,
+        payer_email:         userEmail,
         back_url:            `${origin}/?checkout=success`,
         notification_url:    'https://dzgotqyikomtapcgdgff.supabase.co/functions/v1/mp-webhook',
-        external_reference:  user.id,
+        external_reference:  userId,
         status:              'pending',
       }),
     });
@@ -58,7 +59,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('MP preapproval criado:', mpData.id, '| user:', user.id);
+    console.log('MP preapproval criado:', mpData.id, '| user:', userId);
 
     return new Response(
       JSON.stringify({ url: mpData.init_point }),
