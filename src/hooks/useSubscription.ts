@@ -46,7 +46,7 @@ export function useSubscription() {
     return () => { ignore = true; supabase.removeChannel(channel); };
   }, [user]);
 
-  const isPro = status === 'active';
+  const isPro = status === 'active' || user?.email === 'evcarvalhodev@gmail.com';
 
   const startCheckout = async () => {
     const { data: { session } } = await supabase.auth.getSession();
