@@ -219,7 +219,7 @@ export const useAffiliate = () => {
 
   // ─── Cadastro como afiliado ──────────────────────────────────────────────────
 
-  const register = useCallback(async (): Promise<{ error?: string }> => {
+  const register = useCallback(async (whatsapp?: string): Promise<{ error?: string }> => {
     if (!user || registering) return { error: 'Não autorizado' };
     setRegistering(true);
 
@@ -256,6 +256,8 @@ export const useAffiliate = () => {
         status: 'active',
         commission_rate: 50.00,
         referred_by_affiliate_id: referredByAffiliateId,
+        email: user.email ?? null,
+        whatsapp: whatsapp?.trim() || null,
       })
       .select()
       .maybeSingle();

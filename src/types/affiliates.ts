@@ -19,6 +19,8 @@ export interface Affiliate {
   commission_rate: number;
   /** Afiliado que indicou este afiliado (MLM nível 2) */
   referred_by_affiliate_id: string | null;
+  email: string | null;
+  whatsapp: string | null;
   created_at: string;
 }
 

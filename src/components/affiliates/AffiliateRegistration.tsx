@@ -9,13 +9,15 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Link2, TrendingUp, Users, RefreshCcw, ShieldCheck, Zap, DollarSign
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Props {
-  onRegister: () => Promise<{ error?: string }>;
+  onRegister: (whatsapp: string) => Promise<{ error?: string }>;
   registering: boolean;
 }
 
@@ -55,10 +57,15 @@ const benefits = [
 const AffiliateRegistration = ({ onRegister, registering }: Props) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [whatsapp, setWhatsapp] = useState('');
 
   const handleRegister = async () => {
+    if (!whatsapp.trim()) {
+      toast({ title: 'Informe seu WhatsApp', variant: 'destructive' });
+      return;
+    }
     setLoading(true);
-    const result = await onRegister();
+    const result = await onRegister(whatsapp);
     setLoading(false);
 
     if (result.error) {
@@ -128,6 +135,20 @@ const AffiliateRegistration = ({ onRegister, registering }: Props) => {
             <li>Sem burocracia, sem espera</li>
             <li>Comece a divulgar agora mesmo</li>
           </ul>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="whatsapp" className="text-sm">WhatsApp (com DDD)</Label>
+            <Input
+              id="whatsapp"
+              placeholder="(11) 99999-9999"
+              value={whatsapp}
+              onChange={e => setWhatsapp(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Usado para envio do pagamento das comissões
+            </p>
+          </div>
+
           <Button
             onClick={handleRegister}
             disabled={loading || registering}

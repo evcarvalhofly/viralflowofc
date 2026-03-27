@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAffiliate } from '@/hooks/useAffiliate';
 
 import AffiliateRegistration from '@/components/affiliates/AffiliateRegistration';
+import AdminAffiliatePanel from '@/components/affiliates/AdminAffiliatePanel';
 import StatsCards from '@/components/affiliates/StatsCards';
 import AffiliateLinkPanel from '@/components/affiliates/AffiliateLinkPanel';
 import CommissionHistory from '@/components/affiliates/CommissionHistory';
@@ -25,8 +26,14 @@ import WithdrawalPanel from '@/components/affiliates/WithdrawalPanel';
 import AffiliateRanking from '@/components/affiliates/AffiliateRanking';
 import ReferralsList from '@/components/affiliates/ReferralsList';
 
+const ADMIN_EMAIL = 'evcarvalhodev@gmail.com';
+
 const Affiliates = () => {
   const { user } = useAuth();
+
+  if (user?.email === ADMIN_EMAIL) {
+    return <AdminAffiliatePanel />;
+  }
 
   const {
     affiliate,
@@ -63,7 +70,7 @@ const Affiliates = () => {
   if (!affiliate) {
     return (
       <AffiliateRegistration
-        onRegister={register}
+        onRegister={(whatsapp) => register(whatsapp)}
         registering={registering}
       />
     );
