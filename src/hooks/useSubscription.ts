@@ -86,7 +86,7 @@ export function useSubscription() {
 
     if (!data?.url) {
       console.error('Checkout: no URL returned', data);
-      toast.error('Erro ao iniciar pagamento', { description: 'Resposta inválida do servidor.' });
+      toast.error('Erro ao iniciar pagamento', { description: JSON.stringify(data) });
       return;
     }
 
