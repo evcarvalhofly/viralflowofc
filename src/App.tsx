@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Auth from "./pages/Auth";
@@ -33,7 +33,10 @@ const queryClient = new QueryClient();
 /** Carrega hooks globais e UI de notificação/PWA — só para usuários autenticados */
 const AppShell = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
+  const { pathname } = useLocation();
   const [showNotifModal, setShowNotifModal] = useState(false);
+
+  const BLOCKED_PATHS = ['/planopro', '/convite'];
 
   // Escuta eventos Supabase e mostra notificações em background
   useBackgroundNotifications();
@@ -58,7 +61,7 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   return (
     <>
       {children}
-      {showNotifModal && (
+      {showNotifModal && !BLOCKED_PATHS.includes(pathname) && (
         <NotificationPermissionModal onClose={() => setShowNotifModal(false)} />
       )}
       <PWAInstallPrompt />
