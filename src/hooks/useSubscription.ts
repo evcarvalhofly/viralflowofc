@@ -50,31 +50,15 @@ export function useSubscription() {
 
   const startCheckout = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      window.location.href = '/auth';
-      return;
-    }
+    if (!session) { window.location.href = '/auth'; return; }
 
-    // Usa fetch direto para evitar problemas com o cliente Supabase
-    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+    const { data, error } = await supabase.functions.invoke('create-checkout', {
+      body: {},
+    });
 
-    let data: { url?: string; error?: string } | null = null;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      });
-      data = await res.json();
-      console.log('Checkout response:', data);
-    } catch (fetchErr) {
-      console.error('Checkout fetch error:', fetchErr);
-      toast.error('Erro ao iniciar pagamento', { description: 'Falha de rede. Tente novamente.' });
+    if (error) {
+      console.error('Checkout error:', error);
+      toast.error('Erro ao iniciar pagamento', { description: 'Tente novamente em instantes.' });
       return;
     }
 
