@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { Zap, Check, Loader2, ArrowRight, Sparkles, Type, Scissors, FileText, MessageSquare, BarChart2 } from 'lucide-react';
+import { Zap, Check, Loader2, ArrowRight, Sparkles, Type, Scissors, MessageSquare, BarChart2, Users, Video, Layers, Share2 } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 
 const FEATURES = [
   { icon: Scissors,     label: 'ViralCut — Editor de vídeo com IA' },
   { icon: Sparkles,     label: 'Auto Corte e Legendas automáticas' },
   { icon: Type,         label: 'Gerador de título e descrição' },
-  { icon: FileText,     label: 'Gerador de roteiros virais' },
   { icon: BarChart2,    label: 'Planejamento de conteúdo completo' },
   { icon: MessageSquare,label: 'Chat com IA ilimitado' },
+  { icon: Users,        label: 'Comunidade' },
+  { icon: Video,        label: 'Biblioteca Vídeos Virais' },
+  { icon: Layers,       label: 'Material de edição' },
+  { icon: Share2,       label: 'Afiliado' },
 ];
 
 export default function PlanoPro() {
