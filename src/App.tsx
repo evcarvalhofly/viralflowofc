@@ -24,6 +24,9 @@ import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useBackgroundNotifications } from "./hooks/useBackgroundNotifications";
 import { useAffiliateTracking } from "./hooks/useAffiliateTracking";
 import { useCheckoutReturn } from "./hooks/useCheckoutReturn";
+import { useSubscription } from "./hooks/useSubscription";
+import PlanoPro from "./pages/PlanoPro";
+import Convite from "./pages/Convite";
 
 const queryClient = new QueryClient();
 
@@ -63,9 +66,12 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
-  if (loading) {
+/** Exige autenticação + assinatura PRO ativa. Redireciona para /planopro se não tiver. */
+const ProRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading: authLoading } = useAuth();
+  const { isPro, loading: subLoading } = useSubscription();
+
+  if (authLoading || subLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="animate-pulse text-primary text-2xl">⚡</div>
@@ -73,6 +79,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   if (!user) return <Navigate to="/auth" replace />;
+  if (!isPro) return <Navigate to="/planopro" replace />;
   return <AppLayout>{children}</AppLayout>;
 };
 
@@ -93,17 +100,22 @@ const App = () => (
           <BrowserRouter>
             <AppShell>
               <Routes>
-                <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                {/* Público */}
                 <Route path="/auth" element={<AuthRoute><Auth /></AuthRoute>} />
-                <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-                <Route path="/planning" element={<ProtectedRoute><Planning /></ProtectedRoute>} />
-                <Route path="/gameover" element={<ProtectedRoute><GameOver /></ProtectedRoute>} />
-                <Route path="/viral-videos" element={<ProtectedRoute><ViralVideos /></ProtectedRoute>} />
-                <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
-                <Route path="/viralcut" element={<ProtectedRoute><ViralCut /></ProtectedRoute>} />
-                <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
-                <Route path="/avisos" element={<ProtectedRoute><Avisos /></ProtectedRoute>} />
-                <Route path="/affiliates" element={<ProtectedRoute><Affiliates /></ProtectedRoute>} />
+                <Route path="/convite" element={<Convite />} />
+                <Route path="/planopro" element={<PlanoPro />} />
+
+                {/* Requer PRO */}
+                <Route path="/" element={<ProRoute><Home /></ProRoute>} />
+                <Route path="/chat" element={<ProRoute><Chat /></ProRoute>} />
+                <Route path="/planning" element={<ProRoute><Planning /></ProRoute>} />
+                <Route path="/gameover" element={<ProRoute><GameOver /></ProRoute>} />
+                <Route path="/viral-videos" element={<ProRoute><ViralVideos /></ProRoute>} />
+                <Route path="/assets" element={<ProRoute><Assets /></ProRoute>} />
+                <Route path="/viralcut" element={<ProRoute><ViralCut /></ProRoute>} />
+                <Route path="/community" element={<ProRoute><Community /></ProRoute>} />
+                <Route path="/avisos" element={<ProRoute><Avisos /></ProRoute>} />
+                <Route path="/affiliates" element={<ProRoute><Affiliates /></ProRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppShell>
