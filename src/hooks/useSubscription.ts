@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -49,18 +50,28 @@ export function useSubscription() {
 
   const startCheckout = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      window.location.href = '/auth';
+      return;
+    }
 
     const { data, error } = await supabase.functions.invoke('create-checkout', {
       headers: { Authorization: `Bearer ${session.access_token}` },
       body: {
         success_url: `${window.location.origin}/?checkout=success`,
-        cancel_url:  `${window.location.origin}/?checkout=cancel`,
+        cancel_url:  `${window.location.origin}/planopro?checkout=cancel`,
       },
     });
 
-    if (error || !data?.url) {
-      console.error('Checkout error:', error ?? data);
+    if (error) {
+      console.error('Checkout error:', error);
+      toast.error('Erro ao iniciar pagamento', { description: 'Tente novamente em instantes.' });
+      return;
+    }
+
+    if (!data?.url) {
+      console.error('Checkout: no URL returned', data);
+      toast.error('Erro ao iniciar pagamento', { description: 'Resposta inválida do servidor.' });
       return;
     }
 
