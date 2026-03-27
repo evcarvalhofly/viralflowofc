@@ -55,17 +55,26 @@ export function useSubscription() {
       return;
     }
 
-    const { data, error } = await supabase.functions.invoke('create-checkout', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-      body: {
-        success_url: `${window.location.origin}/?checkout=success`,
-        cancel_url:  `${window.location.origin}/planopro?checkout=cancel`,
-      },
-    });
+    // Usa fetch direto para evitar problemas com o cliente Supabase
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-    if (error) {
-      console.error('Checkout error:', error);
-      toast.error('Erro ao iniciar pagamento', { description: 'Tente novamente em instantes.' });
+    let data: { url?: string; error?: string } | null = null;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      data = await res.json();
+      console.log('Checkout response:', data);
+    } catch (fetchErr) {
+      console.error('Checkout fetch error:', fetchErr);
+      toast.error('Erro ao iniciar pagamento', { description: 'Falha de rede. Tente novamente.' });
       return;
     }
 
