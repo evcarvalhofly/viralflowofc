@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
       if (referral) {
         const { data: affiliate } = await admin
           .from('affiliates')
-          .select('id, commission_rate, referred_by_affiliate_id')
+          .select('id, commission_rate')
           .eq('id', referral.affiliate_id)
           .eq('status', 'active')
           .maybeSingle();
@@ -100,14 +100,14 @@ Deno.serve(async (req) => {
           const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
           const periodStart = new Date().toISOString();
 
-          const level1Amount = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
+          const commAmount = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
 
           await admin.from('commissions').insert({
             affiliate_id:    affiliate.id,
             subscription_id: preapprovalId,
             referral_id:     referral.id,
             type:            commType,
-            amount:          level1Amount,
+            amount:          commAmount,
             status:          'pending',
             available_after: availableAfter,
             level:           1,
@@ -121,23 +121,7 @@ Deno.serve(async (req) => {
               .eq('id', referral.id);
           }
 
-          // MLM nível 2 — quem indicou o afiliado recebe 10% fixo
-          if (affiliate.referred_by_affiliate_id) {
-            const level2Amount = parseFloat((0.10 * PRICE).toFixed(2));
-            await admin.from('commissions').insert({
-              affiliate_id:    affiliate.referred_by_affiliate_id,
-              subscription_id: preapprovalId,
-              referral_id:     referral.id,
-              type:            commType,
-              amount:          level2Amount,
-              status:          'pending',
-              available_after: availableAfter,
-              level:           2,
-              period_start:    periodStart,
-            });
-          }
-
-          console.log('Comissão criada para afiliado:', affiliate.id, '| valor:', level1Amount, '| tipo:', commType);
+          console.log('Comissão criada para afiliado:', affiliate.id, '| valor:', commAmount, '| tipo:', commType);
         }
       }
     }
