@@ -65,17 +65,13 @@ export function useSubscription() {
 
     if (error) {
       console.error('Checkout error:', error);
-      let msg = typeof error === 'object' && 'message' in error ? String((error as { message: string }).message) : String(error);
-      // Tenta extrair o erro real do corpo da resposta
-      try {
-        const ctx = (error as { context?: Response }).context;
-        if (ctx) {
-          const body = await ctx.json();
-          console.error('Checkout error body:', body);
-          if (body?.error) msg = String(body.error);
-        }
-      } catch { /* ignora */ }
-      toast.error('Erro ao iniciar pagamento', { description: msg || 'Tente novamente em instantes.' });
+      toast.error('Erro ao iniciar pagamento', { description: 'Tente novamente em instantes.' });
+      return;
+    }
+
+    if (data?.error) {
+      console.error('Checkout MP error:', data.error);
+      toast.error('Erro ao iniciar pagamento', { description: String(data.error) });
       return;
     }
 

@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const MP_ACCESS_TOKEN = Deno.env.get('MP_ACCESS_TOKEN')!;
@@ -18,16 +18,18 @@ Deno.serve(async (req) => {
     const token = authHeader.replace('Bearer ', '');
     const parts = token.split('.');
     if (parts.length !== 3) {
-      return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Token inválido' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     // JWT usa base64url — converte para base64 padrão antes de decodificar
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(atob(base64));
-    const userId     = payload.sub as string;
-    const userEmail  = payload.email as string;
+    const userId    = payload.sub as string;
+    const userEmail = payload.email as string;
+
+    console.log('userId:', userId, '| email:', userEmail);
 
     if (!userId) {
-      return new Response(JSON.stringify({ error: 'Sessão inválida' }), { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Sessão inválida' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const origin = req.headers.get('origin') ?? 'https://viralflowofc.lovable.app';
@@ -55,12 +57,12 @@ Deno.serve(async (req) => {
     });
 
     const mpData = await mpRes.json();
+    console.log('MP response status:', mpRes.status, '| body:', JSON.stringify(mpData));
 
     if (!mpRes.ok || !mpData.init_point) {
-      console.error('MP error:', JSON.stringify(mpData));
       return new Response(
-        JSON.stringify({ error: mpData?.message ?? 'Erro ao criar assinatura' }),
-        { status: 500, headers: corsHeaders }
+        JSON.stringify({ error: mpData?.message ?? mpData?.cause ?? 'Erro ao criar assinatura no MercadoPago' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -74,7 +76,7 @@ Deno.serve(async (req) => {
     console.error('create-checkout erro:', err);
     return new Response(
       JSON.stringify({ error: String(err) }),
-      { status: 500, headers: corsHeaders }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
