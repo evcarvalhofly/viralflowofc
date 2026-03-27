@@ -64,7 +64,7 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
       {showNotifModal && !BLOCKED_PATHS.includes(pathname) && (
         <NotificationPermissionModal onClose={() => setShowNotifModal(false)} />
       )}
-      <PWAInstallPrompt />
+      {!BLOCKED_PATHS.includes(pathname) && <PWAInstallPrompt />}
     </>
   );
 };
