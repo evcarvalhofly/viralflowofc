@@ -593,12 +593,40 @@ const ViralCut = () => {
   handleItemDeleteRef.current = handleItemDelete;
 
   const handleUpdateItem = useCallback((trackId: string, itemId: string, updates: Partial<TrackItem>) => {
-    setProjectRaw((p) => ({
-      ...p,
-      tracks: p.tracks.map((t) =>
-        t.id !== trackId ? t : { ...t, items: t.items.map((i) => i.id !== itemId ? i : { ...i, ...updates }) }
-      ),
-    }));
+    setProjectRaw((p) => {
+      // If this is a subtitle position change, apply the same delta to ALL subtitle items
+      if (updates.textDetails?.posX !== undefined || updates.textDetails?.posY !== undefined) {
+        const movedItem = p.tracks.flatMap((t) => t.items).find((i) => i.id === itemId);
+        if (movedItem?.name === 'Legenda' && movedItem.textDetails && updates.textDetails) {
+          const dx = (updates.textDetails.posX ?? movedItem.textDetails.posX) - movedItem.textDetails.posX;
+          const dy = (updates.textDetails.posY ?? movedItem.textDetails.posY) - movedItem.textDetails.posY;
+          return {
+            ...p,
+            tracks: p.tracks.map((t) => ({
+              ...t,
+              items: t.items.map((i) => {
+                if (i.name !== 'Legenda' || !i.textDetails) return i;
+                if (i.id === itemId) return { ...i, ...updates };
+                return {
+                  ...i,
+                  textDetails: {
+                    ...i.textDetails,
+                    posX: Math.max(0, Math.min(100, i.textDetails.posX + dx)),
+                    posY: Math.max(0, Math.min(100, i.textDetails.posY + dy)),
+                  },
+                };
+              }),
+            })),
+          };
+        }
+      }
+      return {
+        ...p,
+        tracks: p.tracks.map((t) =>
+          t.id !== trackId ? t : { ...t, items: t.items.map((i) => i.id !== itemId ? i : { ...i, ...updates }) }
+        ),
+      };
+    });
   }, []);
 
   const handleToggleMute = useCallback((trackId: string) => {
@@ -783,6 +811,15 @@ const ViralCut = () => {
     return false;
   }, [selectedItemId, project.tracks]);
 
+  const selectedSubtitleDetails = useMemo(() => {
+    if (!selectedItemId) return null;
+    for (const track of project.tracks) {
+      const item = track.items.find((i) => i.id === selectedItemId);
+      if (item?.name === 'Legenda') return item.textDetails ?? null;
+    }
+    return null;
+  }, [selectedItemId, project.tracks]);
+
   const handleChangeAllSubtitleStyle = useCallback((style: SubtitleStyle) => {
     const styleDetails = SUBTITLE_TEXT_DETAILS[style];
     const anim = SUBTITLE_ANIMATION[style];
@@ -797,6 +834,19 @@ const ViralCut = () => {
             textDetails: { ...item.textDetails, ...styleDetails },
             animationIn: anim,
           };
+        }),
+      })),
+    }), { pushHistory: true });
+  }, [updateProject]);
+
+  const handleChangeAllSubtitleCustom = useCallback((patch: Partial<typeof DEFAULT_TEXT_DETAILS>) => {
+    updateProject((p) => ({
+      ...p,
+      tracks: p.tracks.map((track) => ({
+        ...track,
+        items: track.items.map((item) => {
+          if (item.name !== 'Legenda' || !item.textDetails) return item;
+          return { ...item, textDetails: { ...item.textDetails, ...patch } };
         }),
       })),
     }), { pushHistory: true });
@@ -1245,6 +1295,8 @@ const ViralCut = () => {
             <SubtitleStylePanel
               currentStyle={selectedSubtitleStyle}
               onChangeStyle={handleChangeAllSubtitleStyle}
+              onChangeCustom={handleChangeAllSubtitleCustom}
+              currentTextDetails={selectedSubtitleDetails}
               onClose={() => setShowSubtitleStylePanel(false)}
             />
           )}

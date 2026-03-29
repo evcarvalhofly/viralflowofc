@@ -21,7 +21,7 @@ export function drawTextItemOnCanvas(
   ctx.save();
   ctx.globalAlpha = td.opacity ?? 1;
 
-  const fontStr = `bold ${fontSize}px ${td.fontFamily || 'Inter, Arial, sans-serif'}`;
+  const fontStr = `${td.fontWeight ?? 'bold'} ${fontSize}px ${td.fontFamily || 'Inter, Arial, sans-serif'}`;
   ctx.font = fontStr;
   ctx.textAlign = (td.textAlign as CanvasTextAlign) || 'center';
   ctx.textBaseline = 'middle';

@@ -45,6 +45,7 @@ export interface TextDetails {
   width: number;
   strokeWidth?: number;   // text outline (webkit-text-stroke)
   strokeColor?: string;
+  fontWeight?: string;
 }
 
 export interface VideoDetails {

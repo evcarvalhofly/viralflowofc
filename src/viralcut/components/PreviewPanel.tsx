@@ -52,6 +52,16 @@ function previewSize(w?: number, h?: number): { w: number; h: number } {
   return { w: Math.max(2, Math.round(w * scale / 2) * 2), h: Math.max(2, Math.round(h * scale / 2) * 2) };
 }
 
+function buildStrokeTextShadow(px: number, color: string): string {
+  const n = px;
+  return [
+    `${-n}px ${-n}px 0 ${color}`, `${n}px ${-n}px 0 ${color}`,
+    `${-n}px ${n}px 0 ${color}`,  `${n}px ${n}px 0 ${color}`,
+    `0 ${-n}px 0 ${color}`,       `0 ${n}px 0 ${color}`,
+    `${-n}px 0 0 ${color}`,       `${n}px 0 0 ${color}`,
+  ].join(', ');
+}
+
 // ── Direct-manipulation overlay for a text or image item ──────────────────
 interface OverlayHandleProps {
   item: TrackItem;
@@ -782,6 +792,10 @@ export function PreviewPanel({
           const shadowStyle = td.boxShadow?.blur > 0
             ? `${td.boxShadow.x}px ${td.boxShadow.y}px ${td.boxShadow.blur}px ${td.boxShadow.color}`
             : 'none';
+          const strokeShadow = td.strokeWidth && td.strokeWidth > 0
+            ? buildStrokeTextShadow(td.strokeWidth, td.strokeColor ?? '#000000')
+            : null;
+          const finalTextShadow = [strokeShadow, shadowStyle !== 'none' ? shadowStyle : null].filter(Boolean).join(', ') || 'none';
           return (
             <OverlayHandle
               key={item.id}
@@ -805,11 +819,11 @@ export function PreviewPanel({
                   padding: '2px 6px',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
-                  textShadow: shadowStyle,
+                  textShadow: finalTextShadow,
                   borderWidth: td.borderWidth,
                   borderStyle: td.borderWidth > 0 ? 'solid' : 'none',
                   borderColor: td.borderColor,
-                  WebkitTextStroke: td.strokeWidth ? `${td.strokeWidth}px ${td.strokeColor ?? '#000000'}` : undefined,
+                  fontWeight: td.fontWeight ?? undefined,
                   pointerEvents: 'none',
                   lineHeight: 1.35,
                   animation: (() => {
