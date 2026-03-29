@@ -411,6 +411,25 @@ const ViralCut = () => {
     if (!mf) return;
     updateProject((p) => {
       const targetType: Track['type'] = mf.type === 'audio' ? 'audio' : mf.type === 'image' ? 'image' : 'video';
+
+      // ── Auto-orient: set canvas to first video's aspect ratio ──────────
+      const isFirstVideo =
+        mf.type === 'video' &&
+        p.aspectRatio === '16:9' &&
+        p.width === 1920 &&
+        p.height === 1080 &&
+        (p.tracks.find((t) => t.type === 'video')?.items.length ?? 0) === 0;
+
+      let orientationPatch: Partial<Project> = {};
+      if (isFirstVideo && mf.width && mf.height) {
+        const resolved = resolveAspectRatioFromMedia(mf.width, mf.height);
+        orientationPatch = {
+          aspectRatio: resolved.aspectRatio,
+          width: resolved.projectWidth,
+          height: resolved.projectHeight,
+        };
+      }
+
       let track = p.tracks.find((t) => t.type === targetType);
       let tracks = p.tracks;
       if (!track && targetType === 'image') {
@@ -418,7 +437,7 @@ const ViralCut = () => {
         tracks = [...p.tracks, newTrack];
         track = newTrack;
       }
-      if (!track) return p;
+      if (!track) return { ...p, ...orientationPatch };
       const lastEnd = track.items.reduce((acc, i) => Math.max(acc, i.endTime), 0);
       const dur = mf.duration > 0 ? mf.duration : 5;
       const item: TrackItem = {
@@ -432,9 +451,9 @@ const ViralCut = () => {
         imageDetails: targetType === 'image' ? { ...DEFAULT_IMAGE_DETAILS } : undefined,
       };
       const newTracks = tracks.map((t) => t.id === track!.id ? { ...t, items: [...t.items, item] } : t);
-      return { ...p, tracks: newTracks };
+      return { ...p, ...orientationPatch, tracks: newTracks };
     }, { pushHistory: true });
-  }, [media, updateProject]);
+  }, [media, updateProject, resolveAspectRatioFromMedia]);
 
   const handleAddOverlay = useCallback((mediaId: string) => {
     const mf = media.find((m) => m.id === mediaId);
