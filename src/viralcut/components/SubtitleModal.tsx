@@ -73,11 +73,11 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm pointer-events-auto" onClick={onClose}>
       <div
-        className="bg-card border border-border rounded-2xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden"
+        className="bg-card border border-border rounded-2xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <Captions className="w-4 h-4 text-primary" />
             <h3 className="font-semibold text-sm text-foreground">Legendas Automáticas</h3>
@@ -87,7 +87,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
           {/* Clipe selecionado */}
           <div className="bg-muted rounded-xl p-3">
             {videoItem && mediaFile ? (
@@ -170,8 +170,11 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
                       : 'border-border bg-muted hover:border-primary/50'
                   }`}
                 >
-                  <div className="w-full h-8 rounded-lg flex items-center justify-center" style={{ background: s.preview.background ?? 'transparent' }}>
-                    <span className="text-xs font-bold px-1.5" style={{ ...s.preview, background: undefined, fontSize: s.preview.fontSize ?? '12px' }}>
+                  <div
+                    className="w-full h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: (!s.preview.background || s.preview.background === 'transparent') ? '#111' : s.preview.background as string }}
+                  >
+                    <span className="text-xs font-bold px-1.5" style={{ ...s.preview, background: undefined, fontSize: '12px' }}>
                       Exemplo
                     </span>
                   </div>
@@ -209,7 +212,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
         </div>
 
         {/* Footer */}
-        <div className="px-5 pb-5 flex gap-2">
+        <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-border shrink-0">
           <button
             onClick={onClose}
             className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
