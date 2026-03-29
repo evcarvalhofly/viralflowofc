@@ -18,6 +18,7 @@ import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
 import { SubtitleModal } from '@/viralcut/components/SubtitleModal';
+import { SubtitleStylePanel } from '@/viralcut/components/SubtitleStylePanel';
 import { SubtitleSegment, SubtitleStyle } from '@/viralcut/hooks/useSubtitleGeneration';
 import { AnimationPreset } from '@/viralcut/types';
 import { exportProjectWithMediaBunny } from '@/viralcut/export3/exportProjectWithMediaBunny';
@@ -155,6 +156,7 @@ const ViralCut = () => {
   const [showMobilePanel, setShowMobilePanel] = useState(false);
   const [showAutoCut, setShowAutoCut] = useState(false);
   const [showSubtitleModal, setShowSubtitleModal] = useState(false);
+  const [showSubtitleStylePanel, setShowSubtitleStylePanel] = useState(false);
 
   const hasMedia = media.length > 0;
 
@@ -640,25 +642,41 @@ const ViralCut = () => {
 
   // ── Subtitle text styles per preset ──────────────────────
   const SUBTITLE_TEXT_DETAILS: Record<SubtitleStyle, Partial<typeof DEFAULT_TEXT_DETAILS>> = {
-    classic: { fontSize: 3,   fontFamily: 'Inter, sans-serif',                   color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.75)',    posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
-    minimal: { fontSize: 3,   fontFamily: 'Inter, sans-serif',                   color: '#ffffff', backgroundColor: 'transparent',         posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 8  } },
-    viral:   { fontSize: 3.2, fontFamily: 'Inter, sans-serif',                   color: '#facc15', backgroundColor: 'rgba(0,0,0,0.82)',    posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
-    bold:    { fontSize: 3.8, fontFamily: '"Anton", Impact, sans-serif',          color: '#ffffff', backgroundColor: 'transparent',         posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  }, strokeWidth: 3, strokeColor: '#000000' },
-    neon:    { fontSize: 3,   fontFamily: 'Inter, sans-serif',                   color: '#00f5ff', backgroundColor: 'transparent',         posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#00f5ff', x: 0, y: 0, blur: 10 } },
-    cinema:  { fontSize: 2.5, fontFamily: 'Georgia, serif',                      color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.55)',    posX: 50, posY: 92, width: 85, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
-    karaoke: { fontSize: 3.8, fontFamily: '"Bebas Neue", "Anton", sans-serif',   color: '#ffffff', backgroundColor: 'rgba(234,179,8,0.9)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
-    fire:    { fontSize: 3.2, fontFamily: '"Oswald", sans-serif',                color: '#ffffff', backgroundColor: 'rgba(220,38,38,0.88)',posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    classic:   { fontSize: 3,   fontFamily: 'Inter, sans-serif',                          color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.75)',      posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    minimal:   { fontSize: 3,   fontFamily: 'Inter, sans-serif',                          color: '#ffffff', backgroundColor: 'transparent',           posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 8  } },
+    viral:     { fontSize: 3.2, fontFamily: 'Inter, sans-serif',                          color: '#facc15', backgroundColor: 'rgba(0,0,0,0.82)',      posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    bold:      { fontSize: 3.8, fontFamily: '"Anton", Impact, sans-serif',                color: '#ffffff', backgroundColor: 'transparent',           posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  }, strokeWidth: 3, strokeColor: '#000000' },
+    neon:      { fontSize: 3,   fontFamily: 'Inter, sans-serif',                          color: '#00f5ff', backgroundColor: 'transparent',           posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#00f5ff', x: 0, y: 0, blur: 10 } },
+    cinema:    { fontSize: 2.5, fontFamily: 'Georgia, serif',                             color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.55)',      posX: 50, posY: 92, width: 85, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    karaoke:   { fontSize: 3.8, fontFamily: '"Bebas Neue", "Anton", sans-serif',          color: '#ffffff', backgroundColor: 'rgba(234,179,8,0.9)',   posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    fire:      { fontSize: 3.2, fontFamily: '"Oswald", sans-serif',                       color: '#ffffff', backgroundColor: 'rgba(220,38,38,0.88)', posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    american:  { fontSize: 4.5, fontFamily: '"Anton", Impact, sans-serif',                color: '#ffffff', backgroundColor: 'transparent',           posX: 50, posY: 87, width: 92, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  }, strokeWidth: 4, strokeColor: '#000000' },
+    outline:   { fontSize: 3.5, fontFamily: '"Montserrat", "Inter", sans-serif',          color: '#ffffff', backgroundColor: 'transparent',           posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  }, strokeWidth: 3, strokeColor: '#000000' },
+    highlight: { fontSize: 3.2, fontFamily: 'Inter, sans-serif',                          color: '#000000', backgroundColor: '#FFE500',               posX: 50, posY: 88, width: 80, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    elegant:   { fontSize: 2.8, fontFamily: '"Playfair Display", Georgia, serif',         color: '#f5f0e8', backgroundColor: 'transparent',           posX: 50, posY: 90, width: 88, textAlign: 'center', boxShadow: { color: '#000000', x: 1, y: 1, blur: 6  } },
+    sport:     { fontSize: 3.8, fontFamily: '"Oswald", sans-serif',                       color: '#ffffff', backgroundColor: 'rgba(255,107,0,0.9)',   posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    pop:       { fontSize: 4.0, fontFamily: '"Bangers", cursive',                         color: '#ffffff', backgroundColor: 'rgba(220,0,120,0.9)',   posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    cream:     { fontSize: 3.0, fontFamily: '"Montserrat", "Inter", sans-serif',          color: '#1a1a1a', backgroundColor: 'rgba(255,248,220,0.95)',posX: 50, posY: 88, width: 85, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
+    horror:    { fontSize: 3.2, fontFamily: '"Oswald", sans-serif',                       color: '#cc0000', backgroundColor: 'rgba(0,0,0,0.88)',      posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#cc0000', x: 0, y: 0, blur: 8  } },
   };
 
   const SUBTITLE_ANIMATION: Record<SubtitleStyle, AnimationPreset> = {
-    classic: 'none',
-    minimal: 'fadeIn',
-    viral:   'zoomIn',
-    bold:    'slideUp',
-    neon:    'fadeIn',
-    cinema:  'none',
-    karaoke: 'zoomIn',
-    fire:    'slideUp',
+    classic:   'none',
+    minimal:   'fadeIn',
+    viral:     'zoomIn',
+    bold:      'slideUp',
+    neon:      'fadeIn',
+    cinema:    'none',
+    karaoke:   'zoomIn',
+    fire:      'slideUp',
+    american:  'slideUp',
+    outline:   'fadeIn',
+    highlight: 'zoomIn',
+    elegant:   'fadeIn',
+    sport:     'slideUp',
+    pop:       'zoomIn',
+    cream:     'fadeIn',
+    horror:    'fadeIn',
   };
 
   // Agrupa palavras usando timestamps reais com detecção de pausa natural,
@@ -741,6 +759,47 @@ const ViralCut = () => {
       );
       return { ...p, tracks: updatedTracks };
     }, { pushHistory: true });
+  }, [updateProject]);
+
+  // ── Detect if selected item is a subtitle ─────────────────
+  const selectedSubtitleStyle = useMemo((): SubtitleStyle | undefined => {
+    if (!selectedItemId) return undefined;
+    for (const track of project.tracks) {
+      const item = track.items.find(i => i.id === selectedItemId);
+      if (item && item.name === 'Legenda' && item.textDetails) {
+        // Try to match current style from backgroundColor/fontFamily
+        return undefined; // we just want to know it IS a subtitle
+      }
+    }
+    return undefined;
+  }, [selectedItemId, project.tracks]);
+
+  const isSelectedSubtitle = useMemo(() => {
+    if (!selectedItemId) return false;
+    for (const track of project.tracks) {
+      const item = track.items.find(i => i.id === selectedItemId);
+      if (item && item.name === 'Legenda') return true;
+    }
+    return false;
+  }, [selectedItemId, project.tracks]);
+
+  const handleChangeAllSubtitleStyle = useCallback((style: SubtitleStyle) => {
+    const styleDetails = SUBTITLE_TEXT_DETAILS[style];
+    const anim = SUBTITLE_ANIMATION[style];
+    updateProject((p) => ({
+      ...p,
+      tracks: p.tracks.map((track) => ({
+        ...track,
+        items: track.items.map((item) => {
+          if (item.name !== 'Legenda' || !item.textDetails) return item;
+          return {
+            ...item,
+            textDetails: { ...item.textDetails, ...styleDetails },
+            animationIn: anim,
+          };
+        }),
+      })),
+    }), { pushHistory: true });
   }, [updateProject]);
 
   const handleSplitAllAtPlayhead = useCallback(() => {
@@ -827,6 +886,14 @@ const ViralCut = () => {
     if (isMobile) { setMobileTab('editar'); setShowMobilePanel(true); }
     else { setShowProperties(true); }
   }, [isMobile]);
+
+  useEffect(() => {
+    if (isSelectedSubtitle) {
+      setShowSubtitleStylePanel(true);
+    } else {
+      setShowSubtitleStylePanel(false);
+    }
+  }, [isSelectedSubtitle]);
 
   // Clipe de vídeo para legendas: item selecionado (se for vídeo) ou primeiro da timeline
   const subtitleVideoItem = useMemo(() => {
@@ -1157,7 +1224,7 @@ const ViralCut = () => {
           </div>
         )}
 
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-border">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-border relative">
           <PreviewPanel
             tracks={stableTracks}
             media={media}
@@ -1174,6 +1241,13 @@ const ViralCut = () => {
             onUpdateItem={handleUpdateItem}
             onOpenProperties={handleItemDoubleClick}
           />
+          {isSelectedSubtitle && showSubtitleStylePanel && (
+            <SubtitleStylePanel
+              currentStyle={selectedSubtitleStyle}
+              onChangeStyle={handleChangeAllSubtitleStyle}
+              onClose={() => setShowSubtitleStylePanel(false)}
+            />
+          )}
         </div>
 
         {showProperties && (
