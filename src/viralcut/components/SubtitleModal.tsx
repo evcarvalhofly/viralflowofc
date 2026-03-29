@@ -14,17 +14,17 @@ interface SubtitleModalProps {
 
 const STYLE_OPTIONS: { id: SubtitleStyle; label: string; preview: React.CSSProperties }[] = [
   { id: 'classic',   label: 'Clássico',    preview: { color: '#ffffff', background: 'rgba(0,0,0,0.75)',     fontFamily: 'Inter, sans-serif' } },
-  { id: 'minimal',   label: 'Minimal',     preview: { color: '#ffffff', background: 'transparent',          fontFamily: 'Inter, sans-serif', textShadow: '0 0 6px #000, 1px 1px 3px #000' } },
+  { id: 'minimal',   label: 'Minimal',     preview: { color: '#ffffff', background: '#111',               fontFamily: 'Inter, sans-serif', textShadow: '0 0 6px #000, 1px 1px 3px #000' } },
   { id: 'viral',     label: 'Viral',       preview: { color: '#facc15', background: 'rgba(0,0,0,0.82)',     fontFamily: 'Inter, sans-serif' } },
-  { id: 'bold',      label: 'Bold',        preview: { color: '#ffffff', background: 'transparent',          fontFamily: '"Anton", Impact, sans-serif', WebkitTextStroke: '1.5px #000' } },
-  { id: 'neon',      label: 'Neon',        preview: { color: '#00f5ff', background: 'transparent',          fontFamily: 'Inter, sans-serif', textShadow: '0 0 8px #00f5ff, 0 0 14px #00f5ff' } },
-  { id: 'cinema',    label: 'Cinema',      preview: { color: '#ffffff', background: 'rgba(0,0,0,0.55)',     fontFamily: 'Georgia, serif' } },
+  { id: 'bold',      label: 'Bold',        preview: { color: '#ffffff', background: '#222',               fontFamily: '"Anton", Impact, sans-serif', textShadow: '1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' } },
+  { id: 'neon',      label: 'Neon',        preview: { color: '#00f5ff', background: '#111',               fontFamily: 'Inter, sans-serif', textShadow: '0 0 8px #00f5ff, 0 0 14px #00f5ff' } },
+  { id: 'cinema',    label: 'Cinema',      preview: { color: '#ffffff', background: 'rgba(0,0,0,0.75)',   fontFamily: 'Georgia, serif' } },
   { id: 'karaoke',   label: 'Karaoke',     preview: { color: '#ffffff', background: 'rgba(234,179,8,0.9)', fontFamily: '"Bebas Neue", sans-serif' } },
-  { id: 'fire',      label: 'Fire',        preview: { color: '#ffffff', background: 'rgba(220,38,38,0.88)',fontFamily: '"Oswald", sans-serif' } },
-  { id: 'american',  label: 'American',    preview: { color: '#ffffff', background: 'transparent',          fontFamily: '"Anton", Impact, sans-serif', WebkitTextStroke: '2px #000', letterSpacing: '1px' } },
-  { id: 'outline',   label: 'Outline',     preview: { color: '#ffffff', background: 'transparent',          fontFamily: '"Montserrat", sans-serif', WebkitTextStroke: '1.5px #000' } },
+  { id: 'fire',      label: 'Fire',        preview: { color: '#ffffff', background: 'rgba(220,38,38,0.88)', fontFamily: '"Oswald", sans-serif' } },
+  { id: 'american',  label: 'American',    preview: { color: '#ffffff', background: '#222',               fontFamily: '"Anton", Impact, sans-serif', textShadow: '1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000', letterSpacing: '1px' } },
+  { id: 'outline',   label: 'Outline',     preview: { color: '#ffffff', background: '#222',               fontFamily: '"Montserrat", sans-serif', textShadow: '1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' } },
   { id: 'highlight', label: 'Highlight',   preview: { color: '#000000', background: '#FFE500',              fontFamily: 'Inter, sans-serif', fontWeight: 'bold' } },
-  { id: 'elegant',   label: 'Elegante',    preview: { color: '#f5f0e8', background: 'transparent',          fontFamily: '"Playfair Display", Georgia, serif', textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } },
+  { id: 'elegant',   label: 'Elegante',    preview: { color: '#f5f0e8', background: '#1a1218',             fontFamily: '"Playfair Display", Georgia, serif', textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } },
   { id: 'sport',     label: 'Sport',       preview: { color: '#ffffff', background: 'rgba(255,107,0,0.9)', fontFamily: '"Oswald", sans-serif', letterSpacing: '1px' } },
   { id: 'pop',       label: 'Pop',         preview: { color: '#ffffff', background: 'rgba(220,0,120,0.9)', fontFamily: '"Bangers", cursive', letterSpacing: '2px' } },
   { id: 'cream',     label: 'Cream',       preview: { color: '#1a1a1a', background: 'rgba(255,248,220,0.95)', fontFamily: '"Montserrat", sans-serif', fontWeight: 'bold' } },
@@ -172,7 +172,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
                 >
                   <div
                     className="w-full h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: (!s.preview.background || s.preview.background === 'transparent') ? '#111' : s.preview.background as string }}
+                    style={{ background: (s.preview.background as string) || '#111' }}
                   >
                     <span className="text-xs font-bold px-1.5" style={{ ...s.preview, background: undefined, fontSize: '12px' }}>
                       Exemplo
