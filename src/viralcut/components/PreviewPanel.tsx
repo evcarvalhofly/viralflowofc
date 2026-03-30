@@ -431,6 +431,7 @@ export function PreviewPanel({
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.save();
       ctx.globalAlpha = vd?.opacity ?? 1;
+      ctx.filter = buildFilter(vd?.brightness, vd?.contrast, vd?.saturation);
       // Contain-fit: center video without stretching
       const scale = Math.min(canvas.width / vW, canvas.height / vH);
       const dw = vW * scale;
