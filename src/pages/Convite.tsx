@@ -1,8 +1,7 @@
 import { useState, useRef } from 'react';
-import { Zap, Check, Loader2, ArrowRight, Mail, Shield, Video, Layers, MapPin, ShoppingBag, DollarSign, Flame, Calendar, Type } from 'lucide-react';
-import { useSubscription } from '@/hooks/useSubscription';
+import { Zap, Check, ArrowRight, Shield, Flame } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Input } from '@/components/ui/input';
+import { CheckoutModal } from '@/components/CheckoutModal';
 
 const STATS = [
   { value: '+1.200', label: 'criadores ativos' },
@@ -23,28 +22,15 @@ const FEATURES = [
 
 export default function Convite() {
   const { user } = useAuth();
-  const { startCheckout } = useSubscription();
-  const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [emailStep, setEmailStep] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
   const ctaRef = useRef<HTMLDivElement>(null);
-
-  const isGuest = !user;
 
   const scrollToCta = () =>
     ctaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-  const handleCheckout = async () => {
-    if (isGuest && !emailStep) { setEmailStep(true); setTimeout(scrollToCta, 100); return; }
-    if (isGuest && !email.trim()) return;
-    setLoading(true);
-    await startCheckout(isGuest ? email.trim() : undefined);
-    setLoading(false);
-  };
-
   const handleHeroCta = () => {
     scrollToCta();
-    setTimeout(handleCheckout, 400);
+    setTimeout(() => setShowCheckout(true), 300);
   };
 
   return (
@@ -74,7 +60,7 @@ export default function Convite() {
 
         <div className="mt-8 flex flex-col items-center gap-3">
           <button
-            onClick={handleHeroCta}
+            onClick={() => { scrollToCta(); setTimeout(() => setShowCheckout(true), 300); }}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-4 text-base font-bold text-white shadow-xl shadow-violet-500/30 transition-all hover:from-violet-500 hover:to-purple-500 active:scale-95"
           >
             <Flame className="h-4 w-4" />
@@ -207,39 +193,11 @@ export default function Convite() {
             </div>
           </div>
 
-          {emailStep && (
-            <div className="mb-4 space-y-2 rounded-xl border border-border bg-card/60 p-4 text-left">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mail className="h-4 w-4 shrink-0 text-violet-400" />
-                <span>Qual email você usará para acessar o ViralFlow?</span>
-              </div>
-              <Input
-                type="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCheckout()}
-                autoFocus
-                className="bg-background"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Após o pagamento, crie sua conta com este email para ativar o PRO automaticamente.
-              </p>
-            </div>
-          )}
-
           <button
-            onClick={handleCheckout}
-            disabled={loading || (emailStep && !email.trim())}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-4 text-base font-bold text-white shadow-xl shadow-violet-500/30 transition-all hover:from-violet-500 hover:to-purple-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => setShowCheckout(true)}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-4 text-base font-bold text-white shadow-xl shadow-violet-500/30 transition-all hover:from-violet-500 hover:to-purple-500 active:scale-95"
           >
-            {loading ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Redirecionando para o pagamento...</>
-            ) : emailStep ? (
-              <>Continuar para pagamento <ArrowRight className="h-4 w-4" /></>
-            ) : (
-              <><Flame className="h-4 w-4" /> Assinar o ViralFlow agora — R$37,90/mês</>
-            )}
+            <Flame className="h-4 w-4" /> Assinar o ViralFlow agora — R$37,90/mês
           </button>
 
           <p className="mt-3 text-xs text-muted-foreground">
@@ -255,6 +213,12 @@ export default function Convite() {
         </a>
       </div>
 
+      {showCheckout && (
+        <CheckoutModal
+          onClose={() => setShowCheckout(false)}
+          onSuccess={() => { window.location.href = '/auth'; }}
+        />
+      )}
     </div>
   );
 }

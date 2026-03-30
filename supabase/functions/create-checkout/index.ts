@@ -13,47 +13,49 @@ Deno.serve(async (req) => {
     const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    const origin = req.headers.get('origin') ?? 'https://viralflowofc.lovable.app';
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
     // Parse body
-    let refCode: string | null = null;
-    let bodyEmail: string | null = null;
-    try {
-      const body = await req.json();
-      refCode    = body?.ref_code ?? null;
-      bodyEmail  = body?.email    ?? null;
-    } catch { /* no body */ }
+    let body: any = {};
+    try { body = await req.json(); } catch { /* empty */ }
 
-    // Determine if logged-in user or guest via JWT role
+    // Detect logged-in user from JWT
     const authHeader = req.headers.get('Authorization');
     let userId: string | null = null;
     let userEmail: string | null = null;
-    let isGuest = true;
 
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
       const parts = token.split('.');
       if (parts.length === 3) {
         try {
-          const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          const base64  = parts[1].replace(/-/g, '+').replace(/_/g, '/');
           const payload = JSON.parse(atob(base64));
           if (payload.role === 'authenticated' && payload.sub) {
             userId    = payload.sub as string;
             userEmail = payload.email as string;
-            isGuest   = false;
           }
-        } catch { /* invalid JWT — treat as guest */ }
+        } catch { /* invalid JWT */ }
       }
     }
 
+    const isGuest = !userId;
+    const payerEmail: string = body.payer?.email ?? userEmail ?? '';
+    const phone: string | null = body.phone ?? null;
+    const refCode: string | null = body.ref_code ?? null;
+
+    // ── Create or find external_reference ─────────────────────────────────────
     let externalReference: string;
-    let backUrl: string;
 
     if (isGuest) {
-      const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
       const { data: session, error: sessionError } = await admin
         .from('checkout_sessions')
-        .insert({ ref_code: refCode, status: 'created', payer_email: bodyEmail ?? null })
+        .insert({
+          ref_code:    refCode,
+          status:      'created',
+          payer_email: payerEmail || null,
+          payer_phone: phone,
+        })
         .select('id')
         .single();
 
@@ -63,65 +65,146 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-
       externalReference = session.id;
-      userEmail = bodyEmail ?? 'guest@viralflow.app';
-      backUrl   = `${origin}/auth?checkout=success`;
       console.log('Guest checkout session:', session.id, '| ref_code:', refCode);
     } else {
       externalReference = userId!;
-      backUrl           = `${origin}/?checkout=success`;
       console.log('Logged-in checkout | user:', userId);
     }
 
-    const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
-        'Content-Type':  'application/json',
+    // ── Call MercadoPago /v1/payments (Checkout Transparente) ─────────────────
+    const paymentBody: any = {
+      transaction_amount: 37.90,
+      token:              body.token,
+      description:        'ViralFlow PRO',
+      installments:       body.installments ?? 1,
+      payment_method_id:  body.payment_method_id,
+      issuer_id:          body.issuer_id,
+      payer: {
+        email:          payerEmail,
+        identification: body.payer?.identification ?? undefined,
       },
-      body: JSON.stringify({
-        reason:             'ViralFlow PRO',
-        payer_email:        userEmail,
-        back_url:           backUrl,
-        notification_url:   'https://dzgotqyikomtapcgdgff.supabase.co/functions/v1/mp-webhook',
-        external_reference: externalReference,
-        auto_recurring: {
-          frequency:          1,
-          frequency_type:     'months',
-          transaction_amount: 37.90,
-          currency_id:        'BRL',
-        },
-      }),
-    });
+      external_reference: externalReference,
+      notification_url:   'https://dzgotqyikomtapcgdgff.supabase.co/functions/v1/mp-webhook',
+    };
 
-    const mpData = await mpRes.json();
-    console.log('MP response status:', mpRes.status, '| id:', mpData.id);
-
-    const isTestToken = MP_ACCESS_TOKEN.startsWith('TEST-');
-    const checkoutUrl = isTestToken
-      ? (mpData.sandbox_init_point ?? mpData.init_point)
-      : mpData.init_point;
-
-    if (!mpRes.ok || !checkoutUrl) {
-      console.error('MP error:', JSON.stringify(mpData));
-      return new Response(
-        JSON.stringify({ error: mpData?.message ?? mpData?.cause ?? 'Erro ao criar assinatura no MercadoPago' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (phone) {
+      paymentBody.payer.phone = { area_code: '', number: phone };
     }
 
-    console.log('Checkout mode:', isTestToken ? 'SANDBOX' : 'PRODUCTION', '| url:', checkoutUrl);
+    const mpRes = await fetch('https://api.mercadopago.com/v1/payments', {
+      method: 'POST',
+      headers: {
+        'Authorization':    `Bearer ${MP_ACCESS_TOKEN}`,
+        'Content-Type':     'application/json',
+        'X-Idempotency-Key': `vf-${externalReference}-${Date.now()}`,
+      },
+      body: JSON.stringify(paymentBody),
+    });
+
+    const payment = await mpRes.json();
+    console.log('MP payment status:', payment.status, '| id:', payment.id, '| detail:', payment.status_detail);
+
+    if (!mpRes.ok) {
+      console.error('MP error:', JSON.stringify(payment));
+      const cause = payment?.cause?.[0]?.description ?? payment?.message ?? 'Erro no pagamento';
+      return new Response(JSON.stringify({ error: cause }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── On approval: activate subscription immediately for logged-in user ─────
+    if (payment.status === 'approved' && !isGuest) {
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      await admin
+        .from('profiles')
+        .update({
+          subscription_status:    'active',
+          subscription_expires_at: expiresAt,
+          stripe_subscription_id:  String(payment.id),
+        })
+        .eq('user_id', userId!);
+
+      console.log('Subscription activated for user:', userId, '| expires:', expiresAt);
+
+      // Process affiliate commission
+      await processCommission(admin, userId!, String(payment.id));
+    }
+
+    if (payment.status === 'approved' && isGuest) {
+      await admin
+        .from('checkout_sessions')
+        .update({
+          status:      'paid',
+          payer_email: payerEmail || null,
+          payer_phone: phone,
+          mp_preapproval_id: String(payment.id),
+        })
+        .eq('id', externalReference);
+    }
 
     return new Response(
-      JSON.stringify({ url: checkoutUrl }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ status: payment.status, payment_id: payment.id }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
+
   } catch (err) {
     console.error('create-checkout erro:', err);
     return new Response(
       JSON.stringify({ error: String(err) }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
 });
+
+// ── Affiliate commission helper ────────────────────────────────────────────────
+async function processCommission(admin: any, userId: string, paymentId: string) {
+  try {
+    const { data: referral } = await admin
+      .from('referrals')
+      .select('id, affiliate_id, status')
+      .eq('referred_user_id', userId)
+      .neq('status', 'cancelled')
+      .maybeSingle();
+
+    if (!referral) return;
+
+    const { data: affiliate } = await admin
+      .from('affiliates')
+      .select('id, commission_rate')
+      .eq('id', referral.affiliate_id)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (!affiliate) return;
+
+    const PRICE          = 37.90;
+    const isInitial      = referral.status === 'pending';
+    const commType       = isInitial ? 'initial' : 'recurring';
+    const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const commAmount     = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
+
+    await admin.from('commissions').insert({
+      affiliate_id:    affiliate.id,
+      subscription_id: paymentId,
+      referral_id:     referral.id,
+      type:            commType,
+      amount:          commAmount,
+      status:          'pending',
+      available_after: availableAfter,
+      level:           1,
+      period_start:    new Date().toISOString(),
+    });
+
+    if (isInitial) {
+      await admin
+        .from('referrals')
+        .update({ status: 'converted', converted_at: new Date().toISOString() })
+        .eq('id', referral.id);
+    }
+
+    console.log('Comissão criada | afiliado:', affiliate.id, '| valor:', commAmount, '| tipo:', commType);
+  } catch (e) {
+    console.error('processCommission error:', e);
+  }
+}
