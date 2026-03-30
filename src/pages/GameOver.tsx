@@ -203,7 +203,7 @@ const GameOver = () => {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen overflow-y-auto">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-[100dvh] overflow-y-auto">
       <div className="p-4 md:p-6 max-w-3xl mx-auto w-full space-y-6 pb-10">
 
         {/* Header */}

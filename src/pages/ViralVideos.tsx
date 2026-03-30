@@ -117,7 +117,7 @@ const CategoryCard = ({ cat }: { cat: VideoCategory }) => {
 /* ── Página principal ── */
 const ViralVideos = () => {
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen overflow-y-auto">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-[100dvh] overflow-y-auto">
       <div className="p-4 md:p-6 max-w-5xl mx-auto w-full space-y-6">
 
         {/* Header */}

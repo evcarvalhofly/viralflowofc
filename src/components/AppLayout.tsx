@@ -58,7 +58,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   }, [user]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-[100dvh] overflow-hidden bg-background">
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setMobileOpen(false)} />
@@ -66,7 +66,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
       {/* Sidebar - always dark background for contrast */}
       <aside className={`
-        fixed md:sticky top-0 left-0 z-50 h-screen w-64
+        fixed md:sticky top-0 left-0 z-50 h-[100dvh] w-64
         bg-[hsl(220,25%,10%)] text-[hsl(220,14%,92%)]
         border-r border-[hsl(220,20%,18%)] flex flex-col
         transition-transform duration-200
@@ -143,7 +143,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden">
         {/* Mobile header - sticky so it always stays at top */}
         <header className="md:hidden sticky top-0 flex items-center justify-between h-14 px-4 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 z-30">
           <button onClick={() => setMobileOpen(true)}>

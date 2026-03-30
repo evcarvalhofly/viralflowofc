@@ -415,7 +415,7 @@ const Chat = () => {
   const hasEnoughContext = messages.some(m => m.role === "assistant" && m.content.includes("[PLAN_READY]"));
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-[100dvh]">
       {/* Header actions */}
       {messages.length > 0 && (
         <div className="flex justify-end p-2 border-b border-border">
