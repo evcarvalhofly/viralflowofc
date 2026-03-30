@@ -306,6 +306,11 @@ export function PreviewPanel({
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
 
+  // Track the actual CSS-rendered height of the overlay container so that
+  // text font sizes (which must be in CSS pixels, not canvas internal pixels)
+  // match what the export renders at the project's full resolution.
+  const [overlayH, setOverlayH] = useState(270);
+
   // Preload tracking: what is ready in the inactive slot
   const preloadRef = useRef<{ itemId: string; url: string; mediaTime: number; ready: boolean } | null>(null);
   const activeItemIdRef = useRef<string | null>(null);
@@ -382,6 +387,18 @@ export function PreviewPanel({
   const getTrackId = useCallback((itemId: string) => {
     return tracks.find((t) => t.items.some((i) => i.id === itemId))?.id ?? '';
   }, [tracks]);
+
+  // Observe actual CSS height of overlay container for accurate font sizing
+  useEffect(() => {
+    const el = overlayContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height;
+      if (h && h > 0) setOverlayH(h);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const applyVideoProps = useCallback(() => {
     const v = getActiveVideo();
@@ -779,7 +796,7 @@ export function PreviewPanel({
           const td = item.textDetails;
           if (!td) return null;
           const trackId = getTrackId(item.id);
-          const fontSizePx = (td.fontSize / 100) * canvasH;
+          const fontSizePx = (td.fontSize / 100) * overlayH;
           const fontSize = `${fontSizePx}px`;
           const shadowStyle = td.boxShadow?.blur > 0
             ? `${td.boxShadow.x}px ${td.boxShadow.y}px ${td.boxShadow.blur}px ${td.boxShadow.color}`
