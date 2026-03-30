@@ -98,7 +98,12 @@ Deno.serve(async (req) => {
     const mpData = await mpRes.json();
     console.log('MP response status:', mpRes.status, '| id:', mpData.id);
 
-    if (!mpRes.ok || !mpData.init_point) {
+    const isTestToken = MP_ACCESS_TOKEN.startsWith('TEST-');
+    const checkoutUrl = isTestToken
+      ? (mpData.sandbox_init_point ?? mpData.init_point)
+      : mpData.init_point;
+
+    if (!mpRes.ok || !checkoutUrl) {
       console.error('MP error:', JSON.stringify(mpData));
       return new Response(
         JSON.stringify({ error: mpData?.message ?? mpData?.cause ?? 'Erro ao criar assinatura no MercadoPago' }),
@@ -106,8 +111,10 @@ Deno.serve(async (req) => {
       );
     }
 
+    console.log('Checkout mode:', isTestToken ? 'SANDBOX' : 'PRODUCTION', '| url:', checkoutUrl);
+
     return new Response(
-      JSON.stringify({ url: mpData.init_point }),
+      JSON.stringify({ url: checkoutUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
