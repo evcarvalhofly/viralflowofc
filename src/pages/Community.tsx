@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import CommunityMap from '@/components/community/CommunityMap';
 import EditProfileModal from '@/components/community/EditProfileModal';
 import { ShoppingPanel } from '@/components/community/ShoppingPanel';
+import { LevelUpModal } from '@/components/community/LevelUpModal';
 import { supabase } from '@/integrations/supabase/client';
 import { Settings, Bell } from 'lucide-react';
 import { NotificationsPanel } from '@/components/community/NotificationsPanel';
+import { useLevelProgression, LevelUpEvent } from '@/hooks/useLevelProgression';
 
 const Community = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -13,6 +15,7 @@ const Community = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [levelUpEvent, setLevelUpEvent] = useState<LevelUpEvent | null>(null);
 
   const loadProfiles = useCallback(async () => {
     const { data, error } = await supabase
@@ -70,13 +73,13 @@ const Community = () => {
         loadNotificationCount(user.id, user.email);
       }
     });
-    
+
     loadProfiles();
 
     const channel = supabase
       .channel('community_updates')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'profiles' }, 
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
         () => loadProfiles()
       )
       .subscribe();
@@ -85,6 +88,21 @@ const Community = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Derive current user's level from loaded profiles
+  const currentUserLevel = useMemo(() => {
+    if (!currentUserId) return null;
+    const me = profiles.find((p: any) => p.user_id === currentUserId);
+    return me ? (me.nivel ?? 1) : null;
+  }, [profiles, currentUserId]);
+
+  // Level progression — handles 60-second timer (1→2) and server-side checks (2→6)
+  useLevelProgression({
+    currentUserId,
+    currentUserLevel,
+    onLevelUp: (event) => setLevelUpEvent(event),
+    onRefresh: loadProfiles,
+  });
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c]">
@@ -97,7 +115,7 @@ const Community = () => {
         </div>
         <div className="flex items-center gap-2 text-sm text-primary">
           <span className="hidden sm:inline text-muted-foreground mr-2">{profiles.length} Habitantes</span>
-          <button 
+          <button
             onClick={() => setShowNotifications(true)}
             className="relative p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-colors"
           >
@@ -108,7 +126,7 @@ const Community = () => {
               </span>
             )}
           </button>
-          <button 
+          <button
             onClick={() => setShowEditProfile(true)}
             className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-colors"
           >
@@ -132,8 +150,8 @@ const Community = () => {
       </div>
 
       {showEditProfile && (
-        <EditProfileModal 
-          onClose={() => setShowEditProfile(false)} 
+        <EditProfileModal
+          onClose={() => setShowEditProfile(false)}
           onSaved={() => { setShowEditProfile(false); loadProfiles(); }}
         />
       )}
@@ -143,13 +161,20 @@ const Community = () => {
       )}
 
       {showNotifications && (
-        <NotificationsPanel 
-          onClose={() => setShowNotifications(false)} 
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
           onUpdateCount={() => {
             supabase.auth.getUser().then(({ data: { user } }) => {
               if (user) loadNotificationCount(user.id, user.email);
             });
           }}
+        />
+      )}
+
+      {levelUpEvent && (
+        <LevelUpModal
+          event={levelUpEvent}
+          onClose={() => setLevelUpEvent(null)}
         />
       )}
     </div>

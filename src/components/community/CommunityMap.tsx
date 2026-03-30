@@ -152,7 +152,23 @@ const IsometricBuilding = React.memo(({ nivel, isOnline }: { nivel: number; isOn
   let viewBox = '0 0 60 100';
   let dims = { w: 60, h: 100 };
 
-  if (nivel >= 5) {
+  if (nivel >= 6) {
+    glow = 'drop-shadow-[0_0_20px_rgba(251,191,36,0.7)]';
+    viewBox = '0 0 70 190'; dims = { w: 70, h: 190 };
+    svgContent = (<>
+      {/* Base wide floor */}
+      <Block cx={35} cy={140} rx={32} ry={16} h={28} top="#fde68a" left="#b45309" right="#92400e" />
+      {/* Mid tower */}
+      <Block cx={35} cy={70}  rx={22} ry={11} h={70} top="#fef3c7" left="#d97706" right="#b45309" />
+      {/* Upper spire */}
+      <Block cx={35} cy={40}  rx={14} ry={7}  h={30} top="#fffbeb" left="#f59e0b" right="#d97706" />
+      {/* Tip */}
+      <Block cx={35} cy={20}  rx={7}  ry={3.5} h={20} top="#fff7ed" left="#fbbf24" right="#f59e0b" />
+      {/* Crown antenna with star */}
+      <polygon points="35,2 37,9 35,16 33,9"  fill="#fcd34d" className="animate-pulse" />
+      <polygon points="35,0 36,3 39,3 37,5 38,8 35,6 32,8 33,5 31,3 34,3" fill="#fef08a" />
+    </>);
+  } else if (nivel >= 5) {
     glow = 'drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]';
     viewBox = '0 0 70 160'; dims = { w: 70, h: 160 };
     svgContent = (<>
