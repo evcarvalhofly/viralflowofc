@@ -166,33 +166,33 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
 
   return (
     <>
-    <div className="fixed inset-0 z-[55] flex items-end sm:items-center justify-end">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+    {/* Full-screen overlay — covers the entire map */}
+    <div className="fixed inset-0 z-[55] bg-[#0a0a0c] flex flex-col">
 
-      {/* Panel — usa h-screen para garantir altura correta em qualquer viewport */}
-      <div className="relative w-full sm:w-[420px] h-[92dvh] sm:h-screen bg-background border-l border-border shadow-2xl flex flex-col rounded-t-3xl sm:rounded-none" style={{ maxHeight: '100dvh' }}>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            {view !== "list" && (
-              <button onClick={() => setView("list")} className="p-1 rounded-full hover:bg-muted mr-1">
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            )}
-            <span className="text-lg">🏪</span>
-            <h2 className="font-bold text-base">
-              {view === "list" && "Shopping da Comunidade"}
-              {view === "detail" && selectedProduct?.title}
-              {view === "sell" && "Anunciar Produto"}
-              {view === "myproducts" && "Meus Produtos"}
-            </h2>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-full hover:bg-muted">
-            <X className="h-5 w-5" />
-          </button>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0 bg-background/80 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          {view !== "list" && (
+            <button onClick={() => setView("list")} className="p-1 rounded-full hover:bg-muted mr-1">
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
+          <span className="text-lg">🏪</span>
+          <h2 className="font-bold text-base">
+            {view === "list" && "Shopping da Comunidade"}
+            {view === "detail" && selectedProduct?.title}
+            {view === "sell" && "Anunciar Produto"}
+            {view === "myproducts" && "Meus Produtos"}
+          </h2>
         </div>
+        <button onClick={onClose} className="p-1.5 rounded-full hover:bg-muted transition-colors">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Centered content wrapper */}
+      <div className="flex-1 overflow-hidden flex flex-col items-center w-full">
+      <div className="w-full max-w-2xl flex flex-col flex-1 overflow-hidden">
 
         {/* ===== LIST VIEW ===== */}
         {view === "list" && (
@@ -245,7 +245,7 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
             {/* Grid */}
             <div className="flex-1 overflow-y-auto p-3">
               {loading ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} className="rounded-xl border border-border bg-card animate-pulse">
                       <div className="aspect-square bg-muted rounded-t-xl" />
@@ -267,7 +267,7 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {products.map((p) => (
                     <button key={p.id} onClick={() => openProduct(p)}
                       className="group text-left rounded-xl bg-card border border-border overflow-hidden hover:shadow-md hover:border-primary/40 transition-all">
@@ -481,8 +481,9 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
             )}
           </div>
         )}
-      </div>
-    </div>
+      </div>{/* max-w-2xl */}
+      </div>{/* centered wrapper */}
+    </div>{/* full-screen overlay */}
 
     {chatPeerId && (
       <DirectChatWindow
