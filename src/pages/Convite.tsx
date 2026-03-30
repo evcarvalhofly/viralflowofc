@@ -78,7 +78,7 @@ export default function Convite() {
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-4 text-base font-bold text-white shadow-xl shadow-violet-500/30 transition-all hover:from-violet-500 hover:to-purple-500 active:scale-95"
           >
             <Flame className="h-4 w-4" />
-            Quero começar agora por R$0,10/mês
+            Quero começar agora por R$37,90/mês
           </button>
           <p className="text-xs text-muted-foreground">Garantia de 7 dias. Cancele quando quiser.</p>
         </div>
@@ -194,15 +194,15 @@ export default function Convite() {
           <p className="mb-8 text-2xl font-extrabold sm:text-3xl">
             Tudo isso por menos de{' '}
             <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-              R$0,10 por mês.
+              R$1,30 por dia.
             </span>
           </p>
 
           <div className="mb-6 flex items-end justify-center gap-1">
             <span className="mb-1 text-base text-muted-foreground">R$</span>
-            <span className="text-6xl font-extrabold tracking-tight">0</span>
+            <span className="text-6xl font-extrabold tracking-tight">37</span>
             <div className="mb-1 text-left">
-              <span className="text-2xl font-bold">,10</span>
+              <span className="text-2xl font-bold">,90</span>
               <p className="text-xs leading-none text-muted-foreground">/mês</p>
             </div>
           </div>
@@ -238,7 +238,7 @@ export default function Convite() {
             ) : emailStep ? (
               <>Continuar para pagamento <ArrowRight className="h-4 w-4" /></>
             ) : (
-              <><Flame className="h-4 w-4" /> Assinar o ViralFlow agora — R$0,10/mês</>
+              <><Flame className="h-4 w-4" /> Assinar o ViralFlow agora — R$37,90/mês</>
             )}
           </button>
 
