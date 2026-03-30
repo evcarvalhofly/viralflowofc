@@ -172,7 +172,7 @@ export function SubtitleStylePanel({
             ))}
           </div>
         ) : (
-          <div className="p-3 space-y-4">
+          <div className="p-3 space-y-4 max-h-[60vh] overflow-y-auto">
             {/* Text color */}
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-2">Cor do texto</label>
