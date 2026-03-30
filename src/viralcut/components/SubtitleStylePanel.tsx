@@ -108,7 +108,7 @@ export function SubtitleStylePanel({
   const COLORS = ['#ffffff', '#facc15', '#00f5ff', '#ff4444', '#44ff88', '#ff88ff'];
 
   return (
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-[340px] sm:w-[400px]">
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[340px] sm:w-[400px]">
       <div className="bg-card/95 backdrop-blur-sm border border-border rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
