@@ -97,6 +97,7 @@ export function SubtitleStylePanel({
   const currentColor = currentTextDetails?.color ?? '#ffffff';
   const currentFontWeight = currentTextDetails?.fontWeight ?? '700';
   const currentFontFamily = currentTextDetails?.fontFamily ?? 'Inter, sans-serif';
+  const currentFontSize = currentTextDetails?.fontSize ?? 3.5;
   const bgType = detectBgType();
 
   const applyBgType = (type: BgType) => {
@@ -263,6 +264,33 @@ export function SubtitleStylePanel({
                     </button>
                   )
                 )}
+              </div>
+            </div>
+
+            {/* Font size */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-muted-foreground">Tamanho</label>
+                <span className="text-xs font-semibold text-foreground tabular-nums">{currentFontSize.toFixed(1)}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onChangeCustom({ fontSize: Math.max(1, parseFloat((currentFontSize - 0.5).toFixed(1))) })}
+                  className="w-7 h-7 rounded-lg border border-border/50 bg-muted/50 text-foreground hover:bg-muted flex items-center justify-center text-sm font-bold shrink-0"
+                >−</button>
+                <input
+                  type="range"
+                  min={1}
+                  max={12}
+                  step={0.5}
+                  value={currentFontSize}
+                  onChange={(e) => onChangeCustom({ fontSize: parseFloat(e.target.value) })}
+                  className="flex-1 accent-violet-500 h-1.5"
+                />
+                <button
+                  onClick={() => onChangeCustom({ fontSize: Math.min(12, parseFloat((currentFontSize + 0.5).toFixed(1))) })}
+                  className="w-7 h-7 rounded-lg border border-border/50 bg-muted/50 text-foreground hover:bg-muted flex items-center justify-center text-sm font-bold shrink-0"
+                >+</button>
               </div>
             </div>
 
