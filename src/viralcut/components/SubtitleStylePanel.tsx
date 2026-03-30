@@ -66,6 +66,8 @@ interface SubtitleStylePanelProps {
   onChangeCustom: (patch: Partial<TextDetails>) => void;
   currentTextDetails?: TextDetails | null;
   onClose: () => void;
+  /** When true, renders without absolute positioning (caller handles placement) */
+  inline?: boolean;
 }
 
 export function SubtitleStylePanel({
@@ -74,6 +76,7 @@ export function SubtitleStylePanel({
   onChangeCustom,
   currentTextDetails,
   onClose,
+  inline = false,
 }: SubtitleStylePanelProps) {
   const [tab, setTab] = useState<'presets' | 'custom'>('presets');
 
@@ -107,9 +110,8 @@ export function SubtitleStylePanel({
 
   const COLORS = ['#ffffff', '#facc15', '#00f5ff', '#ff4444', '#44ff88', '#ff88ff'];
 
-  return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[340px] sm:w-[400px]">
-      <div className="bg-card/95 backdrop-blur-sm border border-border rounded-2xl shadow-2xl overflow-hidden">
+  const card = (
+    <div className="bg-card/95 backdrop-blur-sm border border-border rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <span className="text-xs font-semibold text-foreground">Legendas — altera todas</span>
@@ -172,7 +174,7 @@ export function SubtitleStylePanel({
             ))}
           </div>
         ) : (
-          <div className="p-3 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="p-3 space-y-4 overflow-y-auto flex-1 min-h-0">
             {/* Text color */}
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-2">Cor do texto</label>
@@ -284,7 +286,14 @@ export function SubtitleStylePanel({
             </div>
           </div>
         )}
-      </div>
+    </div>
+  );
+
+  if (inline) return card;
+
+  return (
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[340px] sm:w-[400px] max-h-[calc(100%-2rem)] flex flex-col">
+      {card}
     </div>
   );
 }

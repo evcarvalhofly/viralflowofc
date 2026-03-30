@@ -1240,6 +1240,23 @@ const ViralCut = () => {
             onClose={() => setShowSubtitleModal(false)}
           />
         )}
+
+        {/* Subtitle style panel — mobile bottom sheet */}
+        {isSelectedSubtitle && showSubtitleStylePanel && (
+          <div
+            className="fixed inset-x-2 z-50 rounded-2xl overflow-hidden shadow-2xl"
+            style={{ bottom: BOTTOM_BAR_H + 8 }}
+          >
+            <SubtitleStylePanel
+              currentStyle={selectedSubtitleStyle}
+              onChangeStyle={handleChangeAllSubtitleStyle}
+              onChangeCustom={handleChangeAllSubtitleCustom}
+              currentTextDetails={selectedSubtitleDetails}
+              onClose={() => setShowSubtitleStylePanel(false)}
+              inline
+            />
+          </div>
+        )}
       </div>
     );
   }
