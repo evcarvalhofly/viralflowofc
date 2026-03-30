@@ -118,7 +118,12 @@ const Community = () => {
         </div>
       </header>
 
-      <div className="flex-1 relative overflow-hidden">
+      {/* Hide map (display:none) when any overlay is open to prevent GPU
+          compositing layer of the map from bleeding through fixed modals on mobile */}
+      <div
+        className="flex-1 relative overflow-hidden"
+        style={(showShopping || showEditProfile || showNotifications) ? { display: 'none' } : undefined}
+      >
         <CommunityMap
           profiles={profiles}
           currentUserId={currentUserId}
