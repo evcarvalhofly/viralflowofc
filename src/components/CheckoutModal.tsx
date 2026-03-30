@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Phone, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
-import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react';
+import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
+import { initMercadoPago, Payment } from '@mercadopago/sdk-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -15,10 +15,11 @@ interface CheckoutModalProps {
 
 export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const { user } = useAuth();
-  const [phone, setPhone] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
+  const [pixData, setPixData] = useState<{ qrCode: string; qrBase64: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!MP_PUBLIC_KEY) {
@@ -27,6 +28,14 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     }
     initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' });
   }, []);
+
+  const copyPix = () => {
+    if (!pixData) return;
+    navigator.clipboard.writeText(pixData.qrCode);
+    setCopied(true);
+    toast.success('Código PIX copiado!');
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const onSubmit = async (formData: any) => {
     setProcessing(true);
@@ -37,7 +46,6 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
       const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
         body: {
           ...formData,
-          phone: phone.trim() || null,
           ref_code: refCode,
         },
       });
@@ -54,11 +62,15 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
           onSuccess?.();
           onClose();
         }, 2500);
+      } else if (status === 'pending' && data?.qr_code) {
+        // PIX — show QR code
+        setPixData({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 });
+        toast.info('PIX gerado! Escaneie o QR Code para concluir.');
       } else if (status === 'in_process' || status === 'pending') {
         toast.info('Pagamento em análise. Você receberá uma notificação em breve.');
         onClose();
       } else {
-        setError('Pagamento não aprovado. Verifique os dados do cartão e tente novamente.');
+        setError('Pagamento não aprovado. Verifique os dados e tente novamente.');
       }
     } catch (e: any) {
       setError(e.message ?? 'Erro inesperado. Tente novamente.');
@@ -95,6 +107,30 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
               <p className="text-muted-foreground text-sm">Bem-vindo ao ViralFlow PRO 🎉</p>
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mt-2" />
             </div>
+
+          ) : pixData ? (
+            <div className="flex flex-col items-center gap-4 py-4 text-center">
+              <p className="text-white font-bold text-base">Pague via PIX</p>
+              <p className="text-muted-foreground text-xs">Escaneie o QR Code ou copie o código abaixo</p>
+              {pixData.qrBase64 && (
+                <img
+                  src={`data:image/png;base64,${pixData.qrBase64}`}
+                  alt="QR Code PIX"
+                  className="w-48 h-48 rounded-xl bg-white p-2"
+                />
+              )}
+              <button
+                onClick={copyPix}
+                className="flex items-center gap-2 w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-muted-foreground hover:border-violet-500/40 transition-colors text-left"
+              >
+                <span className="flex-1 truncate font-mono">{pixData.qrCode}</span>
+                {copied ? <Check className="h-4 w-4 text-emerald-400 shrink-0" /> : <Copy className="h-4 w-4 shrink-0" />}
+              </button>
+              <p className="text-xs text-muted-foreground">
+                Após o pagamento, seu acesso PRO será ativado automaticamente.
+              </p>
+            </div>
+
           ) : (
             <>
               {!MP_PUBLIC_KEY && (
@@ -104,26 +140,9 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                 </div>
               )}
 
-              {/* Phone */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-medium">
-                  Telefone / WhatsApp
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                  <input
-                    type="tel"
-                    placeholder="(11) 99999-9999"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-muted-foreground text-sm focus:outline-none focus:border-violet-500/50 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* MercadoPago CardPayment Brick */}
+              {/* MercadoPago Payment Brick — cartão + débito + PIX */}
               {MP_PUBLIC_KEY && (
-                <CardPayment
+                <Payment
                   initialization={{
                     amount: AMOUNT,
                     payer: {
@@ -135,6 +154,9 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                       style: { theme: 'dark' },
                     },
                     paymentMethods: {
+                      creditCard: 'all',
+                      debitCard: 'all',
+                      bankTransfer: 'all',
                       maxInstallments: 1,
                     },
                   }}

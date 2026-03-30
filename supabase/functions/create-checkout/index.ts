@@ -73,13 +73,12 @@ Deno.serve(async (req) => {
     }
 
     // ── Call MercadoPago /v1/payments (Checkout Transparente) ─────────────────
+    const isPix = body.payment_method_id === 'pix' || body.formData?.payment_method_id === 'pix';
+
     const paymentBody: any = {
       transaction_amount: 37.90,
-      token:              body.token,
       description:        'ViralFlow PRO',
-      installments:       body.installments ?? 1,
       payment_method_id:  body.payment_method_id,
-      issuer_id:          body.issuer_id,
       payer: {
         email:          payerEmail,
         identification: body.payer?.identification ?? undefined,
@@ -87,6 +86,12 @@ Deno.serve(async (req) => {
       external_reference: externalReference,
       notification_url:   'https://dzgotqyikomtapcgdgff.supabase.co/functions/v1/mp-webhook',
     };
+
+    if (!isPix) {
+      paymentBody.token        = body.token;
+      paymentBody.installments = body.installments ?? 1;
+      paymentBody.issuer_id    = body.issuer_id;
+    }
 
     if (phone) {
       paymentBody.payer.phone = { area_code: '', number: phone };
@@ -143,8 +148,15 @@ Deno.serve(async (req) => {
         .eq('id', externalReference);
     }
 
+    // For PIX, return QR code data
+    const pixInfo = payment.point_of_interaction?.transaction_data;
     return new Response(
-      JSON.stringify({ status: payment.status, payment_id: payment.id }),
+      JSON.stringify({
+        status:          payment.status,
+        payment_id:      payment.id,
+        qr_code:         pixInfo?.qr_code         ?? null,
+        qr_code_base64:  pixInfo?.qr_code_base64  ?? null,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
 
