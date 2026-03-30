@@ -61,9 +61,9 @@ export default function PlanoPro() {
           <div className="bg-gradient-to-br from-violet-600/20 via-purple-600/10 to-transparent border-b border-border p-6 text-center">
             <div className="flex items-end justify-center gap-1">
               <span className="text-lg text-muted-foreground mb-1">R$</span>
-              <span className="text-6xl font-extrabold text-foreground tracking-tight">37</span>
+              <span className="text-6xl font-extrabold text-foreground tracking-tight">0</span>
               <div className="mb-1 text-left">
-                <span className="text-2xl font-bold text-foreground">,90</span>
+                <span className="text-2xl font-bold text-foreground">,10</span>
                 <p className="text-xs text-muted-foreground leading-none">/mês</p>
               </div>
             </div>
@@ -115,7 +115,7 @@ export default function PlanoPro() {
               ) : emailStep ? (
                 <>Continuar para pagamento <ArrowRight className="h-4 w-4" /></>
               ) : (
-                <>Assinar agora por R$37,90/mês <ArrowRight className="h-4 w-4" /></>
+                <>Assinar agora por R$0,10/mês <ArrowRight className="h-4 w-4" /></>
               )}
             </button>
             <p className="text-center text-[11px] text-muted-foreground">

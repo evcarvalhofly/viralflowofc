@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (affiliate) {
-          const PRICE        = 37.90;
+          const PRICE        = 0.10;
           const isInitial    = referral.status === 'pending';
           const commType     = isInitial ? 'initial' : 'recurring';
           const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
