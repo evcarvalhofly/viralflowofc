@@ -80,6 +80,9 @@ export class CanvasRenderer {
       const bmp = await this._loadImage(mf.url);
       if (bmp) this.images.set(id, bmp);
     }
+
+    // Ensure Google Fonts (and any other web fonts) are fully loaded before canvas rendering
+    await document.fonts.ready;
   }
 
   /** Renders the timeline state at `timeSec` onto the canvas. */

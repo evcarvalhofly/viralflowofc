@@ -34,6 +34,32 @@ const STYLES: StyleDef[] = [
 
 type BgType = 'filled' | 'stroke' | 'shadow' | 'clean';
 
+interface FontOption {
+  label: string;
+  family: string; // value stored in TextDetails.fontFamily
+  css: string;    // css font-family for preview
+}
+
+const FONT_OPTIONS: FontOption[] = [
+  { label: 'Inter',            family: 'Inter, sans-serif',                   css: 'Inter, sans-serif' },
+  { label: 'Roboto',           family: '"Roboto", sans-serif',                css: '"Roboto", sans-serif' },
+  { label: 'Poppins',          family: '"Poppins", sans-serif',               css: '"Poppins", sans-serif' },
+  { label: 'Montserrat',       family: '"Montserrat", sans-serif',            css: '"Montserrat", sans-serif' },
+  { label: 'Lato',             family: '"Lato", sans-serif',                  css: '"Lato", sans-serif' },
+  { label: 'Nunito',           family: '"Nunito", sans-serif',                css: '"Nunito", sans-serif' },
+  { label: 'Raleway',          family: '"Raleway", sans-serif',               css: '"Raleway", sans-serif' },
+  { label: 'Oswald',           family: '"Oswald", sans-serif',                css: '"Oswald", sans-serif' },
+  { label: 'Anton',            family: '"Anton", sans-serif',                 css: '"Anton", sans-serif' },
+  { label: 'Bebas Neue',       family: '"Bebas Neue", sans-serif',            css: '"Bebas Neue", sans-serif' },
+  { label: 'Abril Fatface',    family: '"Abril Fatface", serif',              css: '"Abril Fatface", serif' },
+  { label: 'Black Han Sans',   family: '"Black Han Sans", sans-serif',        css: '"Black Han Sans", sans-serif' },
+  { label: 'Playfair',         family: '"Playfair Display", Georgia, serif',  css: '"Playfair Display", serif' },
+  { label: 'Bangers',          family: '"Bangers", cursive',                  css: '"Bangers", cursive' },
+  { label: 'Pacifico',         family: '"Pacifico", cursive',                 css: '"Pacifico", cursive' },
+  { label: 'Lobster',          family: '"Lobster", cursive',                  css: '"Lobster", cursive' },
+  { label: 'Permanent Marker', family: '"Permanent Marker", cursive',         css: '"Permanent Marker", cursive' },
+];
+
 interface SubtitleStylePanelProps {
   currentStyle?: SubtitleStyle;
   onChangeStyle: (style: SubtitleStyle) => void;
@@ -61,6 +87,7 @@ export function SubtitleStylePanel({
 
   const currentColor = currentTextDetails?.color ?? '#ffffff';
   const currentFontWeight = currentTextDetails?.fontWeight ?? '700';
+  const currentFontFamily = currentTextDetails?.fontFamily ?? 'Inter, sans-serif';
   const bgType = detectBgType();
 
   const applyBgType = (type: BgType) => {
@@ -228,6 +255,31 @@ export function SubtitleStylePanel({
                     </button>
                   )
                 )}
+              </div>
+            </div>
+
+            {/* Font family */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-2">Fonte</label>
+              <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-0.5">
+                {FONT_OPTIONS.map((f) => {
+                  const isActive = currentFontFamily === f.family;
+                  return (
+                    <button
+                      key={f.family}
+                      onClick={() => onChangeCustom({ fontFamily: f.family })}
+                      className={`flex items-center justify-center h-9 rounded-xl border text-sm transition-all px-2 ${
+                        isActive
+                          ? 'border-violet-500 bg-violet-500/15 text-foreground'
+                          : 'border-border/50 bg-muted/50 text-muted-foreground hover:border-violet-400/50 hover:text-foreground'
+                      }`}
+                      style={{ fontFamily: f.css }}
+                      title={f.label}
+                    >
+                      <span className="truncate">{f.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
