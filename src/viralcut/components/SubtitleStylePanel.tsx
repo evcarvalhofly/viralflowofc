@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { SubtitleStyle } from '@/viralcut/hooks/useSubtitleGeneration';
 import type { TextDetails } from '@/viralcut/types';
@@ -79,6 +79,12 @@ export function SubtitleStylePanel({
   inline = false,
 }: SubtitleStylePanelProps) {
   const [tab, setTab] = useState<'presets' | 'custom'>('presets');
+  // Prevent accidental touch-through on open: ignore pointer events for 350ms
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 350);
+    return () => clearTimeout(t);
+  }, []);
 
   const detectBgType = (): BgType => {
     if (!currentTextDetails) return 'filled';
@@ -111,7 +117,7 @@ export function SubtitleStylePanel({
   const COLORS = ['#ffffff', '#facc15', '#00f5ff', '#ff4444', '#44ff88', '#ff88ff'];
 
   const card = (
-    <div className="bg-card/95 backdrop-blur-sm border border-border rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
+    <div className={`bg-card/95 backdrop-blur-sm border border-border rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden${ready ? '' : ' pointer-events-none'}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <span className="text-xs font-semibold text-foreground">Legendas — altera todas</span>

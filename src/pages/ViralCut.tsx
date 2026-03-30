@@ -933,9 +933,12 @@ const ViralCut = () => {
 
   const handleItemDoubleClick = useCallback((id: string) => {
     setSelectedItemId(id);
+    // Subtitle items use the floating panel — don't open properties for them
+    const isSubtitle = project.tracks.some((t) => t.items.some((i) => i.id === id && i.name === 'Legenda'));
+    if (isSubtitle) return;
     if (isMobile) { setMobileTab('editar'); setShowMobilePanel(true); }
     else { setShowProperties(true); }
-  }, [isMobile]);
+  }, [isMobile, project.tracks]);
 
   useEffect(() => {
     if (isSelectedSubtitle) {
