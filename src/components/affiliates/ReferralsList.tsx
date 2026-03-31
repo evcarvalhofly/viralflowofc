@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Users, UserCheck, Clock, XCircle } from 'lucide-react';
+import { Users, Clock, XCircle, ShoppingCart, Info } from 'lucide-react';
 import type { Referral } from '@/types/affiliates';
 
 interface Props {
@@ -24,12 +24,12 @@ const statusConfig = {
     className: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
   },
   converted: {
-    label: 'Assinante',
-    icon: <UserCheck className="h-3 w-3" />,
-    className: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
+    label: 'Venda Pendente',
+    icon: <ShoppingCart className="h-3 w-3" />,
+    className: 'text-blue-400 bg-blue-400/10 border-blue-400/30',
   },
   cancelled: {
-    label: 'Cancelou',
+    label: 'Venda Cancelada',
     icon: <XCircle className="h-3 w-3" />,
     className: 'text-red-400 bg-red-400/10 border-red-400/30',
   },
@@ -50,7 +50,7 @@ const ReferralsList = ({ referrals, loading }: Props) => {
       {/* Resumo */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Assinantes', value: converted, color: 'text-emerald-400' },
+          { label: 'Vendas Pend.', value: converted, color: 'text-blue-400' },
           { label: 'Cadastrados', value: pending, color: 'text-yellow-400' },
           { label: 'Cancelados', value: cancelled, color: 'text-red-400' },
         ].map(s => (
@@ -62,6 +62,19 @@ const ReferralsList = ({ referrals, loading }: Props) => {
           </Card>
         ))}
       </div>
+
+      {/* Aviso sobre Venda Pendente */}
+      {converted > 0 && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3">
+          <Info className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+          <div className="text-xs text-muted-foreground leading-relaxed">
+            <span className="text-blue-400 font-semibold">O que é Venda Pendente?</span>{' '}
+            Uma venda que ocorreu, porém o comprador ainda está dentro do período de 7 dias garantido por lei para solicitar reembolso.
+            Caso não haja cancelamento, ao fim desse período o valor da comissão será liberado automaticamente no seu saldo disponível para saque.
+            Em caso de reembolso, a venda será marcada como <span className="text-red-400 font-medium">Venda Cancelada</span>.
+          </div>
+        </div>
+      )}
 
       {/* Lista */}
       <Card className="bg-card/50 border-border/60">
@@ -104,7 +117,7 @@ const ReferralsList = ({ referrals, loading }: Props) => {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Indicado em {fmtDate(ref.created_at)}
-                      {ref.converted_at && ` · Converteu em ${fmtDate(ref.converted_at)}`}
+                      {ref.converted_at && ` · Comprou em ${fmtDate(ref.converted_at)}`}
                     </p>
                   </div>
 
