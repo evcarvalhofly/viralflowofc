@@ -152,7 +152,8 @@ const Community = () => {
         </div>
         <div className="flex items-center gap-2 text-sm text-primary">
           <span className="hidden sm:inline text-muted-foreground mr-2">{profiles.length} Habitantes</span>
-<button
+          <span className="text-[10px] text-yellow-400 font-mono">dbg:{onlineUserIds.size}|{[...onlineUserIds].map(id=>id.slice(0,6)).join(',')}</span>
+          <button
             onClick={() => setShowNotifications(true)}
             className="relative p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-colors"
           >
