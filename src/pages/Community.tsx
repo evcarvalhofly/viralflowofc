@@ -8,8 +8,9 @@ import { Settings, Bell } from 'lucide-react';
 import { NotificationsPanel } from '@/components/community/NotificationsPanel';
 import { useLevelProgression, LevelUpEvent } from '@/hooks/useLevelProgression';
 
-// Users are considered online if last_seen_at is within this many milliseconds
-const ONLINE_THRESHOLD_MS = 45_000; // 45 seconds
+// Users are considered online if last_seen_at is within this many milliseconds.
+// 120s gives enough headroom for browser background-tab timer throttling (~60s effective interval).
+const ONLINE_THRESHOLD_MS = 120_000; // 2 minutes
 
 const Community = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -79,6 +80,13 @@ const Community = () => {
       }
     });
 
+    // Keep accessToken fresh when Supabase auto-refreshes it (~every 1h)
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.access_token) setAccessToken(session.access_token);
+      }
+    );
+
     loadProfiles();
 
     const channel = supabase
@@ -95,6 +103,7 @@ const Community = () => {
     return () => {
       supabase.removeChannel(channel);
       clearInterval(poll);
+      authSub.unsubscribe();
     };
   }, []);
 
@@ -115,9 +124,20 @@ const Community = () => {
     // Tick every 5s so local re-evaluation of online status is near-instant
     const ticker = setInterval(() => setTick(t => t + 1), 5_000);
 
+    // When tab comes back into focus after being backgrounded, immediately refresh.
+    // This counters browser timer throttling which can delay 30s intervals to 60s+.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        updatePresence();
+        loadProfiles();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       clearInterval(heartbeat);
       clearInterval(ticker);
+      document.removeEventListener('visibilitychange', onVisible);
       // keepalive: true guarantees this request completes even during page navigation
       fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?user_id=eq.${currentUserId}`,
