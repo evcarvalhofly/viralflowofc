@@ -200,7 +200,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                     </p>
                   )}
                   <CardPayment
-                    initialization={{ amount: AMOUNT, payer: { email: user?.email || undefined } }}
+                    initialization={{ amount: AMOUNT }}
                     customization={{
                       visual: { style: { theme: 'dark' } },
                       paymentMethods: { maxInstallments: 1 },
