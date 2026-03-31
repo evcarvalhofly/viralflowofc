@@ -34,13 +34,20 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const onSubmit = async (formData: any) => {
-    console.log('MP onSubmit formData:', JSON.stringify(formData));
+  const onSubmit = async (rawFormData: any) => {
+    // O brick de PIX (bankTransfer) não inclui payment_method_id — detectamos pelo token
+    const isCard = !!rawFormData.token;
+    const isPix  = !rawFormData.token && !!rawFormData.payer?.email;
 
-    if (!formData.payment_method_id) {
+    if (!isCard && !isPix) {
       setError('Selecione um método de pagamento antes de continuar.');
       return;
     }
+
+    // Garante payment_method_id='pix' para o backend quando o brick não o envia
+    const formData = (isPix && !rawFormData.payment_method_id)
+      ? { ...rawFormData, payment_method_id: 'pix' }
+      : rawFormData;
 
     // Email: vem do brick (formData.payer.email) ou do usuário logado
     const payerEmail = formData.payer?.email || user?.email || '';
