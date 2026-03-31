@@ -173,9 +173,12 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
               {tab === 'pix' ? (
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm text-muted-foreground">
-                      E-mail para receber o comprovante
+                    <label className="text-sm font-medium text-white">
+                      Qual e-mail você vai usar para criar sua conta?
                     </label>
+                    <p className="text-xs text-amber-400/90">
+                      ⚠️ Use o mesmo e-mail ao se cadastrar — é assim que seu acesso PRO será ativado automaticamente.
+                    </p>
                     <input
                       type="email"
                       value={pixEmail}
@@ -198,7 +201,12 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                 <>
                   {!user && (
                     <div className="space-y-1.5">
-                      <label className="text-sm text-muted-foreground">E-mail para o comprovante</label>
+                      <label className="text-sm font-medium text-white">
+                      Qual e-mail você vai usar para criar sua conta?
+                    </label>
+                    <p className="text-xs text-amber-400/90">
+                      ⚠️ Use o mesmo e-mail ao se cadastrar — é assim que seu acesso PRO será ativado automaticamente.
+                    </p>
                       <input
                         type="email"
                         value={cardEmail}
