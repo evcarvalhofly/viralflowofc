@@ -8,6 +8,9 @@ import { Settings, Bell } from 'lucide-react';
 import { NotificationsPanel } from '@/components/community/NotificationsPanel';
 import { useLevelProgression, LevelUpEvent } from '@/hooks/useLevelProgression';
 
+// Users are considered online if last_seen_at is within this many milliseconds
+const ONLINE_THRESHOLD_MS = 90_000; // 90 seconds
+
 const Community = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -16,7 +19,8 @@ const Community = () => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
   const [levelUpEvent, setLevelUpEvent] = useState<LevelUpEvent | null>(null);
-  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  // Tick every 30s so the online-status derived from last_seen_at stays current
+  const [tick, setTick] = useState(0);
 
   const loadProfiles = useCallback(async () => {
     const { data, error } = await supabase
@@ -70,8 +74,6 @@ const Community = () => {
       if (session?.user) {
         setCurrentUserId(session.user.id);
         loadNotificationCount(session.user.id, session.user.email);
-        // Garante que o Realtime usa o JWT do usuário (necessário para canais privados)
-        supabase.realtime.setAuth(session.access_token);
       }
     });
 
@@ -90,46 +92,51 @@ const Community = () => {
     };
   }, []);
 
-  // Realtime Presence — tracks who is actually on this page right now
+  // Heartbeat presence: update last_seen_at every 30s while on this page.
+  // This replaces Supabase Realtime Presence which requires extra authorization policies.
   useEffect(() => {
     if (!currentUserId) return;
 
-    // Sem presence.key no config: Supabase gera chave aleatória por cliente.
-    // O user_id vai no payload do track(), extraído nos eventos.
-    const presenceChannel = supabase.channel('community_presence');
-
-    const readState = () => {
-      const state = presenceChannel.presenceState<{ user_id: string }>();
-      const ids = new Set<string>();
-      Object.values(state).flat().forEach((p: any) => {
-        if (p.user_id) ids.add(p.user_id);
-      });
-      setOnlineUserIds(ids);
+    const updatePresence = async () => {
+      await (supabase as any)
+        .from('profiles')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('user_id', currentUserId);
     };
 
-    presenceChannel
-      .on('presence', { event: 'sync' }, readState)
-      .on('presence', { event: 'join' }, readState)
-      .on('presence', { event: 'leave' }, readState)
-      .subscribe(async (status) => {
-        console.log('[Presence] status:', status);
-        if (status === 'SUBSCRIBED') {
-          const trackRes = await presenceChannel.track({ user_id: currentUserId, online_at: new Date().toISOString() });
-          console.log('[Presence] track result:', trackRes);
-          console.log('[Presence] state after track:', presenceChannel.presenceState());
-          readState();
-        }
-      });
+    // Immediate heartbeat on mount
+    updatePresence();
+
+    const interval = setInterval(() => {
+      updatePresence();
+      setTick(t => t + 1); // refresh online-status computation
+    }, 30_000);
 
     return () => {
-      supabase.removeChannel(presenceChannel);
+      clearInterval(interval);
+      // Mark as offline on unmount
+      (supabase as any)
+        .from('profiles')
+        .update({ last_seen_at: null })
+        .eq('user_id', currentUserId);
     };
   }, [currentUserId]);
 
-  // Merge real-time presence into profiles so CommunityMap shows accurate online dots
-  const profilesWithPresence = useMemo(() =>
-    profiles.map(p => ({ ...p, is_online: onlineUserIds.has(p.user_id) })),
-    [profiles, onlineUserIds]
+  // Derive online status from last_seen_at column
+  const profilesWithPresence = useMemo(() => {
+    const now = Date.now();
+    return profiles.map(p => ({
+      ...p,
+      is_online: p.last_seen_at
+        ? now - new Date(p.last_seen_at).getTime() < ONLINE_THRESHOLD_MS
+        : false,
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profiles, tick]);
+
+  const onlineCount = useMemo(
+    () => profilesWithPresence.filter(p => p.is_online).length,
+    [profilesWithPresence]
   );
 
   // Derive current user's level from loaded profiles
@@ -157,7 +164,6 @@ const Community = () => {
         </div>
         <div className="flex items-center gap-2 text-sm text-primary">
           <span className="hidden sm:inline text-muted-foreground mr-2">{profiles.length} Habitantes</span>
-          <span className="text-[10px] text-yellow-400 font-mono">dbg:{onlineUserIds.size}|{[...onlineUserIds].map(id=>id.slice(0,6)).join(',')}</span>
           <button
             onClick={() => setShowNotifications(true)}
             className="relative p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-colors"
@@ -187,7 +193,7 @@ const Community = () => {
           profiles={profilesWithPresence}
           currentUserId={currentUserId}
           onShoppingClick={() => setShowShopping(true)}
-          presenceCount={Math.max(onlineUserIds.size, currentUserId ? 1 : 0)}
+          presenceCount={onlineCount}
         />
       </div>
 
