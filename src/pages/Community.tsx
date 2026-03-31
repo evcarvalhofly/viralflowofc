@@ -21,6 +21,7 @@ const Community = () => {
   const [levelUpEvent, setLevelUpEvent] = useState<LevelUpEvent | null>(null);
   // Tick every 30s so the online-status derived from last_seen_at stays current
   const [tick, setTick] = useState(0);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async () => {
     const { data, error } = await supabase
@@ -73,6 +74,7 @@ const Community = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setCurrentUserId(session.user.id);
+        setAccessToken(session.access_token);
         loadNotificationCount(session.user.id, session.user.email);
       }
     });
@@ -93,30 +95,41 @@ const Community = () => {
   }, []);
 
   // Heartbeat presence: update last_seen_at every 30s while on this page.
-  // This replaces Supabase Realtime Presence which requires extra authorization policies.
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || !accessToken) return;
 
-    const updatePresence = async () => {
-      await (supabase as any)
+    const updatePresence = () =>
+      (supabase as any)
         .from('profiles')
         .update({ last_seen_at: new Date().toISOString() })
         .eq('user_id', currentUserId);
-    };
 
-    // Immediate heartbeat on mount
-    updatePresence();
+    // Await initial heartbeat before loading profiles so own status appears instantly
+    updatePresence().then(() => loadProfiles());
 
     const heartbeat = setInterval(updatePresence, 30_000);
-    const ticker = setInterval(() => setTick(t => t + 1), 15_000);
+    // Tick every 5s so local re-evaluation of online status is near-instant
+    const ticker = setInterval(() => setTick(t => t + 1), 5_000);
 
     return () => {
       clearInterval(heartbeat);
       clearInterval(ticker);
-      // Note: we intentionally do NOT clear last_seen_at here because the browser
-      // cancels in-flight requests on navigation. The 45s threshold handles expiry naturally.
+      // keepalive: true guarantees this request completes even during page navigation
+      fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?user_id=eq.${currentUserId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ last_seen_at: null }),
+          keepalive: true,
+        }
+      );
     };
-  }, [currentUserId]);
+  }, [currentUserId, accessToken]);
 
   // Derive online status from last_seen_at column
   const profilesWithPresence = useMemo(() => {
