@@ -110,8 +110,11 @@ const Community = () => {
       .on('presence', { event: 'join' }, readState)
       .on('presence', { event: 'leave' }, readState)
       .subscribe(async (status) => {
+        console.log('[Presence] status:', status);
         if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({ user_id: currentUserId, online_at: new Date().toISOString() });
+          const trackRes = await presenceChannel.track({ user_id: currentUserId, online_at: new Date().toISOString() });
+          console.log('[Presence] track result:', trackRes);
+          console.log('[Presence] state after track:', presenceChannel.presenceState());
           readState();
         }
       });
