@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
+import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check, Mail } from 'lucide-react';
 import { initMercadoPago, Payment } from '@mercadopago/sdk-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,17 +15,17 @@ interface CheckoutModalProps {
 
 export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const { user } = useAuth();
+  const [guestEmail, setGuestEmail] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
   const [pixData, setPixData] = useState<{ qrCode: string; qrBase64: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const payerEmail = user?.email ?? guestEmail.trim();
+
   useEffect(() => {
-    if (!MP_PUBLIC_KEY) {
-      console.error('VITE_MP_PUBLIC_KEY não configurada');
-      return;
-    }
+    if (!MP_PUBLIC_KEY) return;
     initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' });
   }, []);
 
@@ -38,6 +38,10 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   };
 
   const onSubmit = async (formData: any) => {
+    if (!payerEmail || !payerEmail.includes('@')) {
+      setError('Informe um e-mail válido antes de pagar.');
+      return;
+    }
     setProcessing(true);
     setError(null);
     try {
@@ -46,6 +50,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
       const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
         body: {
           ...formData,
+          payer: { ...formData.payer, email: payerEmail },
           ref_code: refCode,
         },
       });
@@ -63,7 +68,6 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
           onClose();
         }, 2500);
       } else if (status === 'pending' && data?.qr_code) {
-        // PIX — show QR code
         setPixData({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 });
         toast.info('PIX gerado! Escaneie o QR Code para concluir.');
       } else if (status === 'in_process' || status === 'pending') {
@@ -89,10 +93,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
             <h2 className="text-white font-bold text-lg">ViralFlow PRO</h2>
             <p className="text-muted-foreground text-xs">R$37,90/mês · Cancele quando quiser</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-white transition-colors p-1"
-          >
+          <button onClick={onClose} className="text-muted-foreground hover:text-white transition-colors p-1">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -136,21 +137,39 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
               {!MP_PUBLIC_KEY && (
                 <div className="flex items-start gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>Chave pública do MercadoPago não configurada (VITE_MP_PUBLIC_KEY).</span>
+                  <span>Chave pública do MercadoPago não configurada.</span>
                 </div>
               )}
 
-              {/* MercadoPago Payment Brick — cartão + débito + PIX */}
+              {/* Email para guest */}
+              {!user && (
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground font-medium">
+                    Seu e-mail <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <input
+                      type="email"
+                      placeholder="seu@email.com"
+                      value={guestEmail}
+                      onChange={e => { setGuestEmail(e.target.value); setError(null); }}
+                      className="w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-muted-foreground text-sm focus:outline-none focus:border-violet-500/50 transition-colors"
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Usado para ativar seu acesso após o cadastro.</p>
+                </div>
+              )}
+
+              {/* MercadoPago Payment Brick */}
               {MP_PUBLIC_KEY && (
                 <Payment
                   initialization={{
                     amount: AMOUNT,
-                    ...(user?.email ? { payer: { email: user.email } } : {}),
+                    payer: { email: payerEmail || undefined },
                   }}
                   customization={{
-                    visual: {
-                      style: { theme: 'dark' },
-                    },
+                    visual: { style: { theme: 'dark' } },
                     paymentMethods: {
                       creditCard: 'all',
                       debitCard: 'all',
@@ -163,7 +182,6 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                 />
               )}
 
-              {/* Error */}
               {error && (
                 <div className="flex items-start gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg p-3">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
