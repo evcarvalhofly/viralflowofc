@@ -89,8 +89,12 @@ const Community = () => {
       )
       .subscribe();
 
+    // Fallback poll: ensures count stays accurate even if a realtime event is missed
+    const poll = setInterval(loadProfiles, 10_000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(poll);
     };
   }, []);
 
