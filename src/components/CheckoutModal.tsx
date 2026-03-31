@@ -17,7 +17,6 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const { user } = useAuth();
   const [tab, setTab] = useState<'pix' | 'card'>('pix');
   const [pixEmail, setPixEmail] = useState(user?.email ?? '');
-  const [cardEmail, setCardEmail] = useState(user?.email ?? '');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
@@ -82,11 +81,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   };
 
   const handleCardSubmit = async (formData: any) => {
-    const payerEmail = user?.email || cardEmail || formData.payer?.email || '';
-    if (!user && (!payerEmail || !payerEmail.includes('@'))) {
-      setError('Informe um e-mail válido antes de pagar.');
-      return;
-    }
+    const payerEmail = user?.email || formData.payer?.email || '';
     await processPayment({
       ...formData,
       payer: { ...formData.payer, email: payerEmail },
@@ -200,31 +195,19 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
               ) : MP_PUBLIC_KEY ? (
                 <>
                   {!user && (
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-white">
-                      Qual e-mail você vai usar para criar sua conta?
-                    </label>
-                    <p className="text-xs text-amber-400/90">
-                      ⚠️ Use o mesmo e-mail ao se cadastrar — é assim que seu acesso PRO será ativado automaticamente.
+                    <p className="text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                      ⚠️ No campo <strong>E-mail</strong> abaixo, use o mesmo e-mail que você vai cadastrar — é assim que seu acesso PRO será ativado.
                     </p>
-                      <input
-                        type="email"
-                        value={cardEmail}
-                        onChange={e => { setCardEmail(e.target.value); setError(null); }}
-                        placeholder="seu@email.com"
-                        className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-muted-foreground text-sm focus:outline-none focus:border-violet-500/60"
-                      />
-                    </div>
                   )}
                   <CardPayment
-                  initialization={{ amount: AMOUNT, payer: { email: user?.email || cardEmail || undefined } }}
-                  customization={{
-                    visual: { style: { theme: 'dark' } },
-                    paymentMethods: { maxInstallments: 1 },
-                  }}
-                  onSubmit={handleCardSubmit}
-                  onError={(e) => console.warn('MP card error:', e)}
-                />
+                    initialization={{ amount: AMOUNT, payer: { email: user?.email || undefined } }}
+                    customization={{
+                      visual: { style: { theme: 'dark' } },
+                      paymentMethods: { maxInstallments: 1 },
+                    }}
+                    onSubmit={handleCardSubmit}
+                    onError={(e) => console.warn('MP card error:', e)}
+                  />
                 </>
               ) : (
                 <div className="flex items-start gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
