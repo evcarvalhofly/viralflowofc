@@ -27,6 +27,7 @@ import { useCheckoutReturn } from "./hooks/useCheckoutReturn";
 import { useSubscription } from "./hooks/useSubscription";
 import PlanoPro from "./pages/PlanoPro";
 import Convite from "./pages/Convite";
+import MinhaConta from "./pages/MinhaConta";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +95,18 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+/** Exige apenas autenticação (sem verificar PRO). Usado para páginas como Minha Conta. */
+const AccountRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="animate-pulse text-primary text-2xl">⚡</div>
+    </div>
+  );
+  if (!user) return <Navigate to="/auth" replace />;
+  return <AppLayout>{children}</AppLayout>;
+};
+
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
     <QueryClientProvider client={queryClient}>
@@ -108,6 +121,9 @@ const App = () => (
                 <Route path="/auth" element={<AuthRoute><Auth /></AuthRoute>} />
                 <Route path="/convite" element={<Convite />} />
                 <Route path="/planopro" element={<PlanoPro />} />
+
+                {/* Conta (só auth, sem PRO obrigatório) */}
+                <Route path="/minha-conta" element={<AccountRoute><MinhaConta /></AccountRoute>} />
 
                 {/* Requer PRO */}
                 <Route path="/" element={<ProRoute><Home /></ProRoute>} />

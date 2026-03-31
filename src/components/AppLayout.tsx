@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Zap, MessageSquare, ClipboardList, TrendingUp,
-  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film, Home, Scissors, Bell, Handshake
+  FolderOpen, Users, LogOut, Menu, Trophy, Sun, Moon, Film, Home, Scissors, Bell, Handshake, UserCircle
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { label: "Minha Conta", icon: <UserCircle className="h-5 w-5" />, path: "/minha-conta" },
   { label: "Início", icon: <Home className="h-5 w-5" />, path: "/" },
   { label: "IA", icon: <MessageSquare className="h-5 w-5" />, path: "/chat" },
   { label: "Planejamento", icon: <ClipboardList className="h-5 w-5" />, path: "/planning" },
