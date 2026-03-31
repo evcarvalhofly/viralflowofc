@@ -66,10 +66,12 @@ const Community = () => {
 
   // Load profiles + subscribe to DB changes
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setCurrentUserId(user.id);
-        loadNotificationCount(user.id, user.email);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setCurrentUserId(session.user.id);
+        loadNotificationCount(session.user.id, session.user.email);
+        // Garante que o Realtime usa o JWT do usuário (necessário para canais privados)
+        supabase.realtime.setAuth(session.access_token);
       }
     });
 
