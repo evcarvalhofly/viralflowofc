@@ -22,15 +22,27 @@ const FEATURES = [
 
 export default function Convite() {
   const { user } = useAuth();
-  const [showCheckout, setShowCheckout] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(
+    () => sessionStorage.getItem('vf_checkout_open') === '1'
+  );
   const ctaRef = useRef<HTMLDivElement>(null);
+
+  const openCheckout = () => {
+    sessionStorage.setItem('vf_checkout_open', '1');
+    setShowCheckout(true);
+  };
+
+  const closeCheckout = () => {
+    sessionStorage.removeItem('vf_checkout_open');
+    setShowCheckout(false);
+  };
 
   const scrollToCta = () =>
     ctaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   const handleHeroCta = () => {
     scrollToCta();
-    setTimeout(() => setShowCheckout(true), 300);
+    setTimeout(openCheckout, 300);
   };
 
   return (
@@ -60,7 +72,7 @@ export default function Convite() {
 
         <div className="mt-8 flex flex-col items-center gap-3">
           <button
-            onClick={() => { scrollToCta(); setTimeout(() => setShowCheckout(true), 300); }}
+            onClick={() => { scrollToCta(); setTimeout(openCheckout, 300); }}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-4 text-base font-bold text-white shadow-xl shadow-violet-500/30 transition-all hover:from-violet-500 hover:to-purple-500 active:scale-95"
           >
             <Flame className="h-4 w-4" />
@@ -194,7 +206,7 @@ export default function Convite() {
           </div>
 
           <button
-            onClick={() => setShowCheckout(true)}
+            onClick={openCheckout}
             className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-4 text-base font-bold text-white shadow-xl shadow-violet-500/30 transition-all hover:from-violet-500 hover:to-purple-500 active:scale-95"
           >
             <Flame className="h-4 w-4" /> Assinar o ViralFlow agora — R$37,90/mês
@@ -215,8 +227,8 @@ export default function Convite() {
 
       {showCheckout && (
         <CheckoutModal
-          onClose={() => setShowCheckout(false)}
-          onSuccess={() => { window.location.href = '/auth'; }}
+          onClose={closeCheckout}
+          onSuccess={() => { sessionStorage.removeItem('vf_checkout_open'); window.location.href = '/auth'; }}
         />
       )}
     </div>

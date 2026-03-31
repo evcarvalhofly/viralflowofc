@@ -17,6 +17,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const { user } = useAuth();
   const [tab, setTab] = useState<'pix' | 'card'>('pix');
   const [pixEmail, setPixEmail] = useState(user?.email ?? '');
+  const [cardEmail, setCardEmail] = useState(user?.email ?? '');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
@@ -81,7 +82,11 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   };
 
   const handleCardSubmit = async (formData: any) => {
-    const payerEmail = formData.payer?.email || user?.email || '';
+    const payerEmail = user?.email || cardEmail || formData.payer?.email || '';
+    if (!user && (!payerEmail || !payerEmail.includes('@'))) {
+      setError('Informe um e-mail válido antes de pagar.');
+      return;
+    }
     await processPayment({
       ...formData,
       payer: { ...formData.payer, email: payerEmail },
@@ -190,8 +195,21 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                 </div>
 
               ) : MP_PUBLIC_KEY ? (
-                <CardPayment
-                  initialization={{ amount: AMOUNT, payer: { email: user?.email || undefined } }}
+                <>
+                  {!user && (
+                    <div className="space-y-1.5">
+                      <label className="text-sm text-muted-foreground">E-mail para o comprovante</label>
+                      <input
+                        type="email"
+                        value={cardEmail}
+                        onChange={e => { setCardEmail(e.target.value); setError(null); }}
+                        placeholder="seu@email.com"
+                        className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-muted-foreground text-sm focus:outline-none focus:border-violet-500/60"
+                      />
+                    </div>
+                  )}
+                  <CardPayment
+                  initialization={{ amount: AMOUNT, payer: { email: user?.email || cardEmail || undefined } }}
                   customization={{
                     visual: { style: { theme: 'dark' } },
                     paymentMethods: { maxInstallments: 1 },
@@ -199,6 +217,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                   onSubmit={handleCardSubmit}
                   onError={(e) => console.warn('MP card error:', e)}
                 />
+                </>
               ) : (
                 <div className="flex items-start gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
