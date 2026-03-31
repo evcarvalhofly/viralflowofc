@@ -40,7 +40,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     setProcessing(true);
     setError(null);
     try {
-      const refCode = !user ? (localStorage.getItem('vf_ref') ?? null) : null;
+      const refCode = !user ? (localStorage.getItem('vf_affiliate_ref') ?? null) : null;
       const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
         body: { ...body, ref_code: refCode },
       });

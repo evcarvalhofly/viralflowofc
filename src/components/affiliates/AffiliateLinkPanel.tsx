@@ -29,7 +29,7 @@ const AffiliateLinkPanel = ({ affiliate, stats }: Props) => {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
 
-  const affiliateUrl = `${window.location.origin}/?ref=${affiliate.ref_code}`;
+  const affiliateUrl = `${window.location.origin}/convite?ref=${affiliate.ref_code}`;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(affiliateUrl);
