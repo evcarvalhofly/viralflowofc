@@ -44,14 +44,16 @@ const Auth = () => {
             p_user_email: email,
           });
 
+          // Atribui afiliado SEMPRE (independente de ter pago antes ou não).
+          // A edge function detecta se já tem assinatura ativa e converte o referral imediatamente.
+          await attributeReferral(signUpData.user.id);
+
           if (checkoutResult?.activated) {
             toast({
               title: "Assinatura ativada!",
               description: "Seu plano PRO está ativo. Bem-vindo ao ViralFlow!",
             });
           } else {
-            // Fluxo normal: atribui afiliado do localStorage
-            attributeReferral(signUpData.user.id);
             toast({
               title: "Conta criada!",
               description: "Verifique seu email para confirmar o cadastro.",

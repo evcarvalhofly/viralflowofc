@@ -64,6 +64,10 @@ export const useAffiliateTracking = () => {
 /**
  * Atribui um cadastro/conversão ao afiliado armazenado no localStorage.
  * Chame isto após o usuário se cadastrar com sucesso.
+ * Usa a edge function process-affiliate-referral para garantir que:
+ * - Se o usuário já tem assinatura ativa (pagou como guest antes de registrar),
+ *   o referral é criado como 'converted' e a comissão é gerada imediatamente.
+ * - Caso contrário, cria como 'pending' (fluxo normal).
  *
  * @param newUserId — ID do usuário recém-criado (auth.users.id)
  * @returns Promise<void>
@@ -72,34 +76,10 @@ export const attributeReferral = async (newUserId: string): Promise<void> => {
   const code = getStoredRefCode();
   if (!code) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
-
-  // Busca o afiliado pelo ref_code
-  const { data: affiliate } = await db
-    .from('affiliates')
-    .select('id')
-    .eq('ref_code', code)
-    .eq('status', 'active')
-    .maybeSingle();
-
-  if (!affiliate?.id) return;
-
-  // Cria o registro de indicação (referral)
-  await db.from('referrals').insert({
-    affiliate_id: affiliate.id,
-    referred_user_id: newUserId,
-    ref_code: code,
-    status: 'pending',
+  // Delega para edge function com service role (lida com commission e status correto)
+  await supabase.functions.invoke('process-affiliate-referral', {
+    body: { user_id: newUserId, ref_code: code },
   });
-
-  // Marca o click como convertido
-  await db
-    .from('ref_clicks')
-    .update({ converted: true })
-    .eq('affiliate_id', affiliate.id)
-    .eq('ref_code', code)
-    .eq('converted', false);
 
   // Limpa o ref armazenado — vínculo já está no banco
   clearStoredRefCode();
