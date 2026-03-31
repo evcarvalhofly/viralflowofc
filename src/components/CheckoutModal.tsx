@@ -35,6 +35,13 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   };
 
   const onSubmit = async (formData: any) => {
+    console.log('MP onSubmit formData:', JSON.stringify(formData));
+
+    if (!formData.payment_method_id) {
+      setError('Selecione um método de pagamento antes de continuar.');
+      return;
+    }
+
     // Email: vem do brick (formData.payer.email) ou do usuário logado
     const payerEmail = formData.payer?.email || user?.email || '';
     if (!payerEmail || !payerEmail.includes('@')) {
