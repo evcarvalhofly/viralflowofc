@@ -146,7 +146,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                   initialization={{
                     amount: AMOUNT,
                     payer: {
-                      email: user?.email ?? '',
+                      email: user?.email || undefined,
                     },
                   }}
                   customization={{
