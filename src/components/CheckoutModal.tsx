@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
-import { initMercadoPago, Payment } from '@mercadopago/sdk-react';
+import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -15,6 +15,8 @@ interface CheckoutModalProps {
 
 export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const { user } = useAuth();
+  const [tab, setTab] = useState<'pix' | 'card'>('pix');
+  const [pixEmail, setPixEmail] = useState(user?.email ?? '');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
@@ -22,8 +24,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!MP_PUBLIC_KEY) return;
-    initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' });
+    if (MP_PUBLIC_KEY) initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' });
   }, []);
 
   const copyPix = () => {
@@ -34,53 +35,23 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const onSubmit = async (rawFormData: any) => {
-    // O brick de PIX (bankTransfer) não inclui payment_method_id — detectamos pelo token
-    const isCard = !!rawFormData.token;
-    const isPix  = !rawFormData.token && !!rawFormData.payer?.email;
-
-    if (!isCard && !isPix) {
-      setError('Selecione um método de pagamento antes de continuar.');
-      return;
-    }
-
-    // Garante payment_method_id='pix' para o backend quando o brick não o envia
-    const formData = (isPix && !rawFormData.payment_method_id)
-      ? { ...rawFormData, payment_method_id: 'pix' }
-      : rawFormData;
-
-    // Email: vem do brick (formData.payer.email) ou do usuário logado
-    const payerEmail = formData.payer?.email || user?.email || '';
-    if (!payerEmail || !payerEmail.includes('@')) {
-      setError('Informe um e-mail válido no formulário.');
-      return;
-    }
-
+  const processPayment = async (body: object) => {
     setProcessing(true);
     setError(null);
     try {
       const refCode = !user ? (localStorage.getItem('vf_ref') ?? null) : null;
-
       const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
-        body: {
-          ...formData,
-          payer: { ...formData.payer, email: payerEmail },
-          ref_code: refCode,
-        },
+        body: { ...body, ref_code: refCode },
       });
 
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(String(data.error));
 
       const status = data?.status;
-
       if (status === 'approved') {
         setApproved(true);
         toast.success('Pagamento aprovado! Bem-vindo ao ViralFlow PRO 🎉');
-        setTimeout(() => {
-          onSuccess?.();
-          onClose();
-        }, 2500);
+        setTimeout(() => { onSuccess?.(); onClose(); }, 2500);
       } else if (status === 'pending' && data?.qr_code) {
         setPixData({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 });
         toast.info('PIX gerado! Escaneie o QR Code para concluir.');
@@ -95,6 +66,26 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     } finally {
       setProcessing(false);
     }
+  };
+
+  const handlePixSubmit = () => {
+    if (!pixEmail || !pixEmail.includes('@')) {
+      setError('Informe um e-mail válido.');
+      return;
+    }
+    setError(null);
+    processPayment({
+      payment_method_id: 'pix',
+      payer: { email: pixEmail },
+    });
+  };
+
+  const handleCardSubmit = async (formData: any) => {
+    const payerEmail = formData.payer?.email || user?.email || '';
+    await processPayment({
+      ...formData,
+      payer: { ...formData.payer, email: payerEmail },
+    });
   };
 
   return (
@@ -139,7 +130,9 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                 className="flex items-center gap-2 w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-muted-foreground hover:border-violet-500/40 transition-colors text-left"
               >
                 <span className="flex-1 truncate font-mono">{pixData.qrCode}</span>
-                {copied ? <Check className="h-4 w-4 text-emerald-400 shrink-0" /> : <Copy className="h-4 w-4 shrink-0" />}
+                {copied
+                  ? <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                  : <Copy className="h-4 w-4 shrink-0" />}
               </button>
               <p className="text-xs text-muted-foreground">
                 Após o pagamento, seu acesso PRO será ativado automaticamente.
@@ -148,44 +141,75 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
 
           ) : (
             <>
-              {!MP_PUBLIC_KEY && (
+              {/* Tabs */}
+              <div className="flex rounded-xl bg-white/5 p-1 gap-1">
+                <button
+                  onClick={() => { setTab('pix'); setError(null); }}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    tab === 'pix'
+                      ? 'bg-violet-600 text-white'
+                      : 'text-muted-foreground hover:text-white'
+                  }`}
+                >
+                  PIX
+                </button>
+                <button
+                  onClick={() => { setTab('card'); setError(null); }}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    tab === 'card'
+                      ? 'bg-violet-600 text-white'
+                      : 'text-muted-foreground hover:text-white'
+                  }`}
+                >
+                  Cartão
+                </button>
+              </div>
+
+              {tab === 'pix' ? (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm text-muted-foreground">
+                      E-mail para receber o comprovante
+                    </label>
+                    <input
+                      type="email"
+                      value={pixEmail}
+                      onChange={e => { setPixEmail(e.target.value); setError(null); }}
+                      placeholder="seu@email.com"
+                      className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-muted-foreground text-sm focus:outline-none focus:border-violet-500/60"
+                    />
+                  </div>
+                  <button
+                    onClick={handlePixSubmit}
+                    disabled={processing}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-sm disabled:opacity-60 hover:from-violet-500 hover:to-purple-500 transition-all active:scale-95"
+                  >
+                    {processing && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {processing ? 'Gerando PIX...' : 'Gerar QR Code PIX — R$37,90'}
+                  </button>
+                </div>
+
+              ) : MP_PUBLIC_KEY ? (
+                <CardPayment
+                  initialization={{ amount: AMOUNT, payer: { email: user?.email || undefined } }}
+                  customization={{
+                    visual: { style: { theme: 'dark' } },
+                    paymentMethods: { maxInstallments: 1 },
+                  }}
+                  onSubmit={handleCardSubmit}
+                  onError={(e) => console.warn('MP card error:', e)}
+                />
+              ) : (
                 <div className="flex items-start gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>Chave pública do MercadoPago não configurada.</span>
                 </div>
               )}
 
-              {MP_PUBLIC_KEY && (
-                <Payment
-                  initialization={{
-                    amount: AMOUNT,
-                    payer: { email: user?.email || undefined },
-                  }}
-                  customization={{
-                    visual: { style: { theme: 'dark' } },
-                    paymentMethods: {
-                      creditCard: 'all',
-                      debitCard: 'all',
-                      bankTransfer: 'all',
-                      maxInstallments: 1,
-                    },
-                  }}
-                  onSubmit={onSubmit}
-                  onError={(e) => console.warn('MP brick error:', e)}
-                />
-              )}
-
               {error && (
                 <div className="flex items-start gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg p-3">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{error}</span>
-                </div>
-              )}
-
-              {processing && (
-                <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm py-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Processando pagamento...</span>
                 </div>
               )}
 
