@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check, Mail } from 'lucide-react';
+import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
 import { initMercadoPago, Payment } from '@mercadopago/sdk-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,14 +15,11 @@ interface CheckoutModalProps {
 
 export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const { user } = useAuth();
-  const [guestEmail, setGuestEmail] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
   const [pixData, setPixData] = useState<{ qrCode: string; qrBase64: string } | null>(null);
   const [copied, setCopied] = useState(false);
-
-  const payerEmail = user?.email ?? guestEmail.trim();
 
   useEffect(() => {
     if (!MP_PUBLIC_KEY) return;
@@ -38,10 +35,19 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   };
 
   const onSubmit = async (formData: any) => {
-    if (!payerEmail || !payerEmail.includes('@')) {
-      setError('Informe um e-mail válido antes de pagar.');
+    // Validações antes de chamar o backend
+    if (!formData.payment_method_id) {
+      setError('Selecione um método de pagamento.');
       return;
     }
+
+    // Email: vem do brick (formData.payer.email) ou do usuário logado
+    const payerEmail = formData.payer?.email || user?.email || '';
+    if (!payerEmail || !payerEmail.includes('@')) {
+      setError('Informe um e-mail válido no formulário.');
+      return;
+    }
+
     setProcessing(true);
     setError(null);
     try {
@@ -141,32 +147,11 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                 </div>
               )}
 
-              {/* Email para guest */}
-              {!user && (
-                <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground font-medium">
-                    Seu e-mail <span className="text-red-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                    <input
-                      type="email"
-                      placeholder="seu@email.com"
-                      value={guestEmail}
-                      onChange={e => { setGuestEmail(e.target.value); setError(null); }}
-                      className="w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-muted-foreground text-sm focus:outline-none focus:border-violet-500/50 transition-colors"
-                    />
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">Usado para ativar seu acesso após o cadastro.</p>
-                </div>
-              )}
-
-              {/* MercadoPago Payment Brick */}
               {MP_PUBLIC_KEY && (
                 <Payment
                   initialization={{
                     amount: AMOUNT,
-                    payer: { email: payerEmail || undefined },
+                    payer: { email: user?.email || undefined },
                   }}
                   customization={{
                     visual: { style: { theme: 'dark' } },
