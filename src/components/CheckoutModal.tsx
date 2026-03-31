@@ -159,7 +159,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                     },
                   }}
                   onSubmit={onSubmit}
-                  onError={(e) => setError(String(e))}
+                  onError={(e) => console.warn('MP brick error:', e)}
                 />
               )}
 
