@@ -295,7 +295,7 @@ const Car = React.memo(({ route, color, delay }: { route: string; color: string;
 const TrafficStyles = React.memo(() => <style>{TRAFFIC_CSS}</style>);
 
 const TrafficLayer = React.memo(({ onlineCount }: { onlineCount: number }) => {
-  const carCount = Math.max(1, Math.min(onlineCount, 10)); // max 10 carros
+  const carCount = onlineCount;
   const entities = useMemo(() => {
     const routes = ['routeE','routeW','routeS','routeN'];
     const colors = ['red','blue','slate','yellow','neutral','green','orange'];
