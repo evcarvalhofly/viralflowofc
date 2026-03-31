@@ -61,10 +61,15 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
           if (!user) navigate(`/parabens?email=${encodeURIComponent(cardEmail)}&method=card`);
         }, 1500);
       } else if (status === 'pending' && data?.qr_code) {
-        sessionStorage.setItem('vf_pix_data', JSON.stringify({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 }));
-        toast.info('PIX gerado!');
-        onClose();
-        navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
+        if (!user) {
+          sessionStorage.setItem('vf_pix_data', JSON.stringify({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 }));
+          toast.info('PIX gerado!');
+          onClose();
+          navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
+        } else {
+          setPixData({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 });
+          toast.info('PIX gerado! Escaneie o QR Code para concluir.');
+        }
       } else if (status === 'in_process' || status === 'pending') {
         toast.info('Pagamento em análise. Você receberá uma notificação em breve.');
         onClose();
