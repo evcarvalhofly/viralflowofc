@@ -72,9 +72,10 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
 /** Exige autenticação + assinatura PRO ativa. Redireciona para /planopro se não tiver. */
 const ProRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading: authLoading } = useAuth();
-  const { isPro, loading: subLoading } = useSubscription();
+  const { isPro, loading: subLoading, status } = useSubscription();
 
-  if (authLoading || subLoading) {
+  // status===null com user presente = fetch de subscription ainda não completou (race condition entre auth e subscription)
+  if (authLoading || subLoading || (!!user && status === null)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="animate-pulse text-primary text-2xl">⚡</div>
