@@ -28,6 +28,7 @@ import { useSubscription } from "./hooks/useSubscription";
 import PlanoPro from "./pages/PlanoPro";
 import Convite from "./pages/Convite";
 import MinhaConta from "./pages/MinhaConta";
+import { SubscriptionExpiredWall } from "./components/SubscriptionExpiredWall";
 
 const queryClient = new QueryClient();
 
@@ -70,10 +71,10 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-/** Exige autenticação + assinatura PRO ativa. Redireciona para /planopro se não tiver. */
+/** Exige autenticação + assinatura PRO ativa. Redireciona para /planopro se nunca assinou. */
 const ProRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading: authLoading } = useAuth();
-  const { isPro, loading: subLoading, status } = useSubscription();
+  const { isPro, isExpired, loading: subLoading, status } = useSubscription();
 
   // status===null com user presente = fetch de subscription ainda não completou (race condition entre auth e subscription)
   if (authLoading || subLoading || (!!user && status === null)) {
@@ -84,6 +85,9 @@ const ProRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   if (!user) return <Navigate to="/auth" replace />;
+  // Assinatura vencida: mantém no app com parede de renovação (não redireciona)
+  if (isExpired) return <AppLayout><SubscriptionExpiredWall /></AppLayout>;
+  // Nunca assinou: redireciona para página de plano
   if (!isPro) return <Navigate to="/planopro" replace />;
   return <AppLayout>{children}</AppLayout>;
 };

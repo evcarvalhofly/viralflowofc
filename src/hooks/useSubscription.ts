@@ -10,6 +10,8 @@ export function useSubscription() {
   const [status, setStatus] = useState<SubscriptionStatus>(null);
   const [loading, setLoading] = useState(true);
 
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+
   useEffect(() => {
     if (!user) { setStatus(null); setLoading(false); return; }
 
@@ -19,11 +21,12 @@ export function useSubscription() {
     const fetch = async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('subscription_status')
+        .select('subscription_status, subscription_expires_at')
         .eq('user_id', user.id)
         .single();
       if (!ignore) {
         setStatus((data?.subscription_status as SubscriptionStatus) ?? 'free');
+        setExpiresAt(data?.subscription_expires_at ?? null);
         setLoading(false);
       }
     };
@@ -41,13 +44,23 @@ export function useSubscription() {
       }, (payload) => {
         const s = payload.new?.subscription_status as SubscriptionStatus;
         if (s) setStatus(s);
+        if (payload.new?.subscription_expires_at !== undefined)
+          setExpiresAt(payload.new.subscription_expires_at ?? null);
       })
       .subscribe();
 
     return () => { ignore = true; supabase.removeChannel(channel); };
   }, [user]);
 
-  const isPro = status === 'active' || user?.email === 'evcarvalhodev@gmail.com';
+  const isAdmin = user?.email === 'evcarvalhodev@gmail.com';
+
+  // Assinatura expirada: status 'canceled' OU 'active' mas data já passou
+  const isExpired = !isAdmin && (
+    status === 'canceled' ||
+    (status === 'active' && !!expiresAt && new Date(expiresAt).getTime() < Date.now())
+  );
+
+  const isPro = isAdmin || (status === 'active' && !isExpired);
 
   const startCheckout = async (guestEmail?: string) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -82,5 +95,5 @@ export function useSubscription() {
     window.location.href = data.url;
   };
 
-  return { status, isPro, loading, startCheckout };
+  return { status, isPro, isExpired, expiresAt, loading, startCheckout };
 }
