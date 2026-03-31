@@ -35,12 +35,6 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   };
 
   const onSubmit = async (formData: any) => {
-    // Validações antes de chamar o backend
-    if (!formData.payment_method_id) {
-      setError('Selecione um método de pagamento.');
-      return;
-    }
-
     // Email: vem do brick (formData.payer.email) ou do usuário logado
     const payerEmail = formData.payer?.email || user?.email || '';
     if (!payerEmail || !payerEmail.includes('@')) {
