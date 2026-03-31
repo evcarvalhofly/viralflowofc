@@ -25,6 +25,7 @@ interface CommunityMapProps {
   profiles: Profile[];
   currentUserId?: string | null;
   onShoppingClick?: () => void;
+  presenceCount?: number;
   is_frozen?: boolean;
 }
 
@@ -365,7 +366,7 @@ const isInvalidLot = (nx: number, ny: number) => {
   return false;
 };
 
-const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, onShoppingClick }) => {
+const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, onShoppingClick, presenceCount }) => {
   const containerRef  = useRef<HTMLDivElement>(null);
   const zoomDivRef    = useRef<HTMLDivElement>(null);
   const mapLayerRef   = useRef<HTMLDivElement>(null);
@@ -481,6 +482,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   );
 
   const onlineCount = useMemo(() => {
+    if (presenceCount !== undefined) return presenceCount;
     const dbOnline = profiles.filter(p => p.is_online).length;
     const meAlreadyCounted = profiles.some(p => p.user_id === currentUserId && p.is_online);
     return meAlreadyCounted ? dbOnline : dbOnline + (currentUserId ? 1 : 0);

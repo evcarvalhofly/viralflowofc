@@ -16,6 +16,7 @@ const Community = () => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
   const [levelUpEvent, setLevelUpEvent] = useState<LevelUpEvent | null>(null);
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
 
   const loadProfiles = useCallback(async () => {
     const { data, error } = await supabase
@@ -30,14 +31,12 @@ const Community = () => {
   const loadNotificationCount = useCallback(async (userId: string, email?: string) => {
     const db = supabase as any;
 
-    // Pedidos de amizade pendentes (sou o destinatário)
     const { count: pendingCount } = await supabase
       .from('friendships')
       .select('*', { count: 'exact', head: true })
       .eq('friend_id', userId)
       .eq('status', 'pending');
 
-    // Amizades aceitas que ainda não vi (sou o remetente)
     const { count: acceptedCount } = await db
       .from('friendships')
       .select('*', { count: 'exact', head: true })
@@ -45,7 +44,6 @@ const Community = () => {
       .eq('status', 'accepted')
       .eq('sender_notified', false);
 
-    // Mensagens não lidas
     const { count: unreadCount } = await db
       .from('direct_messages')
       .select('*', { count: 'exact', head: true })
@@ -66,6 +64,7 @@ const Community = () => {
     setNotificationCount(total);
   }, []);
 
+  // Load profiles + subscribe to DB changes
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
@@ -89,6 +88,45 @@ const Community = () => {
     };
   }, []);
 
+  // Realtime Presence — tracks who is actually on this page right now
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    // Sem presence.key no config: Supabase gera chave aleatória por cliente.
+    // O user_id vai no payload do track(), extraído nos eventos.
+    const presenceChannel = supabase.channel('community_presence');
+
+    const readState = () => {
+      const state = presenceChannel.presenceState<{ user_id: string }>();
+      const ids = new Set<string>();
+      Object.values(state).flat().forEach((p: any) => {
+        if (p.user_id) ids.add(p.user_id);
+      });
+      setOnlineUserIds(ids);
+    };
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, readState)
+      .on('presence', { event: 'join' }, readState)
+      .on('presence', { event: 'leave' }, readState)
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({ user_id: currentUserId, online_at: new Date().toISOString() });
+          readState();
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [currentUserId]);
+
+  // Merge real-time presence into profiles so CommunityMap shows accurate online dots
+  const profilesWithPresence = useMemo(() =>
+    profiles.map(p => ({ ...p, is_online: onlineUserIds.has(p.user_id) })),
+    [profiles, onlineUserIds]
+  );
+
   // Derive current user's level from loaded profiles
   const currentUserLevel = useMemo(() => {
     if (!currentUserId) return null;
@@ -96,7 +134,6 @@ const Community = () => {
     return me ? (me.nivel ?? 1) : null;
   }, [profiles, currentUserId]);
 
-  // Level progression — handles 60-second timer (1→2) and server-side checks (2→6)
   useLevelProgression({
     currentUserId,
     currentUserLevel,
@@ -115,7 +152,7 @@ const Community = () => {
         </div>
         <div className="flex items-center gap-2 text-sm text-primary">
           <span className="hidden sm:inline text-muted-foreground mr-2">{profiles.length} Habitantes</span>
-          <button
+<button
             onClick={() => setShowNotifications(true)}
             className="relative p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-colors"
           >
@@ -136,16 +173,15 @@ const Community = () => {
         </div>
       </header>
 
-      {/* Hide map (display:none) when any overlay is open to prevent GPU
-          compositing layer of the map from bleeding through fixed modals on mobile */}
       <div
         className="flex-1 relative overflow-hidden"
         style={(showShopping || showEditProfile || showNotifications) ? { display: 'none' } : undefined}
       >
         <CommunityMap
-          profiles={profiles}
+          profiles={profilesWithPresence}
           currentUserId={currentUserId}
           onShoppingClick={() => setShowShopping(true)}
+          presenceCount={Math.max(onlineUserIds.size, currentUserId ? 1 : 0)}
         />
       </div>
 

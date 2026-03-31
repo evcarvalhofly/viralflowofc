@@ -13,6 +13,7 @@ export function useSubscription() {
   useEffect(() => {
     if (!user) { setStatus(null); setLoading(false); return; }
 
+    setLoading(true);
     let ignore = false;
 
     const fetch = async () => {
