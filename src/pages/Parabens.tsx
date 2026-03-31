@@ -5,7 +5,7 @@ import { attributeReferral } from "@/hooks/useAffiliateTracking";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Zap, CheckCircle2, Clock, Loader2, Copy, Check, MessageCircle, Eye, EyeOff
+  Zap, CheckCircle2, Loader2, MessageCircle, Eye, EyeOff
 } from "lucide-react";
 
 const WA_NUMBER = "5512992275476";
@@ -17,7 +17,6 @@ const Parabens = () => {
   const { toast } = useToast();
 
   const emailParam = params.get("email") ?? "";
-  const method = params.get("method") ?? "pix"; // 'pix' | 'card'
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState(emailParam);
@@ -25,30 +24,10 @@ const Parabens = () => {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // PIX QR code stored in sessionStorage by CheckoutModal
-  const [pixData, setPixData] = useState<{ qrCode: string; qrBase64: string } | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (method === "pix") {
-      const raw = sessionStorage.getItem("vf_pix_data");
-      if (raw) {
-        try { setPixData(JSON.parse(raw)); } catch { /* ignore */ }
-      }
-    }
-  }, [method]);
-
   // Se já está logado, redireciona para home
   useEffect(() => {
     if (user) navigate("/", { replace: true });
   }, [user, navigate]);
-
-  const copyPix = () => {
-    if (!pixData) return;
-    navigator.clipboard.writeText(pixData.qrCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,46 +77,13 @@ const Parabens = () => {
       </div>
 
       {/* Status banner */}
-      {method === "card" ? (
-        <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 mb-6 w-full max-w-md">
-          <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-emerald-400">Pagamento aprovado!</p>
-            <p className="text-xs text-muted-foreground">Crie sua conta abaixo para acessar o ViralFlow PRO.</p>
-          </div>
+      <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 mb-6 w-full max-w-md">
+        <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-emerald-400">Pagamento confirmado!</p>
+          <p className="text-xs text-muted-foreground">Crie sua conta abaixo para acessar o ViralFlow PRO.</p>
         </div>
-      ) : (
-        <div className="flex items-start gap-3 px-5 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-4 w-full max-w-md">
-          <Clock className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-amber-400">PIX gerado — aguardando pagamento</p>
-            <p className="text-xs text-muted-foreground">Após pagar, crie sua conta abaixo. O acesso PRO será ativado automaticamente.</p>
-          </div>
-        </div>
-      )}
-
-      {/* PIX QR code (if pix method) */}
-      {method === "pix" && pixData && (
-        <div className="flex flex-col items-center gap-3 w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-5 mb-5">
-          <p className="text-sm font-semibold text-white">Escaneie o QR Code para pagar</p>
-          {pixData.qrBase64 && (
-            <img
-              src={`data:image/png;base64,${pixData.qrBase64}`}
-              alt="QR Code PIX"
-              className="w-44 h-44 rounded-xl bg-white p-2"
-            />
-          )}
-          <button
-            onClick={copyPix}
-            className="flex items-center gap-2 w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs text-muted-foreground hover:border-violet-500/40 transition-colors text-left"
-          >
-            <span className="flex-1 truncate font-mono">{pixData.qrCode}</span>
-            {copied
-              ? <Check className="h-4 w-4 text-emerald-400 shrink-0" />
-              : <Copy className="h-4 w-4 shrink-0" />}
-          </button>
-        </div>
-      )}
+      </div>
 
       {/* Signup form */}
       <div className="w-full max-w-md bg-[#13131a] border border-white/10 rounded-2xl p-6">

@@ -20,8 +20,8 @@ export default function PlanoPro() {
   const [showCheckout, setShowCheckout] = useState(false);
 
   const handleSuccess = () => {
-    // Reload to re-check PRO status
-    window.location.href = '/';
+    // Only reload for logged-in users (renewals) — guests are redirected to /parabens by CheckoutModal
+    if (user) window.location.href = '/';
   };
 
   return (
