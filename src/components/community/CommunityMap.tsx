@@ -32,60 +32,55 @@ interface CommunityMapProps {
 const CELL_SIZE = 140;
 const BASE_MAP_LIMIT = 5;
 
-// Duration must match the value used in the Car animation style below
-const CAR_ANIM_DURATION = 12; // seconds
-
-// Cars travel ±500px from center — just barely off the visible map edge.
-// This keeps each car visible ~80% of its cycle so multiple cars are
-// on-screen simultaneously.
+// CSS de tráfego fora do componente para não ser reinjetado a cada render
 const TRAFFIC_CSS = `
 @keyframes routeE {
-  0%    { transform: translate(-500px,  20px)  rotate(0deg);    }
-  35%   { transform: translate(-140px,  20px)  rotate(0deg);    }
-  35.5% { transform: translate(-140px,  20px)  rotate(-90deg);  }
-  39%   { transform: translate(-140px,-140px)  rotate(-90deg);  }
-  39.5% { transform: translate(-140px,-140px)  rotate(0deg);    }
-  60.5% { transform: translate( 140px,-140px)  rotate(0deg);    }
-  61%   { transform: translate( 140px,-140px)  rotate(90deg);   }
-  64.5% { transform: translate( 140px,  20px)  rotate(90deg);   }
-  65%   { transform: translate( 140px,  20px)  rotate(0deg);    }
-  100%  { transform: translate( 500px,  20px)  rotate(0deg);    }
+  0%   { transform: translate(-4000px, 20px)   rotate(0deg); }
+  46%  { transform: translate(-140px,  20px)   rotate(0deg); }
+  46.1%{ transform: translate(-140px,  20px)   rotate(-90deg); }
+  48%  { transform: translate(-140px, -140px)  rotate(-90deg); }
+  48.1%{ transform: translate(-140px, -140px)  rotate(0deg); }
+  51.9%{ transform: translate(140px,  -140px)  rotate(0deg); }
+  52%  { transform: translate(140px,  -140px)  rotate(90deg); }
+  53.9%{ transform: translate(140px,   20px)   rotate(90deg); }
+  54%  { transform: translate(140px,   20px)   rotate(0deg); }
+  100% { transform: translate(4000px,  20px)   rotate(0deg); }
 }
 @keyframes routeW {
-  0%    { transform: translate( 500px, -20px)  rotate(180deg);  }
-  35%   { transform: translate( 140px, -20px)  rotate(180deg);  }
-  35.5% { transform: translate( 140px, -20px)  rotate(-90deg);  }
-  39%   { transform: translate( 140px, 140px)  rotate(-90deg);  }
-  39.5% { transform: translate( 140px, 140px)  rotate(180deg);  }
-  60.5% { transform: translate(-140px, 140px)  rotate(180deg);  }
-  61%   { transform: translate(-140px, 140px)  rotate(90deg);   }
-  64.5% { transform: translate(-140px, -20px)  rotate(90deg);   }
-  65%   { transform: translate(-140px, -20px)  rotate(180deg);  }
-  100%  { transform: translate(-500px, -20px)  rotate(180deg);  }
+  0%   { transform: translate(4000px, -20px)  rotate(180deg); }
+  46%  { transform: translate(140px,  -20px)  rotate(180deg); }
+  46.1%{ transform: translate(140px,  -20px)  rotate(-90deg); }
+  48%  { transform: translate(140px,  140px)  rotate(-90deg); }
+  48.1%{ transform: translate(140px,  140px)  rotate(180deg); }
+  51.9%{ transform: translate(-140px, 140px)  rotate(180deg); }
+  52%  { transform: translate(-140px, 140px)  rotate(90deg); }
+  53.9%{ transform: translate(-140px, -20px)  rotate(90deg); }
+  54%  { transform: translate(-140px, -20px)  rotate(180deg); }
+  100% { transform: translate(-4000px,-20px)  rotate(180deg); }
 }
 @keyframes routeS {
-  0%    { transform: translate(-20px, -500px)  rotate(90deg);   }
-  35%   { transform: translate(-20px, -140px)  rotate(90deg);   }
-  35.5% { transform: translate(-20px, -140px)  rotate(180deg);  }
-  39%   { transform: translate(-140px,-140px)  rotate(180deg);  }
-  39.5% { transform: translate(-140px,-140px)  rotate(90deg);   }
-  60.5% { transform: translate(-140px, 140px)  rotate(90deg);   }
-  61%   { transform: translate(-140px, 140px)  rotate(0deg);    }
-  64.5% { transform: translate(-20px,  140px)  rotate(0deg);    }
-  65%   { transform: translate(-20px,  140px)  rotate(90deg);   }
-  100%  { transform: translate(-20px,  500px)  rotate(90deg);   }
+  0%   { transform: translate(-20px,-4000px) rotate(90deg); }
+  46%  { transform: translate(-20px, -140px) rotate(90deg); }
+  46.1%{ transform: translate(-20px, -140px) rotate(180deg); }
+  48%  { transform: translate(-140px,-140px) rotate(180deg); }
+  48.1%{ transform: translate(-140px,-140px) rotate(90deg); }
+  51.9%{ transform: translate(-140px, 140px) rotate(90deg); }
+  52%  { transform: translate(-140px, 140px) rotate(0deg); }
+  53.9%{ transform: translate(-20px,  140px) rotate(0deg); }
+  54%  { transform: translate(-20px,  140px) rotate(90deg); }
+  100% { transform: translate(-20px, 4000px) rotate(90deg); }
 }
 @keyframes routeN {
-  0%    { transform: translate( 20px,  500px)  rotate(-90deg);  }
-  35%   { transform: translate( 20px,  140px)  rotate(-90deg);  }
-  35.5% { transform: translate( 20px,  140px)  rotate(0deg);    }
-  39%   { transform: translate( 140px, 140px)  rotate(0deg);    }
-  39.5% { transform: translate( 140px, 140px)  rotate(-90deg);  }
-  60.5% { transform: translate( 140px,-140px)  rotate(-90deg);  }
-  61%   { transform: translate( 140px,-140px)  rotate(180deg);  }
-  64.5% { transform: translate( 20px, -140px)  rotate(180deg);  }
-  65%   { transform: translate( 20px, -140px)  rotate(-90deg);  }
-  100%  { transform: translate( 20px, -500px)  rotate(-90deg);  }
+  0%   { transform: translate(20px, 4000px)  rotate(-90deg); }
+  46%  { transform: translate(20px,  140px)  rotate(-90deg); }
+  46.1%{ transform: translate(20px,  140px)  rotate(0deg); }
+  48%  { transform: translate(140px, 140px)  rotate(0deg); }
+  48.1%{ transform: translate(140px, 140px)  rotate(-90deg); }
+  51.9%{ transform: translate(140px,-140px)  rotate(-90deg); }
+  52%  { transform: translate(140px,-140px)  rotate(180deg); }
+  53.9%{ transform: translate(20px, -140px)  rotate(180deg); }
+  54%  { transform: translate(20px, -140px)  rotate(-90deg); }
+  100% { transform: translate(20px,-4000px)  rotate(-90deg); }
 }`;
 
 // ─── Sub-components memoizados ────────────────────────────────────────────────
@@ -265,7 +260,7 @@ const Car = React.memo(({ route, color, delay }: { route: string; color: string;
   };
   const { body, dark } = palette[color] ?? palette.slate;
   return (
-    <div className="absolute pointer-events-none" style={{ left: 0, top: 0, animation: `${route} ${CAR_ANIM_DURATION}s linear infinite`, animationDelay: delay }}>
+    <div className="absolute pointer-events-none" style={{ left: 0, top: 0, animation: `${route} 18s linear infinite`, animationDelay: delay }}>
       <svg width="36" height="20" viewBox="0 0 36 20" style={{ transform: 'translate(-50%, -50%)', overflow: 'visible' }}>
         {/* Rodas traseiras */}
         <rect x="2" y="1"  width="8" height="5" rx="1.5" fill="#111827" />
@@ -304,13 +299,11 @@ const TrafficLayer = React.memo(({ onlineCount }: { onlineCount: number }) => {
   const entities = useMemo(() => {
     const routes = ['routeE','routeW','routeS','routeN'];
     const colors = ['red','blue','slate','yellow','neutral','green','orange'];
-    const n = Math.max(carCount, 1);
     return Array.from({ length: carCount }).map((_, i) => ({
       id: i,
       route: routes[i % 4],
       color: colors[i % 7],
-      // Spread evenly across the full cycle so cars are on-screen simultaneously
-      delay: `-${((i / n) * CAR_ANIM_DURATION).toFixed(2)}s`,
+      delay: `-${(i * 9) % 90}s`,
     }));
   }, [carCount]);
 
