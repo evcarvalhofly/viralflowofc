@@ -28,6 +28,7 @@ import { useSubscription } from "./hooks/useSubscription";
 import PlanoPro from "./pages/PlanoPro";
 import Convite from "./pages/Convite";
 import MinhaConta from "./pages/MinhaConta";
+import Parabens from "./pages/Parabens";
 import { SubscriptionExpiredWall } from "./components/SubscriptionExpiredWall";
 
 const queryClient = new QueryClient();
@@ -38,7 +39,7 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   const { pathname } = useLocation();
   const [showNotifModal, setShowNotifModal] = useState(false);
 
-  const BLOCKED_PATHS = ['/planopro', '/convite'];
+  const BLOCKED_PATHS = ['/planopro', '/convite', '/parabens'];
 
   // Escuta eventos Supabase e mostra notificações em background
   useBackgroundNotifications();
@@ -123,6 +124,7 @@ const App = () => (
               <Routes>
                 {/* Público */}
                 <Route path="/auth" element={<AuthRoute><Auth /></AuthRoute>} />
+                <Route path="/parabens" element={<Parabens />} />
                 <Route path="/convite" element={<Convite />} />
                 <Route path="/planopro" element={<PlanoPro />} />
 

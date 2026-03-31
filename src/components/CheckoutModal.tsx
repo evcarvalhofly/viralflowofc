@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
 import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,8 +16,10 @@ interface CheckoutModalProps {
 
 export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<'pix' | 'card'>('pix');
   const [pixEmail, setPixEmail] = useState(user?.email ?? '');
+  const [pendingEmail, setPendingEmail] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
@@ -51,10 +54,17 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
       if (status === 'approved') {
         setApproved(true);
         toast.success('Pagamento aprovado! Bem-vindo ao ViralFlow PRO 🎉');
-        setTimeout(() => { onSuccess?.(); onClose(); }, 2500);
+        const cardEmail = pendingEmail || user?.email || '';
+        setTimeout(() => {
+          onSuccess?.();
+          onClose();
+          if (!user) navigate(`/parabens?email=${encodeURIComponent(cardEmail)}&method=card`);
+        }, 1500);
       } else if (status === 'pending' && data?.qr_code) {
-        setPixData({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 });
-        toast.info('PIX gerado! Escaneie o QR Code para concluir.');
+        sessionStorage.setItem('vf_pix_data', JSON.stringify({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 }));
+        toast.info('PIX gerado!');
+        onClose();
+        navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
       } else if (status === 'in_process' || status === 'pending') {
         toast.info('Pagamento em análise. Você receberá uma notificação em breve.');
         onClose();
@@ -82,6 +92,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
 
   const handleCardSubmit = async (formData: any) => {
     const payerEmail = user?.email || formData.payer?.email || '';
+    setPendingEmail(payerEmail);
     await processPayment({
       ...formData,
       payer: { ...formData.payer, email: payerEmail },
