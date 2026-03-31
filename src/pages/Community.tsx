@@ -9,7 +9,7 @@ import { NotificationsPanel } from '@/components/community/NotificationsPanel';
 import { useLevelProgression, LevelUpEvent } from '@/hooks/useLevelProgression';
 
 // Users are considered online if last_seen_at is within this many milliseconds
-const ONLINE_THRESHOLD_MS = 90_000; // 90 seconds
+const ONLINE_THRESHOLD_MS = 45_000; // 45 seconds
 
 const Community = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -107,18 +107,14 @@ const Community = () => {
     // Immediate heartbeat on mount
     updatePresence();
 
-    const interval = setInterval(() => {
-      updatePresence();
-      setTick(t => t + 1); // refresh online-status computation
-    }, 30_000);
+    const heartbeat = setInterval(updatePresence, 30_000);
+    const ticker = setInterval(() => setTick(t => t + 1), 15_000);
 
     return () => {
-      clearInterval(interval);
-      // Mark as offline on unmount
-      (supabase as any)
-        .from('profiles')
-        .update({ last_seen_at: null })
-        .eq('user_id', currentUserId);
+      clearInterval(heartbeat);
+      clearInterval(ticker);
+      // Note: we intentionally do NOT clear last_seen_at here because the browser
+      // cancels in-flight requests on navigation. The 45s threshold handles expiry naturally.
     };
   }, [currentUserId]);
 
