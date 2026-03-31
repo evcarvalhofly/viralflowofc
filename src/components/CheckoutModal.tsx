@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
 import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react';
@@ -23,11 +23,47 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
-  const [pixData, setPixData] = useState<{ qrCode: string; qrBase64: string } | null>(null);
+  const [pixData, setPixData] = useState<{ qrCode: string; qrBase64: string; paymentId: string } | null>(null);
+  const [waitingPix, setWaitingPix] = useState(false);
   const [copied, setCopied] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (MP_PUBLIC_KEY) initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' });
+  }, []);
+
+  // Polling: verifica status do PIX a cada 5s após geração
+  useEffect(() => {
+    if (!pixData || !waitingPix) return;
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const { data: status } = await (supabase as any).rpc('check_pix_payment_status', {
+          p_payment_id: String(pixData.paymentId),
+        });
+
+        if (status === 'paid' || status === 'claimed') {
+          clearInterval(pollRef.current!);
+          setWaitingPix(false);
+          setApproved(true);
+          toast.success('Pagamento PIX confirmado! 🎉');
+          setTimeout(() => {
+            onSuccess?.();
+            onClose();
+            if (!user) navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
+          }, 1500);
+        }
+      } catch {
+        // RPC ainda não existe ou erro de rede — continua polling silenciosamente
+      }
+    }, 5000);
+
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [pixData, waitingPix]);
+
+  // Para o polling ao desmontar o componente
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
   const copyPix = () => {
@@ -36,6 +72,16 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     setCopied(true);
     toast.success('Código PIX copiado!');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleManualConfirm = () => {
+    // Fallback: usuário clica "Já paguei" — vai para /parabens manualmente
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (pixData) {
+      sessionStorage.setItem('vf_pix_data', JSON.stringify({ qrCode: pixData.qrCode, qrBase64: pixData.qrBase64 }));
+    }
+    onClose();
+    navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
   };
 
   const processPayment = async (body: object) => {
@@ -51,6 +97,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
       if (data?.error) throw new Error(String(data.error));
 
       const status = data?.status;
+
       if (status === 'approved') {
         setApproved(true);
         toast.success('Pagamento aprovado! Bem-vindo ao ViralFlow PRO 🎉');
@@ -60,16 +107,16 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
           onClose();
           if (!user) navigate(`/parabens?email=${encodeURIComponent(cardEmail)}&method=card`);
         }, 1500);
+
       } else if (status === 'pending' && data?.qr_code) {
-        if (!user) {
-          sessionStorage.setItem('vf_pix_data', JSON.stringify({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 }));
-          toast.info('PIX gerado!');
-          onClose();
-          navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
-        } else {
-          setPixData({ qrCode: data.qr_code, qrBase64: data.qr_code_base64 });
-          toast.info('PIX gerado! Escaneie o QR Code para concluir.');
-        }
+        setPixData({
+          qrCode: data.qr_code,
+          qrBase64: data.qr_code_base64,
+          paymentId: String(data.payment_id),
+        });
+        setWaitingPix(true);
+        toast.info('PIX gerado! Aguardando confirmação do pagamento.');
+
       } else if (status === 'in_process' || status === 'pending') {
         toast.info('Pagamento em análise. Você receberá uma notificação em breve.');
         onClose();
@@ -150,9 +197,24 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                   ? <Check className="h-4 w-4 text-emerald-400 shrink-0" />
                   : <Copy className="h-4 w-4 shrink-0" />}
               </button>
-              <p className="text-xs text-muted-foreground">
-                Após o pagamento, seu acesso PRO será ativado automaticamente.
-              </p>
+
+              {/* Status de espera */}
+              {waitingPix && (
+                <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-2.5 w-full justify-center">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  <span>Aguardando confirmação do pagamento...</span>
+                </div>
+              )}
+
+              {/* Fallback manual para guest */}
+              {!user && (
+                <button
+                  onClick={handleManualConfirm}
+                  className="text-xs text-violet-400 hover:text-violet-300 transition-colors underline underline-offset-2"
+                >
+                  Já realizei o pagamento →
+                </button>
+              )}
             </div>
 
           ) : (
