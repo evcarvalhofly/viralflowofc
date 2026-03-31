@@ -26,6 +26,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const [pixData, setPixData] = useState<{ qrCode: string; qrBase64: string; paymentId: string } | null>(null);
   const [waitingPix, setWaitingPix] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -48,9 +49,12 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
           setApproved(true);
           toast.success('Pagamento PIX confirmado! 🎉');
           setTimeout(() => {
-            onSuccess?.();
-            onClose();
-            if (!user) navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
+            if (!user) {
+              navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
+            } else {
+              onSuccess?.();
+              onClose();
+            }
           }, 1500);
         }
       } catch {
@@ -103,9 +107,12 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
         toast.success('Pagamento aprovado! Bem-vindo ao ViralFlow PRO 🎉');
         const cardEmail = pendingEmail || user?.email || '';
         setTimeout(() => {
-          onSuccess?.();
-          onClose();
-          if (!user) navigate(`/parabens?email=${encodeURIComponent(cardEmail)}&method=card`);
+          if (!user) {
+            navigate(`/parabens?email=${encodeURIComponent(cardEmail)}&method=card`);
+          } else {
+            onSuccess?.();
+            onClose();
+          }
         }, 1500);
 
       } else if (status === 'pending' && data?.qr_code) {
@@ -145,10 +152,12 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const handleCardSubmit = async (formData: any) => {
     const payerEmail = user?.email || formData.payer?.email || '';
     setPendingEmail(payerEmail);
+    setSubmitting(true);
     await processPayment({
       ...formData,
       payer: { ...formData.payer, email: payerEmail },
     });
+    setSubmitting(false);
   };
 
   return (
@@ -272,20 +281,27 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
 
               ) : MP_PUBLIC_KEY ? (
                 <>
-                  {!user && (
+                  {!user && !submitting && !processing && (
                     <p className="text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                       ⚠️ No campo <strong>E-mail</strong> abaixo, use o mesmo e-mail que você vai cadastrar — é assim que seu acesso PRO será ativado.
                     </p>
                   )}
-                  <CardPayment
-                    initialization={{ amount: AMOUNT }}
-                    customization={{
-                      visual: { style: { theme: 'dark' } },
-                      paymentMethods: { maxInstallments: 1 },
-                    }}
-                    onSubmit={handleCardSubmit}
-                    onError={(e) => console.warn('MP card error:', e)}
-                  />
+                  {submitting || processing ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-3">
+                      <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+                      <p className="text-sm text-muted-foreground">Processando pagamento...</p>
+                    </div>
+                  ) : (
+                    <CardPayment
+                      initialization={{ amount: AMOUNT }}
+                      customization={{
+                        visual: { style: { theme: 'dark' } },
+                        paymentMethods: { maxInstallments: 1 },
+                      }}
+                      onSubmit={handleCardSubmit}
+                      onError={(e) => console.warn('MP card error:', e)}
+                    />
+                  )}
                 </>
               ) : (
                 <div className="flex items-start gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
