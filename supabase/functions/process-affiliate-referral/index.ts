@@ -70,7 +70,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const alreadyActive = profile?.subscription_status === 'active';
-    const paymentId     = profile?.stripe_subscription_id ?? null;
 
     const now = new Date().toISOString();
 
@@ -97,14 +96,14 @@ Deno.serve(async (req) => {
     console.log('Referral created | user:', user_id, '| affiliate:', affiliate.id, '| status:', alreadyActive ? 'converted' : 'pending');
 
     // 5. If already active: create commission immediately
-    if (alreadyActive && paymentId) {
+    // Note: subscription_id is omitted (null) because MercadoPago payment IDs are not UUIDs
+    if (alreadyActive) {
       const PRICE          = 37.90;
       const commAmount     = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
       const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
       await admin.from('commissions').insert({
         affiliate_id:    affiliate.id,
-        subscription_id: paymentId,
         referral_id:     referral.id,
         type:            'initial',
         amount:          commAmount,

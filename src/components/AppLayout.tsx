@@ -71,6 +71,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
         bg-[hsl(220,25%,10%)] text-[hsl(220,14%,92%)]
         border-r border-[hsl(220,20%,18%)] flex flex-col
         transition-transform duration-200
+        pt-safe pl-safe
         ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
       `}>
         {/* Logo */}
@@ -89,7 +90,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
@@ -122,7 +123,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
         </nav>
 
         {/* Bottom actions */}
-        <div className="p-3 border-t border-[hsl(220,20%,18%)] space-y-1">
+        <div className="p-3 pb-safe border-t border-[hsl(220,20%,18%)] space-y-1">
           {/* Theme toggle */}
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -146,7 +147,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
       {/* Main */}
       <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden">
         {/* Mobile header - sticky so it always stays at top */}
-        <header className="md:hidden sticky top-0 flex items-center justify-between h-14 px-4 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 z-30">
+        <header className="md:hidden sticky top-0 flex items-center justify-between h-14 px-4 pt-safe border-b border-border bg-card/80 backdrop-blur-sm shrink-0 z-30" style={{paddingTop: 'max(env(safe-area-inset-top, 0px), 0px)', height: 'calc(3.5rem + env(safe-area-inset-top, 0px))'}}>
           <button onClick={() => setMobileOpen(true)}>
             <Menu className="h-6 w-6" />
           </button>
