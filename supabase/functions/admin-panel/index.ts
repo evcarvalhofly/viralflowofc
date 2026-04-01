@@ -49,7 +49,6 @@ Deno.serve(async (req) => {
 
     // ── LIST ─────────────────────────────────────────────────────────────────
     if (action === 'list') {
-      // Usa REST direto — mais confiável que o SDK admin dentro de edge functions
       const usersRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=1000&page=1`, {
         headers: {
           'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
@@ -58,7 +57,10 @@ Deno.serve(async (req) => {
       });
       if (!usersRes.ok) return json({ error: `listUsers REST: ${usersRes.status}` });
       const usersData = await usersRes.json();
-      const authUsers: any[] = usersData.users ?? [];
+      // A API pode retornar array plano ou { users: [...] }
+      const authUsers: any[] = Array.isArray(usersData)
+        ? usersData
+        : (usersData.users ?? []);
 
       const { data: profiles, error: profErr } = await admin
         .from('profiles')
@@ -89,7 +91,49 @@ Deno.serve(async (req) => {
         return bTime - aTime;
       });
 
-      return json({ users: result });
+      return json({ users: result, total: authUsers.length });
+    }
+
+    // ── GET_USER_DETAIL ──────────────────────────────────────────────────────
+    if (action === 'get_user_detail') {
+      const { user_id } = body;
+      if (!user_id) return json({ error: 'user_id é obrigatório' });
+
+      // Auth user
+      const userRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user_id}`, {
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'apikey': SUPABASE_SERVICE_KEY,
+        },
+      });
+      if (!userRes.ok) return json({ error: `getUser REST: ${userRes.status}` });
+      const authUser = await userRes.json();
+
+      // Profile
+      const { data: profile } = await admin
+        .from('profiles')
+        .select('display_name, subscription_status, subscription_expires_at, updated_at')
+        .eq('user_id', user_id)
+        .maybeSingle();
+
+      // Affiliate
+      const { data: affiliate } = await admin
+        .from('affiliates')
+        .select('id, ref_code, status, commission_rate, whatsapp, pix_key, created_at')
+        .eq('user_id', user_id)
+        .maybeSingle();
+
+      return json({
+        user_id,
+        email: authUser.email ?? '',
+        phone: authUser.phone ?? null,
+        created_at: authUser.created_at,
+        last_sign_in_at: authUser.last_sign_in_at ?? null,
+        display_name: profile?.display_name ?? null,
+        subscription_status: profile?.subscription_status ?? 'free',
+        subscription_expires_at: profile?.subscription_expires_at ?? null,
+        affiliate: affiliate ?? null,
+      });
     }
 
     // ── CREATE ───────────────────────────────────────────────────────────────

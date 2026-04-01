@@ -8,6 +8,8 @@ import { Navigate } from 'react-router-dom';
 import {
   Search, Plus, Trash2, Loader2, UserCog, ShieldCheck,
   ChevronUp, ChevronDown, X, CheckCircle2, AlertTriangle,
+  Eye, Calendar, Clock, Handshake, Phone, CreditCard,
+  LogIn, User,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,6 +24,26 @@ interface UserRow {
   subscription_expires_at: string | null;
   updated_at: string;
   created_at: string;
+}
+
+interface UserDetail {
+  user_id: string;
+  email: string;
+  phone: string | null;
+  created_at: string;
+  last_sign_in_at: string | null;
+  display_name: string | null;
+  subscription_status: string;
+  subscription_expires_at: string | null;
+  affiliate: {
+    id: string;
+    ref_code: string;
+    status: string;
+    commission_rate: number;
+    whatsapp: string | null;
+    pix_key: string | null;
+    created_at: string;
+  } | null;
 }
 
 type Toast = { id: number; type: 'success' | 'error'; msg: string };
@@ -58,6 +80,20 @@ const fmtDate = (iso: string | null) => {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
+const fmtDateTime = (iso: string | null) => {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+};
+
+const daysRemaining = (expiresAt: string | null): number | null => {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+};
+
 const statusLabel = (status: string, expiresAt: string | null) => {
   if (status === 'active' && expiresAt) {
     const expired = new Date(expiresAt).getTime() < Date.now();
@@ -68,29 +104,181 @@ const statusLabel = (status: string, expiresAt: string | null) => {
   return { label: 'Gratuito', color: 'text-muted-foreground bg-white/5 border-white/10' };
 };
 
+// ── Detail Modal ──────────────────────────────────────────────────────────────
+
+function DetailModal({ detail, onClose }: { detail: UserDetail; onClose: () => void }) {
+  const { label, color } = statusLabel(detail.subscription_status, detail.subscription_expires_at);
+  const days = daysRemaining(detail.subscription_expires_at);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg bg-[#111] border border-white/10 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
+              <User className="h-4 w-4 text-violet-300" />
+            </div>
+            <div>
+              <p className="font-bold text-sm truncate max-w-[260px]">{detail.email}</p>
+              {detail.display_name && (
+                <p className="text-xs text-muted-foreground">{detail.display_name}</p>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-white transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+
+          {/* Assinatura */}
+          <section className="space-y-3">
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Assinatura</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/[0.04] border border-white/8 rounded-xl p-3 space-y-1">
+                <p className="text-[10px] text-muted-foreground">Status</p>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-lg border text-[11px] font-semibold ${color}`}>
+                  {label}
+                </span>
+              </div>
+              <div className="bg-white/[0.04] border border-white/8 rounded-xl p-3 space-y-1">
+                <p className="text-[10px] text-muted-foreground">Dias restantes</p>
+                <p className={`text-sm font-bold ${days !== null && days > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {days === null ? '—' : days > 0 ? `${days} dias` : 'Expirado'}
+                </p>
+              </div>
+              <div className="bg-white/[0.04] border border-white/8 rounded-xl p-3 space-y-1">
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> Expira em
+                </p>
+                <p className="text-xs font-semibold">{fmtDate(detail.subscription_expires_at)}</p>
+              </div>
+              <div className="bg-white/[0.04] border border-white/8 rounded-xl p-3 space-y-1">
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> Membro desde
+                </p>
+                <p className="text-xs font-semibold">{fmtDate(detail.created_at)}</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Conta */}
+          <section className="space-y-3">
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Conta</h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between py-2 border-b border-white/5">
+                <span className="text-xs text-muted-foreground flex items-center gap-2">
+                  <LogIn className="h-3.5 w-3.5" /> Último login
+                </span>
+                <span className="text-xs font-semibold">{fmtDateTime(detail.last_sign_in_at)}</span>
+              </div>
+              {detail.phone && (
+                <div className="flex items-center justify-between py-2 border-b border-white/5">
+                  <span className="text-xs text-muted-foreground flex items-center gap-2">
+                    <Phone className="h-3.5 w-3.5" /> Telefone
+                  </span>
+                  <span className="text-xs font-semibold">{detail.phone}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between py-2 border-b border-white/5">
+                <span className="text-xs text-muted-foreground">User ID</span>
+                <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[180px]">{detail.user_id}</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Afiliado */}
+          <section className="space-y-3">
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Handshake className="h-3.5 w-3.5" /> Afiliado
+            </h3>
+            {detail.affiliate ? (
+              <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Código de referência</p>
+                    <p className="font-mono font-bold text-purple-300">{detail.affiliate.ref_code}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Comissão</p>
+                    <p className="font-bold text-emerald-400">{detail.affiliate.commission_rate}%</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center justify-between py-1.5 border-b border-white/5">
+                    <span className="text-muted-foreground">Status</span>
+                    <span className={`font-semibold ${detail.affiliate.status === 'active' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {detail.affiliate.status === 'active' ? 'Ativo' : 'Suspenso'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5 border-b border-white/5">
+                    <span className="text-muted-foreground">Afiliado desde</span>
+                    <span className="font-semibold">{fmtDate(detail.affiliate.created_at)}</span>
+                  </div>
+                </div>
+                {(detail.affiliate.whatsapp || detail.affiliate.pix_key) && (
+                  <div className="space-y-1.5 pt-1">
+                    {detail.affiliate.whatsapp && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <Phone className="h-3 w-3" /> WhatsApp
+                        </span>
+                        <span className="font-semibold">{detail.affiliate.whatsapp}</span>
+                      </div>
+                    )}
+                    {detail.affiliate.pix_key && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <CreditCard className="h-3 w-3" /> Chave PIX
+                        </span>
+                        <span className="font-semibold truncate max-w-[180px]">{detail.affiliate.pix_key}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground bg-white/[0.03] border border-white/8 rounded-xl p-4 text-center">
+                Não é afiliado
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── componente principal ──────────────────────────────────────────────────────
 
 export default function PainelGeralAdm() {
   const { user, loading: authLoading } = useAuth();
 
-  const [users, setUsers]           = useState<UserRow[]>([]);
+  const [users, setUsers]             = useState<UserRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [search, setSearch]         = useState('');
-  const [toasts, setToasts]         = useState<Toast[]>([]);
+  const [search, setSearch]           = useState('');
+  const [toasts, setToasts]           = useState<Toast[]>([]);
 
   // modal criação
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate]   = useState(false);
   const [createEmail, setCreateEmail] = useState('');
   const [createPass, setCreatePass]   = useState('');
   const [creating, setCreating]       = useState(false);
 
   // dias por usuário
-  const [daysInput, setDaysInput]   = useState<Record<string, string>>({});
-  const [applying, setApplying]     = useState<Record<string, boolean>>({});
+  const [daysInput, setDaysInput]     = useState<Record<string, string>>({});
+  const [applying, setApplying]       = useState<Record<string, boolean>>({});
 
   // confirmar exclusão
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleting, setDeleting]           = useState<string | null>(null);
+
+  // detalhe do usuário
+  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<UserDetail | null>(null);
 
   // ── toast ────────────────────────────────────────────────────────────────
 
@@ -128,6 +316,20 @@ export default function PainelGeralAdm() {
       (u.display_name ?? '').toLowerCase().includes(q)
     );
   }, [users, search]);
+
+  // ── ver detalhes ─────────────────────────────────────────────────────────
+
+  const handleViewDetail = async (userId: string) => {
+    setLoadingDetail(userId);
+    try {
+      const data = await callAdmin({ action: 'get_user_detail', user_id: userId });
+      setSelectedDetail(data as UserDetail);
+    } catch (e: any) {
+      addToast('error', e.message);
+    } finally {
+      setLoadingDetail(null);
+    }
+  };
 
   // ── criar usuário ────────────────────────────────────────────────────────
 
@@ -231,6 +433,11 @@ export default function PainelGeralAdm() {
         ))}
       </div>
 
+      {/* Modal detalhes */}
+      {selectedDetail && (
+        <DetailModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />
+      )}
+
       {/* Modal criar usuário */}
       {showCreate && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -327,19 +534,22 @@ export default function PainelGeralAdm() {
           </div>
         )}
 
-        {/* Lista */}
+        {/* Vazio */}
         {!loadingList && filtered.length === 0 && (
           <div className="text-center py-20 text-muted-foreground text-sm">
             Nenhum usuário encontrado.
           </div>
         )}
 
+        {/* Lista */}
         {!loadingList && filtered.length > 0 && (
           <div className="space-y-3">
             {filtered.map((u, idx) => {
               const { label, color } = statusLabel(u.subscription_status, u.subscription_expires_at);
-              const isDeleting = deleting === u.user_id;
-              const isApplying = applying[u.user_id] ?? false;
+              const isDeleting  = deleting === u.user_id;
+              const isApplying  = applying[u.user_id] ?? false;
+              const isLoadingDt = loadingDetail === u.user_id;
+              const days = daysRemaining(u.subscription_expires_at);
 
               return (
                 <div
@@ -366,11 +576,27 @@ export default function PainelGeralAdm() {
                       {label}
                     </span>
 
-                    {/* Data de expiração */}
+                    {/* Dias restantes + expiração */}
                     <div className="text-right flex-shrink-0">
-                      <p className="text-[10px] text-muted-foreground">Expira em</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {days !== null && days > 0 ? `${days} dias restantes` : 'Expira em'}
+                      </p>
                       <p className="text-xs font-semibold">{fmtDate(u.subscription_expires_at)}</p>
                     </div>
+
+                    {/* Botão ver detalhes */}
+                    <button
+                      onClick={() => handleViewDetail(u.user_id)}
+                      disabled={isLoadingDt}
+                      title="Ver detalhes"
+                      className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-muted-foreground hover:text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {isLoadingDt
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Eye className="h-3.5 w-3.5" />
+                      }
+                      <span className="hidden sm:inline">Detalhes</span>
+                    </button>
                   </div>
 
                   {/* Controles de dias + excluir */}
