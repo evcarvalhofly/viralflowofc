@@ -31,22 +31,21 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!;
-
-    // ── Verifica autenticação do chamador ────────────────────────────────────
-    const authHeader = req.headers.get('Authorization') ?? '';
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user: caller }, error: authErr } = await userClient.auth.getUser();
-    if (authErr || !caller || caller.email !== ADMIN_EMAIL) {
-      return json({ error: 'Acesso negado' }, 403);
-    }
 
     // ── Cliente admin (service role) ─────────────────────────────────────────
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    // ── Verifica autenticação do chamador via JWT ────────────────────────────
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const jwt = authHeader.replace('Bearer ', '').trim();
+    if (!jwt) return json({ error: 'Acesso negado' }, 403);
+
+    const { data: { user: caller }, error: authErr } = await admin.auth.getUser(jwt);
+    if (authErr || !caller || caller.email !== ADMIN_EMAIL) {
+      return json({ error: 'Acesso negado' }, 403);
+    }
 
     const body = req.method === 'GET' ? {} : await req.json().catch(() => ({}));
     const action: string = body.action ?? 'list';
