@@ -255,9 +255,14 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
 
               {/* Status de espera */}
               {waitingPix && (
-                <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-2.5 w-full justify-center">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                  <span>Aguardando confirmação do pagamento...</span>
+                <div className="flex flex-col gap-1.5 w-full">
+                  <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-2.5 w-full justify-center">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    <span>Aguardando confirmação do pagamento...</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+                    Permaneça nesta página após o pagamento. Você também receberá a confirmação por e-mail — verifique a caixa de spam.
+                  </p>
                 </div>
               )}
 
@@ -304,8 +309,8 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                     <label className="text-sm font-medium text-white">
                       Qual e-mail você vai usar para criar sua conta?
                     </label>
-                    <p className="text-xs text-amber-400/90">
-                      ⚠️ Use o mesmo e-mail ao se cadastrar — é assim que seu acesso PRO será ativado automaticamente.
+                    <p className="text-xs text-amber-400/90 leading-relaxed">
+                      ⚠️ Você receberá a confirmação neste e-mail — use-o também ao criar sua conta para ativar o acesso PRO automaticamente. Verifique a caixa de spam caso não encontre.
                     </p>
                     <input
                       type="email"
