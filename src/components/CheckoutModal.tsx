@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY ?? '';
 const AMOUNT = 37.90;
 
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+
 interface CheckoutModalProps {
   onClose: () => void;
   onSuccess?: () => void;
@@ -48,6 +50,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
           setWaitingPix(false);
           setApproved(true);
           toast.success('Pagamento PIX confirmado! 🎉');
+          sendWelcomeEmail(pixEmail);
           setTimeout(() => {
             if (!user) {
               navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
@@ -88,6 +91,13 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
   };
 
+  const sendWelcomeEmail = (email: string) => {
+    if (!email) return;
+    supabase.functions.invoke('send-welcome-email', {
+      body: { email, is_guest: !user },
+    }).catch(() => {});
+  };
+
   const processPayment = async (body: object) => {
     setProcessing(true);
     setError(null);
@@ -105,7 +115,8 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
       if (status === 'approved') {
         setApproved(true);
         toast.success('Pagamento aprovado! Bem-vindo ao ViralFlow PRO 🎉');
-        const cardEmail = pendingEmail || user?.email || '';
+        const cardEmail = (body as any).payer?.email || user?.email || '';
+        sendWelcomeEmail(cardEmail);
         setTimeout(() => {
           if (!user) {
             navigate(`/parabens?email=${encodeURIComponent(cardEmail)}&method=card`);
@@ -138,8 +149,8 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   };
 
   const handlePixSubmit = () => {
-    if (!pixEmail || !pixEmail.includes('@')) {
-      setError('Informe um e-mail válido.');
+    if (!isValidEmail(pixEmail)) {
+      setError('E-mail inválido. Verifique e tente novamente.');
       return;
     }
     setError(null);
@@ -151,6 +162,10 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
 
   const handleCardSubmit = async (formData: any) => {
     const payerEmail = user?.email || formData.payer?.email || '';
+    if (!isValidEmail(payerEmail)) {
+      setError('E-mail inválido. Verifique o campo e-mail e tente novamente.');
+      return;
+    }
     setPendingEmail(payerEmail);
     setSubmitting(true);
     await processPayment({
