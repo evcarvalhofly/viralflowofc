@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!;
 
     // ── Verifica JWT via endpoint direto do Supabase Auth ────────────────────
     const authHeader = req.headers.get('Authorization') ?? '';
@@ -28,7 +29,7 @@ Deno.serve(async (req) => {
     const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: {
         'Authorization': authHeader,
-        'apikey': SUPABASE_SERVICE_KEY,
+        'apikey': SUPABASE_ANON_KEY,
       },
     });
 
