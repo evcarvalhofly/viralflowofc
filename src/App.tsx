@@ -31,6 +31,7 @@ import MinhaConta from "./pages/MinhaConta";
 import Parabens from "./pages/Parabens";
 import ResetPassword from "./pages/ResetPassword";
 import { SubscriptionExpiredWall } from "./components/SubscriptionExpiredWall";
+import PainelGeralAdm from "./pages/PainelGeralAdm";
 
 const queryClient = new QueryClient();
 
@@ -144,6 +145,8 @@ const App = () => (
                 <Route path="/community" element={<ProRoute><Community /></ProRoute>} />
                 <Route path="/avisos" element={<ProRoute><Avisos /></ProRoute>} />
                 <Route path="/affiliates" element={<ProRoute><Affiliates /></ProRoute>} />
+                {/* Painel ADM (sem AppLayout, acesso direto) */}
+                <Route path="/painelgeraladm" element={<PainelGeralAdm />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppShell>
