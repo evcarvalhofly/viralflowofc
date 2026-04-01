@@ -71,23 +71,32 @@ Deno.serve(async (req) => {
         Vimos que voc&ecirc; gerou um PIX para assinar o <strong style="color:#fff;">ViralFlow PRO</strong>, mas o pagamento ainda n&atilde;o foi confirmado.
       </p>
       <p style="color:#a1a1aa;font-size:15px;line-height:1.7;margin:0 0 28px;">
-        Se tiver alguma d&uacute;vida ou precisar de ajuda, &eacute; s&oacute; responder este e-mail. Caso queira finalizar agora, clique no bot&atilde;o abaixo:
+        Caso queira finalizar agora ou precisar de ajuda, use os bot&otilde;es abaixo:
       </p>
-      <div style="text-align:center;margin-bottom:28px;">
+      <div style="text-align:center;margin-bottom:16px;">
         <a href="${salesUrl}"
            style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#9333ea);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:15px;">
           Finalizar minha compra &rarr;
+        </a>
+      </div>
+      <div style="text-align:center;margin-bottom:28px;">
+        <a href="https://wa.me/5512992275476"
+           style="display:inline-block;background:#25d366;color:#fff;text-decoration:none;padding:12px 32px;border-radius:12px;font-weight:700;font-size:14px;">
+          &#128172; Suporte no WhatsApp
         </a>
       </div>
       <!-- Benefícios rápidos -->
       <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:24px;">
         <p style="color:#a78bfa;font-size:13px;font-weight:700;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">O que voc&ecirc; vai ter com o PRO</p>
         <ul style="color:#a1a1aa;font-size:13px;line-height:2;margin:0;padding:0 0 0 16px;">
-          <li>Roteiros virais gerados por IA</li>
           <li>Planejamento de conte&uacute;do autom&aacute;tico</li>
-          <li>An&aacute;lise de tend&ecirc;ncias em tempo real</li>
-          <li>Cortes virais e legendas autom&aacute;ticas</li>
-          <li>Acesso &agrave; comunidade exclusiva</li>
+          <li>Pacote de v&iacute;deos virais</li>
+          <li>Material de edi&ccedil;&atilde;o de v&iacute;deo</li>
+          <li>Editor de v&iacute;deo</li>
+          <li>Corte autom&aacute;tico com IA</li>
+          <li>Legendas autom&aacute;ticas com IA</li>
+          <li>Comunidade</li>
+          <li>Afiliados</li>
         </ul>
       </div>
       <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:20px;">
