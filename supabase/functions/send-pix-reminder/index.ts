@@ -109,12 +109,20 @@ Deno.serve(async (req) => {
 </body>
 </html>`;
 
+      const textBody = `Você deixou algo para trás...\n\nVimos que você gerou um PIX para assinar o ViralFlow PRO, mas o pagamento ainda não foi confirmado.\n\nFinalizar compra: ${salesUrl}\n\nPrecisa de ajuda? Fale conosco no WhatsApp: https://wa.me/5512992275476\n\n---\nViralFlow · Pagamento processado pelo MercadoPago\nPara cancelar notificações, responda este e-mail.`;
+
       try {
         await transporter.sendMail({
           from: '"ViralFlow" <evandro@goupwin.com>',
+          replyTo: 'evandro@goupwin.com',
           to: session.payer_email,
-          subject: 'Voc\u00ea esqueceu de finalizar sua compra \u2014 ViralFlow PRO',
+          subject: 'Você esqueceu de finalizar sua compra — ViralFlow PRO',
+          text: textBody,
           html,
+          headers: {
+            'List-Unsubscribe': '<mailto:evandro@goupwin.com?subject=unsubscribe>',
+            'X-Entity-Ref-ID': `viralflow-pix-${session.id}`,
+          },
         });
 
         // Marca como enviado para não reenviar

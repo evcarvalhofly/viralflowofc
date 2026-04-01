@@ -88,11 +88,21 @@ Deno.serve(async (req) => {
 </body>
 </html>`;
 
+    const textBody = is_guest
+      ? `Pagamento confirmado!\n\nObrigado pela sua compra! Acesse o link abaixo para criar sua conta e começar a usar o ViralFlow PRO:\n\n${parabensUrl}\n\n---\nViralFlow · Pagamento processado pelo MercadoPago`
+      : `Assinatura ativada!\n\nObrigado pela renovação! Seu plano PRO está ativo por mais 30 dias.\n\nAcessar ViralFlow: https://viralflow-gilt.vercel.app\n\n---\nViralFlow · Pagamento processado pelo MercadoPago`;
+
     await transporter.sendMail({
       from: '"ViralFlow" <evandro@goupwin.com>',
+      replyTo: 'evandro@goupwin.com',
       to: email,
       subject,
+      text: textBody,
       html,
+      headers: {
+        'List-Unsubscribe': '<mailto:evandro@goupwin.com?subject=unsubscribe>',
+        'X-Entity-Ref-ID': `viralflow-welcome-${Date.now()}`,
+      },
     });
 
     console.log('Welcome email sent to:', email, '| is_guest:', is_guest);

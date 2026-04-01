@@ -189,12 +189,23 @@ Deno.serve(async (req) => {
         const email: string | undefined = authUser.email;
         if (!email) continue;
 
+        const cfg = REMINDER_CONFIG[win.type];
+        const textBody = cfg.isExpired
+          ? `Sua assinatura ViralFlow PRO venceu ${cfg.daysText}.\n\nRenove agora e volte a ter acesso a todas as ferramentas.\n\nRenovar assinatura: ${renewUrl}\n\nPrecisa de ajuda? WhatsApp: ${whatsappUrl}\n\n---\nViralFlow · Para cancelar notificações, responda este e-mail.`
+          : `Sua assinatura ViralFlow PRO vence ${cfg.daysText}.\n\nRenove agora para não perder o acesso!\n\nRenovar assinatura: ${renewUrl}\n\nPrecisa de ajuda? WhatsApp: ${whatsappUrl}\n\n---\nViralFlow · Para cancelar notificações, responda este e-mail.`;
+
         try {
           await transporter.sendMail({
             from: '"ViralFlow" <evandro@goupwin.com>',
+            replyTo: 'evandro@goupwin.com',
             to: email,
             subject: REMINDER_CONFIG[win.type].subject,
+            text: textBody,
             html: buildHtml(win.type),
+            headers: {
+              'List-Unsubscribe': '<mailto:evandro@goupwin.com?subject=unsubscribe>',
+              'X-Entity-Ref-ID': `viralflow-reminder-${win.type}-${profile.user_id}`,
+            },
           });
 
           // Registra envio — UNIQUE impede duplicatas se a função rodar mais de uma vez no dia
