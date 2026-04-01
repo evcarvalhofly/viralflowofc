@@ -304,9 +304,11 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                     <label className="text-sm font-medium text-white">
                       Qual e-mail você vai usar para criar sua conta?
                     </label>
-                    <p className="text-xs text-amber-400/90">
-                      Após a compra permaneça nessa página! (enviaremos a compra no email cadastrado - Verifique também a Caixa de Spam)
-                    </p>
+                    <div className="text-xs text-emerald-400 space-y-0.5">
+                      <p>✅ Após a compra permaneça nessa página</p>
+                      <p>✅ Enviaremos a compra no email cadastrado</p>
+                      <p>✅ Verifique também a Caixa de Spam</p>
+                    </div>
                     <input
                       type="email"
                       value={pixEmail}
@@ -328,9 +330,11 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
               ) : MP_PUBLIC_KEY ? (
                 <>
                   {!submitting && !processing && (
-                    <p className="text-xs text-amber-400/90">
-                      Após a compra permaneça nessa página! (enviaremos a compra no email cadastrado - Verifique também a Caixa de Spam)
-                    </p>
+                    <div className="text-xs text-emerald-400 space-y-0.5">
+                      <p>✅ Após a compra permaneça nessa página</p>
+                      <p>✅ Enviaremos a compra no email cadastrado</p>
+                      <p>✅ Verifique também a Caixa de Spam</p>
+                    </div>
                   )}
                   {submitting || processing ? (
                     <div className="flex flex-col items-center justify-center py-12 gap-3">
