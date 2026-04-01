@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Zap, Check, ArrowRight, Shield, Flame } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { CheckoutModal } from '@/components/CheckoutModal';
@@ -26,6 +26,19 @@ export default function Convite() {
     () => sessionStorage.getItem('vf_checkout_open') === '1'
   );
   const ctaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = document.getElementById('root');
+    const prev = document.body.style.overflow;
+    document.documentElement.style.overflow = 'auto';
+    document.body.style.overflow = 'auto';
+    if (root) root.style.overflow = 'auto';
+    return () => {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = prev;
+      if (root) root.style.overflow = '';
+    };
+  }, []);
 
   const openCheckout = () => {
     sessionStorage.setItem('vf_checkout_open', '1');
