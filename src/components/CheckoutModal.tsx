@@ -11,6 +11,22 @@ const AMOUNT = 37.90;
 
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
 
+/** Verifica se o domínio do e-mail tem MX records (aceita e-mail real) */
+const checkEmailDomainMX = async (email: string): Promise<boolean> => {
+  const domain = email.trim().split('@')[1];
+  if (!domain) return false;
+  try {
+    const res = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`, {
+      headers: { Accept: 'application/dns-json' },
+    });
+    const data = await res.json();
+    // Status 0 = NOERROR, Answer com registros = domínio tem MX
+    return data.Status === 0 && Array.isArray(data.Answer) && data.Answer.length > 0;
+  } catch {
+    return true; // se não conseguir verificar, não bloqueia
+  }
+};
+
 interface CheckoutModalProps {
   onClose: () => void;
   onSuccess?: () => void;
@@ -29,6 +45,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
   const [waitingPix, setWaitingPix] = useState(false);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validating, setValidating] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -148,12 +165,19 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     }
   };
 
-  const handlePixSubmit = () => {
+  const handlePixSubmit = async () => {
     if (!isValidEmail(pixEmail)) {
       setError('E-mail inválido. Verifique e tente novamente.');
       return;
     }
     setError(null);
+    setValidating(true);
+    const mxOk = await checkEmailDomainMX(pixEmail);
+    setValidating(false);
+    if (!mxOk) {
+      setError('E-mail inválido. Use um e-mail real para receber seu acesso.');
+      return;
+    }
     processPayment({
       payment_method_id: 'pix',
       payer: { email: pixEmail },
@@ -164,6 +188,13 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     const payerEmail = user?.email || formData.payer?.email || '';
     if (!isValidEmail(payerEmail)) {
       setError('E-mail inválido. Verifique o campo e-mail e tente novamente.');
+      return;
+    }
+    setValidating(true);
+    const mxOk = await checkEmailDomainMX(payerEmail);
+    setValidating(false);
+    if (!mxOk) {
+      setError('E-mail inválido. Use um e-mail real para receber seu acesso.');
       return;
     }
     setPendingEmail(payerEmail);
@@ -286,11 +317,11 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                   </div>
                   <button
                     onClick={handlePixSubmit}
-                    disabled={processing}
+                    disabled={processing || validating}
                     className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-sm disabled:opacity-60 hover:from-violet-500 hover:to-purple-500 transition-all active:scale-95"
                   >
-                    {processing && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {processing ? 'Gerando PIX...' : 'Gerar QR Code PIX — R$37,90'}
+                    {(processing || validating) && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {validating ? 'Verificando e-mail...' : processing ? 'Gerando PIX...' : 'Gerar QR Code PIX — R$37,90'}
                   </button>
                 </div>
 
