@@ -49,8 +49,16 @@ Deno.serve(async (req) => {
 
     // ── LIST ─────────────────────────────────────────────────────────────────
     if (action === 'list') {
-      const { data: authData, error: listErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
-      if (listErr) return json({ error: `listUsers: ${listErr.message}` });
+      // Usa REST direto — mais confiável que o SDK admin dentro de edge functions
+      const usersRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=1000&page=1`, {
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'apikey': SUPABASE_SERVICE_KEY,
+        },
+      });
+      if (!usersRes.ok) return json({ error: `listUsers REST: ${usersRes.status}` });
+      const usersData = await usersRes.json();
+      const authUsers: any[] = usersData.users ?? [];
 
       const { data: profiles, error: profErr } = await admin
         .from('profiles')
@@ -59,7 +67,7 @@ Deno.serve(async (req) => {
 
       const profileMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
 
-      const result = (authData.users ?? []).map((u: any) => {
+      const result = authUsers.map((u: any) => {
         const p: any = profileMap.get(u.id) ?? {};
         return {
           user_id: u.id,
@@ -89,13 +97,18 @@ Deno.serve(async (req) => {
       const { email, password } = body;
       if (!email || !password) return json({ error: 'email e password são obrigatórios' });
 
-      const { data, error } = await admin.auth.admin.createUser({
-        email: email.trim(),
-        password,
-        email_confirm: true,
+      const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'apikey': SUPABASE_SERVICE_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: email.trim(), password, email_confirm: true }),
       });
-      if (error) return json({ error: error.message });
-      return json({ user_id: data.user?.id, email: data.user?.email });
+      const created = await createRes.json();
+      if (!createRes.ok) return json({ error: created.message ?? created.msg ?? 'Erro ao criar usuário' });
+      return json({ user_id: created.id, email: created.email });
     }
 
     // ── DELETE ───────────────────────────────────────────────────────────────
@@ -103,8 +116,17 @@ Deno.serve(async (req) => {
       const { user_id } = body;
       if (!user_id) return json({ error: 'user_id é obrigatório' });
 
-      const { error } = await admin.auth.admin.deleteUser(user_id);
-      if (error) return json({ error: error.message });
+      const delRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user_id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'apikey': SUPABASE_SERVICE_KEY,
+        },
+      });
+      if (!delRes.ok) {
+        const e = await delRes.json().catch(() => ({}));
+        return json({ error: e.message ?? 'Erro ao excluir usuário' });
+      }
       return json({ ok: true });
     }
 
