@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
       : 'https://viralflow-gilt.vercel.app';
 
     const subject = is_guest
-      ? 'Pagamento confirmado &mdash; crie sua conta ViralFlow PRO'
+      ? 'Pagamento confirmado — crie sua conta ViralFlow PRO'
       : 'Assinatura ViralFlow PRO ativada!';
 
     const headline = is_guest
