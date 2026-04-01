@@ -13,7 +13,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Handshake, Link2, DollarSign, Trophy, LayoutDashboard } from 'lucide-react';
+import { Handshake, Link2, DollarSign, Trophy, LayoutDashboard, UserCog } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAffiliate } from '@/hooks/useAffiliate';
 
@@ -25,6 +25,7 @@ import CommissionHistory from '@/components/affiliates/CommissionHistory';
 import WithdrawalPanel from '@/components/affiliates/WithdrawalPanel';
 import AffiliateRanking from '@/components/affiliates/AffiliateRanking';
 import ReferralsList from '@/components/affiliates/ReferralsList';
+import AffiliateProfilePanel from '@/components/affiliates/AffiliateProfilePanel';
 
 const ADMIN_EMAIL = 'evcarvalhodev@gmail.com';
 
@@ -49,6 +50,7 @@ const Affiliates = () => {
     withdrawalsLoading,
     withdrawalSubmitting,
     register,
+    updateAffiliate,
     requestWithdrawal,
   } = useAffiliate();
 
@@ -123,7 +125,7 @@ const Affiliates = () => {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4">
           <Tabs defaultValue="overview">
-            <TabsList className="w-full grid grid-cols-4 h-9 mb-5 bg-card/50">
+            <TabsList className="w-full grid grid-cols-5 h-9 mb-5 bg-card/50">
               <TabsTrigger value="overview" className="text-xs gap-1.5">
                 <LayoutDashboard className="h-3.5 w-3.5 hidden sm:block" />
                 Geral
@@ -139,6 +141,10 @@ const Affiliates = () => {
               <TabsTrigger value="ranking" className="text-xs gap-1.5">
                 <Trophy className="h-3.5 w-3.5 hidden sm:block" />
                 Ranking
+              </TabsTrigger>
+              <TabsTrigger value="profile" className="text-xs gap-1.5">
+                <UserCog className="h-3.5 w-3.5 hidden sm:block" />
+                Meus Dados
               </TabsTrigger>
             </TabsList>
 
@@ -171,6 +177,11 @@ const Affiliates = () => {
             {/* ── Ranking ──────────────────────────────────────────────────── */}
             <TabsContent value="ranking" className="mt-0">
               <AffiliateRanking currentAffiliate={affiliate} />
+            </TabsContent>
+
+            {/* ── Meus Dados ───────────────────────────────────────────────── */}
+            <TabsContent value="profile" className="mt-0">
+              <AffiliateProfilePanel affiliate={affiliate} onSave={updateAffiliate} />
             </TabsContent>
           </Tabs>
         </div>

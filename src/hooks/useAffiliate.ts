@@ -217,6 +217,21 @@ export const useAffiliate = () => {
     [affiliate, withdrawalSubmitting, fetchWithdrawals]
   );
 
+  // ─── Atualizar whatsapp / pix_key ────────────────────────────────────────────
+
+  const updateAffiliate = useCallback(async (whatsapp: string, pixKey: string): Promise<{ error?: string }> => {
+    if (!affiliate) return { error: 'Não autorizado' };
+
+    const { error } = await db
+      .from('affiliates')
+      .update({ whatsapp: whatsapp || null, pix_key: pixKey || null })
+      .eq('id', affiliate.id);
+
+    if (error) return { error: error.message };
+    setAffiliate(prev => prev ? { ...prev, whatsapp: whatsapp || null, pix_key: pixKey || null } : prev);
+    return {};
+  }, [affiliate]);
+
   // ─── Cadastro como afiliado ──────────────────────────────────────────────────
 
   const register = useCallback(async (whatsapp?: string, pixKey?: string): Promise<{ error?: string }> => {
@@ -303,6 +318,7 @@ export const useAffiliate = () => {
     withdrawalsLoading,
     withdrawalSubmitting,
     register,
+    updateAffiliate,
     requestWithdrawal,
     refetch: {
       stats: () => affiliate && fetchStats(affiliate.id),
