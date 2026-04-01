@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
       if (!externalRef) return new Response('ok', { headers: corsHeaders });
 
       if (status === 'approved') {
-        await handleApprovedPayment(admin, externalRef, String(eventId));
+        await handleApprovedPayment(admin, externalRef, String(eventId), payment.transaction_amount);
       }
 
       return new Response('ok', { headers: corsHeaders });
@@ -68,8 +68,8 @@ Deno.serve(async (req) => {
   }
 });
 
-// ── Activate or renew subscription for 30 days ────────────────────────────────
-async function handleApprovedPayment(admin: any, externalRef: string, paymentId: string) {
+// ── Activate or renew subscription ────────────────────────────────────────────
+async function handleApprovedPayment(admin: any, externalRef: string, paymentId: string, transactionAmount?: number) {
   // Detect guest session (UUID from checkout_sessions) vs logged-in user
   const { data: guestSession } = await admin
     .from('checkout_sessions')
@@ -88,8 +88,10 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
   }
 
   // Logged-in user
-  const userId    = externalRef;
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const userId  = externalRef;
+  const isAnnual = (transactionAmount ?? 0) >= 200;
+  const days    = isAnnual ? 365 : 30;
+  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
   await admin
     .from('profiles')
@@ -121,7 +123,7 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 
   if (!affiliate) return;
 
-  const PRICE          = 37.90;
+  const PRICE          = transactionAmount ?? 37.90;
   const isInitial      = referral.status === 'pending';
   const commAmount     = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
   const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

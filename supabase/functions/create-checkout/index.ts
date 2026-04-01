@@ -43,6 +43,9 @@ Deno.serve(async (req) => {
     const payerEmail: string = body.payer?.email ?? userEmail ?? '';
     const phone: string | null = body.phone ?? null;
     const refCode: string | null = body.ref_code ?? null;
+    const plan: 'monthly' | 'annual' = body.plan === 'annual' ? 'annual' : 'monthly';
+    const AMOUNT = plan === 'annual' ? 297.00 : 37.90;
+    const DAYS   = plan === 'annual' ? 365 : 30;
 
     // ── Create or find external_reference ─────────────────────────────────────
     let externalReference: string;
@@ -76,7 +79,7 @@ Deno.serve(async (req) => {
     const isPix = body.payment_method_id === 'pix' || body.formData?.payment_method_id === 'pix';
 
     const paymentBody: any = {
-      transaction_amount: 37.90,
+      transaction_amount: AMOUNT,
       description:        'ViralFlow PRO',
       payment_method_id:  body.payment_method_id,
       payer: {
@@ -120,7 +123,7 @@ Deno.serve(async (req) => {
 
     // ── On approval: activate subscription immediately for logged-in user ─────
     if (payment.status === 'approved' && !isGuest) {
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + DAYS * 24 * 60 * 60 * 1000).toISOString();
       await admin
         .from('profiles')
         .update({
@@ -133,7 +136,7 @@ Deno.serve(async (req) => {
       console.log('Subscription activated for user:', userId, '| expires:', expiresAt);
 
       // Process affiliate commission
-      await processCommission(admin, userId!, String(payment.id));
+      await processCommission(admin, userId!, String(payment.id), AMOUNT);
     }
 
     if (payment.status === 'approved' && isGuest) {
@@ -170,7 +173,7 @@ Deno.serve(async (req) => {
 });
 
 // ── Affiliate commission helper ────────────────────────────────────────────────
-async function processCommission(admin: any, userId: string, paymentId: string) {
+async function processCommission(admin: any, userId: string, paymentId: string, price = 37.90) {
   try {
     const { data: referral } = await admin
       .from('referrals')
@@ -190,7 +193,7 @@ async function processCommission(admin: any, userId: string, paymentId: string) 
 
     if (!affiliate) return;
 
-    const PRICE          = 37.90;
+    const PRICE          = price;
     const isInitial      = referral.status === 'pending';
     const commType       = isInitial ? 'initial' : 'recurring';
     const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

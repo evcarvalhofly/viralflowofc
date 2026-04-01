@@ -7,7 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY ?? '';
-const AMOUNT = 37.90;
+const PRICES = { monthly: 37.90, annual: 297.00 } as const;
+type Plan = 'monthly' | 'annual';
 
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
 
@@ -30,12 +31,15 @@ const checkEmailDomainMX = async (email: string): Promise<boolean> => {
 interface CheckoutModalProps {
   onClose: () => void;
   onSuccess?: () => void;
+  initialPlan?: Plan;
 }
 
-export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
+export function CheckoutModal({ onClose, onSuccess, initialPlan = 'monthly' }: CheckoutModalProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [plan, setPlan] = useState<Plan>(initialPlan);
   const [tab, setTab] = useState<'pix' | 'card'>('pix');
+  const AMOUNT = PRICES[plan];
   const [pixEmail, setPixEmail] = useState(user?.email ?? '');
   const [pendingEmail, setPendingEmail] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -181,6 +185,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     processPayment({
       payment_method_id: 'pix',
       payer: { email: pixEmail },
+      plan,
     });
   };
 
@@ -202,6 +207,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
     await processPayment({
       ...formData,
       payer: { ...formData.payer, email: payerEmail },
+      plan,
     });
     setSubmitting(false);
   };
@@ -214,7 +220,9 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
           <div>
             <h2 className="text-white font-bold text-lg">ViralFlow PRO</h2>
-            <p className="text-muted-foreground text-xs">R$37,90/mês · Cancele quando quiser</p>
+            <p className="text-muted-foreground text-xs">
+              {plan === 'annual' ? 'R$297,00/ano · Equivale a R$24,75/mês' : 'R$37,90/mês · Cancele quando quiser'}
+            </p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-white transition-colors p-1">
             <X className="h-5 w-5" />
@@ -274,6 +282,36 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
 
           ) : (
             <>
+              {/* Plan selector */}
+              <div className="flex rounded-xl bg-white/5 p-1 gap-1">
+                <button
+                  onClick={() => { setPlan('monthly'); setError(null); }}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    plan === 'monthly' ? 'bg-violet-600 text-white' : 'text-muted-foreground hover:text-white'
+                  }`}
+                >
+                  Mensal — R$37,90
+                </button>
+                <button
+                  onClick={() => { setPlan('annual'); setError(null); }}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors relative ${
+                    plan === 'annual' ? 'bg-violet-600 text-white' : 'text-muted-foreground hover:text-white'
+                  }`}
+                >
+                  Anual — R$297
+                  <span className="absolute -top-2 -right-1 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    -35%
+                  </span>
+                </button>
+              </div>
+
+              {plan === 'annual' && (
+                <div className="flex items-center gap-2 text-emerald-400 text-xs bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                  <span>✅</span>
+                  <span>Você economiza <strong>R$157,80</strong> comparado ao plano mensal</span>
+                </div>
+              )}
+
               {/* Tabs */}
               <div className="flex rounded-xl bg-white/5 p-1 gap-1">
                 <button
@@ -323,7 +361,7 @@ export function CheckoutModal({ onClose, onSuccess }: CheckoutModalProps) {
                     className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-sm disabled:opacity-60 hover:from-violet-500 hover:to-purple-500 transition-all active:scale-95"
                   >
                     {(processing || validating) && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {validating ? 'Verificando e-mail...' : processing ? 'Gerando PIX...' : 'Gerar QR Code PIX — R$37,90'}
+                    {validating ? 'Verificando e-mail...' : processing ? 'Gerando PIX...' : `Gerar QR Code PIX — R$${AMOUNT.toFixed(2).replace('.', ',')}`}
                   </button>
                 </div>
 

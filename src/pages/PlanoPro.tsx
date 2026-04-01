@@ -1,4 +1,5 @@
 import { useState } from 'react';
+type Plan = 'monthly' | 'annual';
 import { Zap, Check, ArrowRight, Sparkles, Type, Scissors, MessageSquare, BarChart2, Users, Video, Layers, Share2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { CheckoutModal } from '@/components/CheckoutModal';
@@ -18,6 +19,7 @@ const FEATURES = [
 export default function PlanoPro() {
   const { user } = useAuth();
   const [showCheckout, setShowCheckout] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<Plan>('monthly');
 
   const handleSuccess = () => {
     // Only reload for logged-in users (renewals) — guests are redirected to /parabens by CheckoutModal
@@ -48,17 +50,43 @@ export default function PlanoPro() {
         {/* Card */}
         <div className="rounded-2xl border border-border bg-card shadow-xl overflow-hidden">
 
-          {/* Preço */}
-          <div className="bg-gradient-to-br from-violet-600/20 via-purple-600/10 to-transparent border-b border-border p-6 text-center">
-            <div className="flex items-end justify-center gap-1">
-              <span className="text-lg text-muted-foreground mb-1">R$</span>
-              <span className="text-6xl font-extrabold text-foreground tracking-tight">37</span>
-              <div className="mb-1 text-left">
-                <span className="text-2xl font-bold text-foreground">,90</span>
-                <p className="text-xs text-muted-foreground leading-none">/mês</p>
+          {/* Seletor de plano */}
+          <div className="p-5 pb-0 space-y-3">
+            <button
+              onClick={() => setSelectedPlan('monthly')}
+              className={`w-full flex items-center justify-between rounded-xl border p-4 transition-colors ${
+                selectedPlan === 'monthly'
+                  ? 'border-violet-500 bg-violet-500/10'
+                  : 'border-border bg-card hover:border-violet-500/40'
+              }`}
+            >
+              <div className="text-left">
+                <p className="text-sm font-bold text-foreground">Mensal</p>
+                <p className="text-xs text-muted-foreground">Cancele quando quiser</p>
               </div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">Cancele quando quiser · Sem fidelidade</p>
+              <div className="text-right">
+                <p className="text-lg font-extrabold text-foreground">R$37,90<span className="text-xs font-normal text-muted-foreground">/mês</span></p>
+              </div>
+            </button>
+            <button
+              onClick={() => setSelectedPlan('annual')}
+              className={`w-full flex items-center justify-between rounded-xl border p-4 transition-colors relative ${
+                selectedPlan === 'annual'
+                  ? 'border-emerald-500 bg-emerald-500/10'
+                  : 'border-border bg-card hover:border-emerald-500/40'
+              }`}
+            >
+              <span className="absolute -top-2.5 left-4 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                ECONOMIZE R$157,80
+              </span>
+              <div className="text-left">
+                <p className="text-sm font-bold text-foreground">Anual</p>
+                <p className="text-xs text-muted-foreground">Equivale a R$24,75/mês</p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-extrabold text-foreground">R$297<span className="text-xs font-normal text-muted-foreground">/ano</span></p>
+              </div>
+            </button>
           </div>
 
           {/* Features */}
@@ -80,7 +108,10 @@ export default function PlanoPro() {
               onClick={() => setShowCheckout(true)}
               className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold text-sm transition-all shadow-lg shadow-violet-500/30"
             >
-              Assinar agora por R$37,90/mês <ArrowRight className="h-4 w-4" />
+              {selectedPlan === 'annual'
+                ? <>Assinar anual por R$297/ano <ArrowRight className="h-4 w-4" /></>
+                : <>Assinar agora por R$37,90/mês <ArrowRight className="h-4 w-4" /></>
+              }
             </button>
             <p className="text-center text-[11px] text-muted-foreground mt-3">
               Pagamento 100% seguro via MercadoPago
@@ -100,6 +131,7 @@ export default function PlanoPro() {
         <CheckoutModal
           onClose={() => setShowCheckout(false)}
           onSuccess={handleSuccess}
+          initialPlan={selectedPlan}
         />
       )}
     </div>
