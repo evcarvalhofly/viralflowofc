@@ -114,7 +114,7 @@ export default function MinhaConta() {
     setResetLoading(true);
     setResetMsg(null);
     const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo: 'https://viralflow-gilt.vercel.app/auth',
+      redirectTo: 'https://viralflow-gilt.vercel.app/reset-password',
     });
     if (error) {
       setResetMsg({ type: 'error', text: 'Erro ao enviar e-mail. Tente novamente.' });
