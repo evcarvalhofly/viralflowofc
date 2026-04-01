@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Settings, Bell } from 'lucide-react';
 import { NotificationsPanel } from '@/components/community/NotificationsPanel';
 import { useLevelProgression, LevelUpEvent } from '@/hooks/useLevelProgression';
+import { LevelProgressBar } from '@/components/community/LevelProgressBar';
 
 // Users are considered online if last_seen_at is within this many milliseconds.
 // 120s gives enough headroom for browser background-tab timer throttling (~60s effective interval).
@@ -217,6 +218,8 @@ const Community = () => {
           </button>
         </div>
       </header>
+
+      <LevelProgressBar currentUserId={currentUserId} currentLevel={currentUserLevel} />
 
       <div
         className="flex-1 relative overflow-hidden"
