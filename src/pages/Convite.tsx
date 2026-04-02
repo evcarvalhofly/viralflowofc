@@ -299,7 +299,7 @@ export default function Convite() {
   };
 
   return (
-    <div className="bg-[#09090b] text-foreground">
+    <div className="bg-[#09090b] text-foreground overflow-x-hidden">
 
       {/* ── BARRA SUPERIOR ─────────────────────────────────────── */}
       <div className="sticky top-0 z-50 bg-violet-600/95 backdrop-blur-sm text-white text-xs font-semibold text-center py-2.5 px-4">
