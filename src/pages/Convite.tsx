@@ -278,13 +278,21 @@ export default function Convite() {
 
   useEffect(() => {
     const onScroll = () => {
-      const el = document.documentElement;
-      const scrolled = el.scrollTop || document.body.scrollTop;
+      const root = document.getElementById('root');
+      // Try #root first (may be the actual scroll container), fallback to window
+      const el = (root && root.scrollHeight > root.clientHeight && root.scrollTop > 0)
+        ? root
+        : document.documentElement;
+      const scrolled = el.scrollTop || document.body.scrollTop || window.scrollY;
       const total = el.scrollHeight - el.clientHeight;
-      setScrollProgress(total > 0 ? (scrolled / total) * 100 : 0);
+      setScrollProgress(total > 0 ? Math.min((scrolled / total) * 100, 100) : 0);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    document.getElementById('root')?.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      document.getElementById('root')?.removeEventListener('scroll', onScroll);
+    };
   }, []);
 
   // Fix: override global overflow:hidden for this public page
@@ -324,7 +332,7 @@ export default function Convite() {
 
       {/* ── BARRA DE PROGRESSO ─────────────────────────────────── */}
       {/* ── BARRA DE PROGRESSO ─────────────────────────────────── */}
-      <div className="fixed top-0 left-0 w-full z-50 h-1 bg-white/5">
+      <div className="fixed top-0 left-0 w-full z-50 h-[3px] bg-white/10">
         <div
           className="h-full bg-violet-500"
           style={{
