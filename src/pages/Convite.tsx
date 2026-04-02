@@ -357,7 +357,7 @@ export default function Convite() {
         <h1 className="mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
           Pare de postar e ser ignorado.{' '}
           <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-            Comece a criar vídeos com potencial REAL de viralização — todos os dias.
+            Conheça o sistema que faz o algoritmo trabalhar por você!
           </span>
         </h1>
 
