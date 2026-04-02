@@ -23,49 +23,49 @@ const FEATURES = [
   {
     icon: Brain,
     title: 'IA que planeja sua semana inteira',
-    desc: 'Você informa o nicho. A IA cria ideias, títulos e o calendário completo de postagens. Chega de "não sei o que postar hoje".',
+    desc: 'Informe seu nicho. A IA monta o calendário completo de posts. Nunca mais fique sem saber o que postar.',
     highlight: 'Planejamento semanal automático',
   },
   {
     icon: Trophy,
     title: 'GameOver — Títulos que fazem bombar',
-    desc: 'Clique no botão, fale sobre o seu vídeo e receba título, descrição e copy viral gerados na hora. Testado para causar engajamento.',
+    desc: 'Fala sobre o vídeo. Recebe título, descrição e copy viral gerados em segundos. Mais cliques, mais views.',
     highlight: 'Título + Descrição + Copy em segundos',
   },
   {
     icon: Film,
     title: 'Biblioteca de vídeos virais prontos',
-    desc: 'Acesse vídeos Dark que já provaram funcionar. Remodele, reutilize e monetize de novo — sem partir do zero.',
+    desc: 'Vídeos que já provaram funcionar. Adapte, poste e cresça — sem partir do zero.',
     highlight: 'Conteúdo pronto para reutilizar',
   },
   {
     icon: Layers,
     title: 'Biblioteca de edição completa',
-    desc: 'Fundos, overlays, efeitos sonoros e muito mais — com prévia antes de baixar, favoritos e filtro dos mais usados pela comunidade. Atualização semanal.',
+    desc: 'Fundos, efeitos e overlays com prévia antes de baixar. Atualização semanal. Material infinito.',
     highlight: 'Atualizado toda semana',
   },
   {
     icon: Scissors,
     title: 'ViralCut — Editor com IA embutida',
-    desc: 'Corte automático removendo pausas e silêncios, legenda automática e editor manual completo. Edita sem saber editar.',
+    desc: 'Sobe o vídeo. A IA corta as pausas e coloca legenda automática. Edição sem saber editar.',
     highlight: 'Corte + legenda automáticos com IA',
   },
   {
     icon: Users,
     title: 'Comunidade no mapa interativo',
-    desc: 'Um mapa de cidade onde cada criador é um prédio. Veja quem está online, faça amizades, troque mensagens. Networking real dentro do app.',
+    desc: 'Cada criador é um prédio na cidade. Veja quem está online, faça amizades e networking real dentro do app.',
     highlight: 'Só no ViralFlow',
   },
   {
     icon: ShoppingBag,
     title: 'Shopping interno',
-    desc: 'Compre e venda serviços e infoprodutos dentro da comunidade. Seu negócio dentro do app.',
+    desc: 'Compre e venda serviços para outros criadores. Monetize além do conteúdo.',
     highlight: 'Monetize para outros criadores',
   },
   {
     icon: Handshake,
     title: 'Programa de afiliados — 50%',
-    desc: 'Indique o ViralFlow e receba 50% de comissão por cada venda. A melhor taxa do mercado.',
+    desc: 'Indique o ViralFlow e receba 50% por cada venda. A melhor taxa do mercado.',
     highlight: '50% de comissão',
   },
 ];
@@ -269,14 +269,14 @@ export default function Convite() {
         </div>
 
         <h1 className="mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-          Pare de perder tempo e{' '}
+          Pare de postar e ser ignorado.{' '}
           <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-            comece a criar conteúdo que realmente viraliza
+            Comece a criar vídeos com potencial REAL de viralização — todos os dias.
           </span>
         </h1>
 
         <p className="mx-auto mt-6 max-w-xl text-base text-zinc-400 sm:text-xl leading-relaxed">
-          IA que planeja, edita e cria copy por você. Comunidade de criadores ativos. E tudo que você precisa para crescer — em um só lugar.
+          Mesmo sem ideia, sem experiência e sem perder horas editando. Um sistema simples que transforma qualquer pessoa em criador estratégico.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -285,7 +285,7 @@ export default function Convite() {
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-4 text-base font-bold text-white shadow-2xl shadow-violet-500/40 transition-all hover:from-violet-500 hover:to-purple-500 hover:shadow-violet-500/60 active:scale-95"
           >
             <Flame className="h-5 w-5" />
-            Quero criar conteúdo viral agora
+            Quero começar a viralizar hoje
           </button>
           <button
             onClick={scrollToPricing}
@@ -322,7 +322,7 @@ export default function Convite() {
       <section className="mx-auto max-w-2xl px-4 py-20 text-center">
         <p className="text-xs font-bold uppercase tracking-widest text-red-400 mb-4">Você reconhece isso?</p>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-10 leading-snug">
-          Criar conteúdo está cada vez mais difícil — e a maioria dos criadores desiste justamente quando estava prestes a decolar.
+          Criar conteúdo hoje não é difícil… o difícil é crescer.
         </h2>
         <div className="space-y-3 text-left">
           {PAIN_POINTS.map(p => (
@@ -332,9 +332,23 @@ export default function Convite() {
             </div>
           ))}
         </div>
-        <p className="mt-10 text-xl font-bold text-white">
+        <p className="mt-6 text-base font-bold text-red-400">
+          👉 E o pior: parece que você está ficando pra trás.
+        </p>
+        <p className="mt-8 text-xl font-bold text-white">
           Nós construímos o ViralFlow exatamente para resolver isso.
         </p>
+      </section>
+
+      {/* ── QUEBRA DE PADRÃO ────────────────────────────────────── */}
+      <section className="px-4 py-8 text-center">
+        <div className="mx-auto max-w-xl">
+          <p className="text-sm text-zinc-500 mb-2">A verdade é uma só:</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-white leading-snug">
+            Quem cresce não cria do zero…<br />
+            <span className="text-violet-400">segue padrões que já viralizam.</span>
+          </p>
+        </div>
       </section>
 
       {/* ── SOLUÇÃO ─────────────────────────────────────────────── */}
@@ -345,9 +359,9 @@ export default function Convite() {
         <div className="mx-auto max-w-3xl">
           <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">O que você tem acesso</p>
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-12 leading-snug">
-            Tudo que um criador de conteúdo precisa —{' '}
+            8 ferramentas que{' '}
             <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-              integrado, simples e pronto para usar
+              trabalham por você enquanto você cria
             </span>
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -370,6 +384,49 @@ export default function Convite() {
                 <p className="text-xs text-zinc-400 leading-relaxed">{desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── PROVA SOCIAL ─────────────────────────────────────────── */}
+      <section className="px-4 py-16">
+        <div className="mx-auto max-w-3xl">
+          <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">Resultados reais</p>
+          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-3 leading-snug">
+            Criadores que usam o ViralFlow já estão colhendo resultados
+          </h2>
+          <p className="text-center text-sm text-zinc-500 mb-10">Prints direto do Instagram — sem edição, sem filtro.</p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46-1.jpeg',
+              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46.jpeg',
+              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-3.jpeg',
+              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-2.jpeg',
+              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-1.jpeg',
+              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45.jpeg',
+            ].map((src, i) => (
+              <div key={i} className="rounded-xl overflow-hidden border border-white/10 bg-white/5">
+                <img
+                  src={src}
+                  alt={`Resultado real ${i + 1}`}
+                  className="w-full h-auto object-cover"
+                  loading="lazy"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 text-center">
+            <a
+              href="https://www.instagram.com/goupcreations?igsh=OTRoN2tlb2t1dXg="
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+            >
+              <Star className="h-4 w-4 text-violet-400" />
+              Ver mais resultados no Instagram →
+            </a>
           </div>
         </div>
       </section>
