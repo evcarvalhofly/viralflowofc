@@ -344,7 +344,7 @@ export default function Convite() {
       </div>
 
       {/* ── HERO ───────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden px-4 pt-16 pb-20 text-center">
+      <section className="relative overflow-hidden px-4 pt-8 pb-20 text-center">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute left-1/2 top-0 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-violet-600/20 blur-[140px]" />
         </div>
