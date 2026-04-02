@@ -107,17 +107,28 @@ const FAQS = [
 ];
 
 /* ─── Carousel ──────────────────────────────────────────────── */
-function Carousel({ images }: { images: string[] }) {
+function Carousel({ images, direction = 'forward' }: { images: string[]; direction?: 'forward' | 'backward' }) {
   const [idx, setIdx] = useState(0);
   const prev = () => setIdx(i => (i - 1 + images.length) % images.length);
   const next = () => setIdx(i => (i + 1) % images.length);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIdx(i => direction === 'forward'
+        ? (i + 1) % images.length
+        : (i - 1 + images.length) % images.length
+      );
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [images.length, direction]);
+
   return (
     <div className="relative">
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
         <img
           src={images[idx]}
           alt={`Resultado ${idx + 1}`}
-          className="w-full h-auto object-contain max-h-[520px]"
+          className="w-full h-auto object-contain max-h-[520px] transition-opacity duration-500"
           loading="lazy"
         />
       </div>
@@ -127,14 +138,14 @@ function Carousel({ images }: { images: string[] }) {
         className="absolute left-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
         aria-label="Anterior"
       >
-        <ChevronDown className="h-5 w-5 -rotate-90" />
+        <ChevronDown className="h-5 w-5 rotate-90" />
       </button>
       <button
         onClick={next}
         className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
         aria-label="Próximo"
       >
-        <ChevronDown className="h-5 w-5 rotate-90" />
+        <ChevronDown className="h-5 w-5 -rotate-90" />
       </button>
       {/* Dots */}
       <div className="flex justify-center gap-1.5 mt-3">
@@ -441,12 +452,12 @@ export default function Convite() {
           </h2>
 
           <div className="space-y-6">
-            <Carousel images={[
+            <Carousel direction="forward" images={[
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46-1.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-3.jpeg',
             ]} />
-            <Carousel images={[
+            <Carousel direction="backward" images={[
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-2.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-1.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45.jpeg',
