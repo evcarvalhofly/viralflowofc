@@ -28,7 +28,7 @@ const modules = [
   },
   {
     label: "GameOver",
-    description: "Acompanhe sua pontuação e conquistas",
+    description: "Crie titulo, descrição que obrigam usuario a comentar e interagir!",
     icon: TrendingUp,
     path: "/gameover",
     gradient: "from-[hsl(330,81%,60%)] to-[hsl(350,70%,45%)]",
