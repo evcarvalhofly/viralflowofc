@@ -377,7 +377,7 @@ export default function Convite() {
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-4 text-base font-bold text-white shadow-2xl shadow-violet-500/40 transition-all hover:from-violet-500 hover:to-purple-500 hover:shadow-violet-500/60 active:scale-95"
           >
             <Flame className="h-5 w-5" />
-            Quero começar a viralizar hoje
+            Quero viralizar agora
           </button>
           <button
             onClick={scrollToPricing}
@@ -558,7 +558,7 @@ export default function Convite() {
         <div className="mx-auto max-w-3xl">
           <p className="text-center text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Comparativo</p>
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10">
-            Sem ViralFlow vs. Com ViralFlow
+            Sem ViralFlow vs Com ViralFlow
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-red-500/5 border border-red-500/10 p-4">
