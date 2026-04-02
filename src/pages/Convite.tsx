@@ -106,6 +106,50 @@ const FAQS = [
   },
 ];
 
+/* ─── Carousel ──────────────────────────────────────────────── */
+function Carousel({ images }: { images: string[] }) {
+  const [idx, setIdx] = useState(0);
+  const prev = () => setIdx(i => (i - 1 + images.length) % images.length);
+  const next = () => setIdx(i => (i + 1) % images.length);
+  return (
+    <div className="relative">
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+        <img
+          src={images[idx]}
+          alt={`Resultado ${idx + 1}`}
+          className="w-full h-auto object-contain max-h-[520px]"
+          loading="lazy"
+        />
+      </div>
+      {/* Arrows */}
+      <button
+        onClick={prev}
+        className="absolute left-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+        aria-label="Anterior"
+      >
+        <ChevronDown className="h-5 w-5 -rotate-90" />
+      </button>
+      <button
+        onClick={next}
+        className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+        aria-label="Próximo"
+      >
+        <ChevronDown className="h-5 w-5 rotate-90" />
+      </button>
+      {/* Dots */}
+      <div className="flex justify-center gap-1.5 mt-3">
+        {images.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setIdx(i)}
+            className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-5 bg-violet-400' : 'w-1.5 bg-white/20'}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─── FAQ Item ───────────────────────────────────────────────── */
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
@@ -390,31 +434,23 @@ export default function Convite() {
 
       {/* ── PROVA SOCIAL ─────────────────────────────────────────── */}
       <section className="px-4 py-16">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-lg">
           <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">Resultados reais</p>
-          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-3 leading-snug">
+          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10 leading-snug">
             Criadores que usam o ViralFlow já estão colhendo resultados
           </h2>
-          <p className="text-center text-sm text-zinc-500 mb-10">Prints direto do Instagram — sem edição, sem filtro.</p>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {[
+          <div className="space-y-6">
+            <Carousel images={[
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46-1.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-3.jpeg',
+            ]} />
+            <Carousel images={[
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-2.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-1.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45.jpeg',
-            ].map((src, i) => (
-              <div key={i} className="rounded-xl overflow-hidden border border-white/10 bg-white/5">
-                <img
-                  src={src}
-                  alt={`Resultado real ${i + 1}`}
-                  className="w-full h-auto object-cover"
-                  loading="lazy"
-                />
-              </div>
-            ))}
+            ]} />
           </div>
 
           <div className="mt-8 text-center">
