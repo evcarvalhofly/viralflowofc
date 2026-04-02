@@ -273,7 +273,19 @@ export default function Convite() {
   );
   const [checkoutPlan, setCheckoutPlan] = useState<Plan>('annual');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('annual');
+  const [scrollProgress, setScrollProgress] = useState(0);
   const pricingRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const el = document.documentElement;
+      const scrolled = el.scrollTop || document.body.scrollTop;
+      const total = el.scrollHeight - el.clientHeight;
+      setScrollProgress(total > 0 ? (scrolled / total) * 100 : 0);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Fix: override global overflow:hidden for this public page
   useEffect(() => {
@@ -310,15 +322,16 @@ export default function Convite() {
   return (
     <div className="bg-[#09090b] text-foreground overflow-x-hidden">
 
-      {/* ── BARRA SUPERIOR ─────────────────────────────────────── */}
-      <div className="sticky top-0 z-50 bg-violet-600/95 backdrop-blur-sm text-white text-xs font-semibold text-center py-2.5 px-4">
-        🔥 Plano Anual com 35% de desconto — R$297 por ano ou R$24,75/mês
-        <button
-          onClick={handleCtaClick}
-          className="ml-3 underline underline-offset-2 hover:no-underline"
-        >
-          Assinar agora →
-        </button>
+      {/* ── BARRA DE PROGRESSO ─────────────────────────────────── */}
+      <div className="sticky top-0 z-50 h-1 bg-white/5">
+        <div
+          className="h-full bg-violet-500"
+          style={{
+            width: `${scrollProgress}%`,
+            transition: 'width 0.1s linear',
+            boxShadow: '0 0 8px 2px rgba(139, 92, 246, 0.7)',
+          }}
+        />
       </div>
 
       {/* ── HERO ───────────────────────────────────────────────── */}
