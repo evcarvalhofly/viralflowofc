@@ -354,7 +354,7 @@ export default function Convite() {
           <span className="text-xs font-bold uppercase tracking-widest text-violet-400">ViralFlow PRO</span>
         </div>
 
-        <h1 className="mx-auto max-w-3xl text-3xl font-extrabold leading-tight tracking-tight sm:text-5xl">
+        <h1 className="mx-auto max-w-xl text-2xl font-extrabold leading-tight tracking-tight sm:text-4xl">
           Pare de postar e ser ignorado.{' '}
           <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
             Conheça o sistema que faz o algoritmo trabalhar por você!
@@ -364,7 +364,7 @@ export default function Convite() {
         <img
           src="https://goupwin.com/wp-content/uploads/2026/04/flow.png"
           alt="ViralFlow"
-          className="mx-auto mt-8 w-full max-w-2xl rounded-2xl"
+          className="mx-auto mt-8 w-full sm:max-w-sm rounded-2xl"
         />
 
         <p className="mx-auto mt-6 max-w-xl text-base text-zinc-400 sm:text-xl leading-relaxed">
