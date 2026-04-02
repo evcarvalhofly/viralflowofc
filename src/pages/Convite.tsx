@@ -118,19 +118,28 @@ function Carousel({ images, direction = 'forward' }: { images: string[]; directi
         ? (i + 1) % images.length
         : (i - 1 + images.length) % images.length
       );
-    }, 3000);
+    }, 3500);
     return () => clearInterval(timer);
   }, [images.length, direction]);
 
   return (
     <div className="relative">
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-        <img
-          src={images[idx]}
-          alt={`Resultado ${idx + 1}`}
-          className="w-full h-auto object-contain max-h-[520px] transition-opacity duration-500"
-          loading="lazy"
-        />
+        {/* Track — all images side by side, slides via translateX */}
+        <div
+          className="flex"
+          style={{ transform: `translateX(-${idx * 100}%)`, transition: 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
+        >
+          {images.map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt={`Resultado ${i + 1}`}
+              className="w-full shrink-0 h-auto object-contain max-h-[520px]"
+              loading="lazy"
+            />
+          ))}
+        </div>
       </div>
       {/* Arrows */}
       <button
@@ -153,7 +162,7 @@ function Carousel({ images, direction = 'forward' }: { images: string[]; directi
           <button
             key={i}
             onClick={() => setIdx(i)}
-            className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-5 bg-violet-400' : 'w-1.5 bg-white/20'}`}
+            className={`h-1.5 rounded-full transition-all duration-300 ${i === idx ? 'w-5 bg-violet-400' : 'w-1.5 bg-white/20'}`}
           />
         ))}
       </div>
