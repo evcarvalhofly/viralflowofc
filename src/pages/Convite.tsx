@@ -323,13 +323,14 @@ export default function Convite() {
     <div className="bg-[#09090b] text-foreground overflow-x-hidden">
 
       {/* ── BARRA DE PROGRESSO ─────────────────────────────────── */}
-      <div className="sticky top-0 z-50 h-1 bg-white/5">
+      {/* ── BARRA DE PROGRESSO ─────────────────────────────────── */}
+      <div className="fixed top-0 left-0 w-full z-50 h-1 bg-white/5">
         <div
           className="h-full bg-violet-500"
           style={{
             width: `${scrollProgress}%`,
-            transition: 'width 0.1s linear',
-            boxShadow: '0 0 8px 2px rgba(139, 92, 246, 0.7)',
+            transition: 'width 0.15s ease-out',
+            boxShadow: '0 0 10px 3px rgba(139, 92, 246, 0.8)',
           }}
         />
       </div>
