@@ -371,8 +371,10 @@ export default function Convite() {
           Mesmo sem ideia, sem experiência e sem perder horas editando. Um sistema simples que transforma qualquer pessoa em criador estratégico.
         </p>
 
-        <div className="inline-flex items-center gap-2 mt-6 rounded-full border border-violet-500/60 bg-violet-500/15 px-5 py-2">
-          <span className="text-base font-extrabold tracking-tight text-white">→ Seja Visualmente IMPOSSÍVEL de Ignorar</span>
+        <div className="mt-8 text-center leading-none w-full rounded-2xl py-5 px-4 overflow-hidden" style={{ background: 'linear-gradient(135deg, #2d0057 0%, #6b00a8 25%, #c0008a 55%, #ff2dcc 75%, #7b00c4 100%)', boxShadow: 'inset 0 0 60px rgba(255,255,255,0.08)' }}>
+          <p className="text-sm font-bold uppercase tracking-[0.25em] text-white/80 mb-2" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)', WebkitTextStroke: '0.3px rgba(255,255,255,0.4)' }}>Seja Visualmente</p>
+          <p className="text-7xl uppercase text-white sm:text-9xl" style={{ fontFamily: "'Anton', sans-serif", textShadow: '0 2px 8px rgba(0,0,0,0.5)', WebkitTextStroke: '0.5px rgba(255,255,255,0.3)', letterSpacing: '-0.02em' }}>IMPOSSÍVEL</p>
+          <p className="text-2xl font-bold italic tracking-wide text-white sm:text-3xl" style={{ fontFamily: "'Playfair Display', serif", textShadow: '0 2px 6px rgba(0,0,0,0.5)', WebkitTextStroke: '0.3px rgba(255,255,255,0.3)' }}>de ignorar</p>
         </div>
 
         {/* ── GIF GRID ───────────────────────────────────────────── */}
