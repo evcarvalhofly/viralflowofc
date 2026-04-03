@@ -371,6 +371,23 @@ export default function Convite() {
           Mesmo sem ideia, sem experiência e sem perder horas editando. Um sistema simples que transforma qualquer pessoa em criador estratégico.
         </p>
 
+        <div className="inline-flex items-center gap-2 mt-6 rounded-full border border-violet-500/40 bg-violet-500/10 px-4 py-1.5">
+          <span className="text-sm font-semibold text-violet-300">→ Seja Visualmente Impossível de Ignorar</span>
+        </div>
+
+        {/* ── GIF GRID ───────────────────────────────────────────── */}
+        <div className="mx-auto mt-8 w-full max-w-sm">
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <img src="https://membros.goupwin.com/wp-content/uploads/2025/07/lv_0_20250308142307-2-1.gif" alt="" className="w-full rounded-xl object-cover aspect-[9/16]" />
+            <img src="https://membros.goupwin.com/wp-content/uploads/2025/07/02283-1.gif" alt="" className="w-full rounded-xl object-cover aspect-[9/16]" />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <img src="https://membros.goupwin.com/wp-content/uploads/2025/07/lv_0_20250719021025-1.gif" alt="" className="w-full rounded-xl object-cover aspect-[9/16]" />
+            <img src="https://membros.goupwin.com/wp-content/uploads/2025/07/lv_0_20250719023826-1.gif" alt="" className="w-full rounded-xl object-cover aspect-[9/16]" />
+            <img src="https://membros.goupwin.com/wp-content/uploads/2025/07/lv_0_20250308142508-1.gif" alt="" className="w-full rounded-xl object-cover aspect-[9/16]" />
+          </div>
+        </div>
+
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={handleCtaClick}
