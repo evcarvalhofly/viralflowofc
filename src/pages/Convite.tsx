@@ -109,23 +109,34 @@ const FAQS = [
 /* ─── Carousel ──────────────────────────────────────────────── */
 function Carousel({ images, direction = 'forward' }: { images: string[]; direction?: 'forward' | 'backward' }) {
   const [idx, setIdx] = useState(0);
-  const prev = () => setIdx(i => (i - 1 + images.length) % images.length);
-  const next = () => setIdx(i => (i + 1) % images.length);
+  const [paused, setPaused] = useState(false);
+  const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const prev = () => { setIdx(i => (i - 1 + images.length) % images.length); handleInteraction(); };
+  const next = () => { setIdx(i => (i + 1) % images.length); handleInteraction(); };
+
+  const handleInteraction = () => {
+    setPaused(true);
+    if (resumeTimer.current) clearTimeout(resumeTimer.current);
+    resumeTimer.current = setTimeout(() => setPaused(false), 10000);
+  };
 
   useEffect(() => {
+    if (paused) return;
     const timer = setInterval(() => {
       setIdx(i => direction === 'forward'
         ? (i + 1) % images.length
         : (i - 1 + images.length) % images.length
       );
-    }, 3500);
+    }, 2200);
     return () => clearInterval(timer);
-  }, [images.length, direction]);
+  }, [images.length, direction, paused]);
+
+  useEffect(() => () => { if (resumeTimer.current) clearTimeout(resumeTimer.current); }, []);
 
   return (
-    <div className="relative">
+    <div className="relative" onMouseDown={handleInteraction} onTouchStart={handleInteraction}>
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-        {/* Track — all images side by side, slides via translateX */}
         <div
           className="flex"
           style={{ transform: `translateX(-${idx * 100}%)`, transition: 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
@@ -141,7 +152,6 @@ function Carousel({ images, direction = 'forward' }: { images: string[]; directi
           ))}
         </div>
       </div>
-      {/* Arrows */}
       <button
         onClick={prev}
         className="absolute left-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
@@ -156,16 +166,6 @@ function Carousel({ images, direction = 'forward' }: { images: string[]; directi
       >
         <ChevronDown className="h-5 w-5 -rotate-90" />
       </button>
-      {/* Dots */}
-      <div className="flex justify-center gap-1.5 mt-3">
-        {images.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setIdx(i)}
-            className={`h-1.5 rounded-full transition-all duration-300 ${i === idx ? 'w-5 bg-violet-400' : 'w-1.5 bg-white/20'}`}
-          />
-        ))}
-      </div>
     </div>
   );
 }
@@ -547,6 +547,33 @@ export default function Convite() {
         </div>
       </section>
 
+      {/* ── PERFIS QUE DESTRAVARAM ───────────────────────────────── */}
+      <section className="px-4 py-12">
+        <div className="mx-auto max-w-lg">
+          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-8 leading-snug">
+            Perfis que destravaram e monetizaram
+          </h2>
+          <div className="space-y-6">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3 text-center">TikTok</p>
+              <Carousel direction="forward" images={[
+                'https://membros.goupwin.com/wp-content/uploads/2026/02/II1.png',
+                'https://membros.goupwin.com/wp-content/uploads/2026/02/II2.png',
+                'https://membros.goupwin.com/wp-content/uploads/2026/02/II3.png',
+              ]} />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3 text-center">Instagram</p>
+              <Carousel direction="forward" images={[
+                'https://membros.goupwin.com/wp-content/uploads/2026/02/perfil3.png',
+                'https://membros.goupwin.com/wp-content/uploads/2026/02/perfil2.png',
+                'https://membros.goupwin.com/wp-content/uploads/2026/02/PERFIL1.png',
+              ]} />
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── PROVA SOCIAL ─────────────────────────────────────────── */}
       <section className="px-4 py-16">
         <div className="mx-auto max-w-lg">
@@ -561,7 +588,7 @@ export default function Convite() {
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-3.jpeg',
             ]} />
-            <Carousel direction="backward" images={[
+            <Carousel direction="forward" images={[
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-2.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-1.jpeg',
               'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45.jpeg',
