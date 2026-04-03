@@ -379,7 +379,7 @@ export default function Convite() {
         />
 
         <p className="mx-auto mt-6 max-w-xl text-base text-zinc-400 sm:text-xl leading-relaxed">
-          Mesmo sem ideia, sem experiência e sem perder horas editando. Um sistema simples que transforma qualquer pessoa em criador estratégico.
+          Dor de cabeça pra editar? Travado em visualizações? — Conheça o ViralFlow ⬇️
         </p>
 
         <div className="mt-8 text-center leading-none w-full rounded-2xl py-5 px-4 overflow-hidden" style={{ background: 'linear-gradient(135deg, #2d0057 0%, #6b00a8 25%, #c0008a 55%, #ff2dcc 75%, #7b00c4 100%)', boxShadow: 'inset 0 0 60px rgba(255,255,255,0.08)' }}>
@@ -500,6 +500,15 @@ export default function Convite() {
           </div>
         </div>
       </section>
+
+      {/* ── IMAGEM PÓS-COMPARATIVO ──────────────────────────────── */}
+      <div className="px-4 pb-8">
+        <img
+          src="https://membros.goupwin.com/wp-content/uploads/2026/04/Generated-Image-April-03-2026-11_38AM-Photoroom.png"
+          alt=""
+          className="mx-auto w-full max-w-sm rounded-2xl"
+        />
+      </div>
 
       {/* ── SOLUÇÃO ─────────────────────────────────────────────── */}
       <section className="relative px-4 py-4 pb-20">
