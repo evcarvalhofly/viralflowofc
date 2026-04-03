@@ -274,6 +274,7 @@ export default function Convite() {
   const [checkoutPlan, setCheckoutPlan] = useState<Plan>('annual');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('annual');
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
   const pricingRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -306,6 +307,16 @@ export default function Convite() {
       document.body.style.overflow = '';
       if (root) root.style.overflow = '';
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setViewers(v => {
+        const delta = Math.floor(Math.random() * 5) - 2;
+        return Math.min(187, Math.max(127, v + delta));
+      });
+    }, 4500);
+    return () => clearInterval(timer);
   }, []);
 
   const openCheckout = (plan: Plan) => {
@@ -390,17 +401,41 @@ export default function Convite() {
           </div>
         </div>
 
+        {/* ── SOCIAL PROOF ───────────────────────────────────────── */}
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <p className="text-sm font-semibold text-red-400 flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+            {viewers} pessoas visualizando agora
+          </p>
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {[
+              'https://membros.goupwin.com/wp-content/uploads/2025/04/imagem_2024-08-29_233135709.png',
+              'https://membros.goupwin.com/wp-content/uploads/2025/04/imagem_2024-08-29_233209217.png',
+              'https://membros.goupwin.com/wp-content/uploads/2025/04/imagem_2024-08-29_232900624.png',
+              'https://membros.goupwin.com/wp-content/uploads/2021/02/outdoor-image-02.jpg',
+              'https://digitalize.goupwin.com/wp-content/uploads/2026/01/image-9.webp',
+            ].map((src, i) => (
+              <img key={i} src={src} alt="" className="w-9 h-9 rounded-full object-cover border-2 border-white/20 -ml-2 first:ml-0" />
+            ))}
+            <div className="flex items-center gap-1.5 ml-1">
+              <span className="text-yellow-400 text-lg leading-none">★★★★★</span>
+              <span className="text-sm text-zinc-400">4.9/5 <span className="text-zinc-500">(2.847)</span></span>
+            </div>
+          </div>
+        </div>
+
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={handleCtaClick}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-4 text-base font-bold text-white shadow-2xl shadow-violet-500/40 transition-all hover:from-violet-500 hover:to-purple-500 hover:shadow-violet-500/60 active:scale-95"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-base font-bold text-white shadow-2xl active:scale-95 transition-all"
+            style={{ background: 'linear-gradient(135deg, #6b00a8 0%, #c0008a 50%, #ff2dcc 100%)', boxShadow: '0 4px 24px rgba(192,0,138,0.45)' }}
           >
             <Flame className="h-5 w-5" />
             Quero viralizar agora
           </button>
           <button
             onClick={scrollToPricing}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
           >
             Ver os planos <ArrowRight className="h-4 w-4" />
           </button>
