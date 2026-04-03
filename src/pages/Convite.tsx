@@ -464,36 +464,40 @@ export default function Convite() {
         </div>
       </section>
 
-      {/* ── DOR ─────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-2xl px-4 py-20 text-center">
-        <p className="text-xs font-bold uppercase tracking-widest text-red-400 mb-4">Você reconhece isso?</p>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-10 leading-snug">
-          Criar conteúdo hoje não é difícil… o difícil é crescer.
-        </h2>
-        <div className="space-y-3 text-left">
-          {PAIN_POINTS.map(p => (
-            <div key={p} className="flex items-start gap-3 rounded-xl bg-red-500/5 border border-red-500/10 px-4 py-3">
-              <X className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-              <span className="text-sm text-zinc-300">{p}</span>
+      {/* ── COMPARATIVO ─────────────────────────────────────────── */}
+      <section className="px-4 py-12">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10">
+            Comparativo
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-red-500/5 border border-red-500/10 p-4">
+              <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <X className="h-3.5 w-3.5" /> Sem ViralFlow
+              </p>
+              <div className="space-y-2.5">
+                {COMPARE.map(c => (
+                  <p key={c.without} className="text-xs text-zinc-500 flex items-start gap-2">
+                    <span className="text-red-500 shrink-0 mt-0.5">✕</span>
+                    {c.without}
+                  </p>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-        <p className="mt-6 text-base font-bold text-red-400">
-          👉 E o pior: parece que você está ficando pra trás.
-        </p>
-        <p className="mt-8 text-xl font-bold text-white">
-          Nós construímos o ViralFlow exatamente para resolver isso.
-        </p>
-      </section>
-
-      {/* ── QUEBRA DE PADRÃO ────────────────────────────────────── */}
-      <section className="px-4 py-8 text-center">
-        <div className="mx-auto max-w-xl">
-          <p className="text-sm text-zinc-500 mb-2">A verdade é uma só:</p>
-          <p className="text-xl sm:text-2xl font-extrabold text-white leading-snug">
-            Quem cresce não cria do zero…<br />
-            <span className="text-violet-400">segue padrões que já viralizam.</span>
-          </p>
+            <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-4">
+              <p className="text-xs font-bold text-violet-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <Check className="h-3.5 w-3.5" /> Com ViralFlow
+              </p>
+              <div className="space-y-2.5">
+                {COMPARE.map(c => (
+                  <p key={c.with} className="text-xs text-zinc-300 flex items-start gap-2">
+                    <span className="text-violet-400 shrink-0 mt-0.5">✓</span>
+                    {c.with}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -602,44 +606,6 @@ export default function Convite() {
               <p className="mx-auto mt-3 max-w-md text-sm text-zinc-400 leading-relaxed">
                 Quando você entra na comunidade, vê uma cidade inteira de criadores. Faça amizades, mande mensagens, compre e venda serviços no Shopping — networking de verdade, dentro do app.
               </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── COMPARATIVO ─────────────────────────────────────────── */}
-      <section className="px-4 py-20">
-        <div className="mx-auto max-w-3xl">
-          <p className="text-center text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Comparativo</p>
-          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10">
-            Sem ViralFlow vs Com ViralFlow
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-red-500/5 border border-red-500/10 p-4">
-              <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                <X className="h-3.5 w-3.5" /> Sem ViralFlow
-              </p>
-              <div className="space-y-2.5">
-                {COMPARE.map(c => (
-                  <p key={c.without} className="text-xs text-zinc-500 flex items-start gap-2">
-                    <span className="text-red-500 shrink-0 mt-0.5">✕</span>
-                    {c.without}
-                  </p>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-4">
-              <p className="text-xs font-bold text-violet-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5" /> Com ViralFlow
-              </p>
-              <div className="space-y-2.5">
-                {COMPARE.map(c => (
-                  <p key={c.with} className="text-xs text-zinc-300 flex items-start gap-2">
-                    <span className="text-violet-400 shrink-0 mt-0.5">✓</span>
-                    {c.with}
-                  </p>
-                ))}
-              </div>
             </div>
           </div>
         </div>
