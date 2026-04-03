@@ -371,8 +371,8 @@ export default function Convite() {
           Mesmo sem ideia, sem experiência e sem perder horas editando. Um sistema simples que transforma qualquer pessoa em criador estratégico.
         </p>
 
-        <div className="inline-flex items-center gap-2 mt-6 rounded-full border border-violet-500/40 bg-violet-500/10 px-4 py-1.5">
-          <span className="text-sm font-semibold text-violet-300">→ Seja Visualmente Impossível de Ignorar</span>
+        <div className="inline-flex items-center gap-2 mt-6 rounded-full border border-violet-500/60 bg-violet-500/15 px-5 py-2">
+          <span className="text-base font-extrabold tracking-tight text-white">→ Seja Visualmente IMPOSSÍVEL de Ignorar</span>
         </div>
 
         {/* ── GIF GRID ───────────────────────────────────────────── */}
