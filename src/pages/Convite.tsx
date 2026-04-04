@@ -734,7 +734,7 @@ export default function Convite() {
       </section>
 
       {/* ── COMUNIDADE DESTAQUE ──────────────────────────────────── */}
-      <section className="px-4 py-16 bg-gradient-to-b from-transparent via-violet-950/20 to-transparent">
+      <section className="px-4 py-6 bg-gradient-to-b from-transparent via-violet-950/20 to-transparent">
         <div className="mx-auto max-w-3xl">
           <div className="overflow-hidden rounded-3xl border border-violet-500/20 bg-[#0f0f13]">
             <div className="relative flex h-64 sm:h-80 items-center justify-center bg-gradient-to-br from-violet-950 via-purple-950/60 to-slate-900">
