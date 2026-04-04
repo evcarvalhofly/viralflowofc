@@ -452,7 +452,7 @@ export default function Convite() {
       <section className="border-y border-white/5 bg-white/[0.02] py-8 px-4">
         <div className="mx-auto grid max-w-3xl grid-cols-3 gap-4 text-center">
           {[
-            { v: '+1.200', l: 'criadores ativos' },
+            { v: '+4.200', l: 'Vendas (antigo ViralCut)' },
             { v: '+8.400', l: 'vídeos gerados' },
             { v: '+3.000', l: 'materiais de edição' },
           ].map(({ v, l }) => (
