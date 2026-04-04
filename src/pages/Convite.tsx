@@ -451,8 +451,11 @@ export default function Convite() {
       {/* ── NÚMEROS ─────────────────────────────────────────────── */}
       <section className="border-y border-white/5 bg-white/[0.02] py-8 px-4">
         <div className="mx-auto grid max-w-3xl grid-cols-3 gap-4 text-center">
+          <div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-violet-400">+4.200</p>
+            <p className="text-xs text-zinc-500 mt-1 leading-tight">Vendas<br />(antigo ViralCut)</p>
+          </div>
           {[
-            { v: '+4.200', l: 'Vendas (antigo ViralCut)' },
             { v: '+8.400', l: 'vídeos gerados' },
             { v: '+3.000', l: 'materiais de edição' },
           ].map(({ v, l }) => (
