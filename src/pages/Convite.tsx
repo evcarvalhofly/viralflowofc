@@ -108,12 +108,20 @@ const FAQS = [
 
 /* ─── Carousel ──────────────────────────────────────────────── */
 function Carousel({ images, direction = 'forward' }: { images: string[]; direction?: 'forward' | 'backward' }) {
+  // Doubled array: [0..n-1, 0..n-1] — idx resets silently at midpoint for seamless loop
+  const doubled = [...images, ...images];
   const [idx, setIdx] = useState(0);
+  const [animated, setAnimated] = useState(true);
   const [paused, setPaused] = useState(false);
   const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const prev = () => { setIdx(i => (i - 1 + images.length) % images.length); handleInteraction(); };
-  const next = () => { setIdx(i => (i + 1) % images.length); handleInteraction(); };
+  const advance = (delta: number) => {
+    setAnimated(true);
+    setIdx(i => i + delta);
+  };
+
+  const prev = () => { advance(-1); handleInteraction(); };
+  const next = () => { advance(1); handleInteraction(); };
 
   const handleInteraction = () => {
     setPaused(true);
@@ -121,16 +129,31 @@ function Carousel({ images, direction = 'forward' }: { images: string[]; directi
     resumeTimer.current = setTimeout(() => setPaused(false), 10000);
   };
 
+  // When we reach the end of the first copy, snap silently to equivalent position in range [0, n-1]
+  useEffect(() => {
+    if (idx >= images.length) {
+      const timer = setTimeout(() => {
+        setAnimated(false);
+        setIdx(i => i - images.length);
+      }, 620); // just after transition ends
+      return () => clearTimeout(timer);
+    }
+    if (idx < 0) {
+      const timer = setTimeout(() => {
+        setAnimated(false);
+        setIdx(i => i + images.length);
+      }, 620);
+      return () => clearTimeout(timer);
+    }
+  }, [idx, images.length]);
+
   useEffect(() => {
     if (paused) return;
     const timer = setInterval(() => {
-      setIdx(i => direction === 'forward'
-        ? (i + 1) % images.length
-        : (i - 1 + images.length) % images.length
-      );
+      advance(direction === 'forward' ? 1 : -1);
     }, 2200);
     return () => clearInterval(timer);
-  }, [images.length, direction, paused]);
+  }, [direction, paused]);
 
   useEffect(() => () => { if (resumeTimer.current) clearTimeout(resumeTimer.current); }, []);
 
@@ -139,9 +162,12 @@ function Carousel({ images, direction = 'forward' }: { images: string[]; directi
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
         <div
           className="flex"
-          style={{ transform: `translateX(-${idx * 100}%)`, transition: 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
+          style={{
+            transform: `translateX(-${idx * 100}%)`,
+            transition: animated ? 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none',
+          }}
         >
-          {images.map((src, i) => (
+          {doubled.map((src, i) => (
             <img
               key={i}
               src={src}
