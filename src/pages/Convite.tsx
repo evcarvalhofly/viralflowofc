@@ -504,7 +504,7 @@ export default function Convite() {
       {/* ── IMAGEM PÓS-COMPARATIVO ──────────────────────────────── */}
       <div className="px-4 pb-8">
         <img
-          src="https://membros.goupwin.com/wp-content/uploads/2026/04/Generated-Image-April-03-2026-11_38AM-Photoroom.png"
+          src="https://goupwin.com/wp-content/uploads/2026/04/Generated-Image-April-04-2026-1_17PM-Photoroom.png"
           alt=""
           className="mx-auto w-full max-w-sm rounded-2xl"
         />
