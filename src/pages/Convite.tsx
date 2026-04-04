@@ -467,6 +467,15 @@ export default function Convite() {
         </div>
       </section>
 
+      {/* ── IMAGEM COM PERGUNTAS ────────────────────────────────── */}
+      <div className="px-4 pb-8">
+        <img
+          src="https://goupwin.com/wp-content/uploads/2026/04/Generated-Image-April-04-2026-1_17PM-Photoroom.png"
+          alt=""
+          className="mx-auto w-full max-w-sm rounded-2xl"
+        />
+      </div>
+
       {/* ── RESPOSTAS ÀS PERGUNTAS DA IMAGEM ───────────────────── */}
       <section className="px-4 pb-12">
         <div className="mx-auto max-w-2xl">
@@ -529,15 +538,6 @@ export default function Convite() {
           </div>
         </div>
       </section>
-
-      {/* ── IMAGEM PÓS-RESPOSTAS ────────────────────────────────── */}
-      <div className="px-4 pb-8">
-        <img
-          src="https://goupwin.com/wp-content/uploads/2026/04/Generated-Image-April-04-2026-1_17PM-Photoroom.png"
-          alt=""
-          className="mx-auto w-full max-w-sm rounded-2xl"
-        />
-      </div>
 
       {/* ── COMPARATIVO ─────────────────────────────────────────── */}
       <section className="px-4 py-12">
