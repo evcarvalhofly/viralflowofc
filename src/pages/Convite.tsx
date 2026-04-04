@@ -510,6 +510,69 @@ export default function Convite() {
         />
       </div>
 
+      {/* ── RESPOSTAS ÀS PERGUNTAS DA IMAGEM ───────────────────── */}
+      <section className="px-4 pb-12">
+        <div className="mx-auto max-w-2xl">
+          <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-2">Respondendo de uma vez</p>
+          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-8 leading-snug">
+            Suas dúvidas têm{' '}
+            <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">resposta aqui</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[
+              {
+                question: 'Editar é cansativo?',
+                answer: 'Edição automática com IA — você aprova, o ViralFlow faz.',
+                icon: '🎬',
+              },
+              {
+                question: 'Conteúdo Viral ou Apelativo?',
+                answer: 'Roteiro infalível com método viral entregue pela IA.',
+                icon: '🚀',
+              },
+              {
+                question: 'Travado no CapCut?',
+                answer: 'Biblioteca infinita de materiais que supera qualquer editor.',
+                icon: '♾️',
+              },
+              {
+                question: 'Arriscar sozinho?',
+                answer: 'Comunidade ativa de criadores do seu lado a cada passo.',
+                icon: '🤝',
+              },
+            ].map((item) => (
+              <div
+                key={item.question}
+                className="rounded-2xl p-px"
+                style={{ background: 'linear-gradient(135deg, #6b00a8, #c0008a)' }}
+              >
+                <div className="rounded-2xl bg-[#0d0d1a] p-5 h-full flex flex-col gap-2">
+                  <span className="text-2xl">{item.icon}</span>
+                  <p className="text-sm text-white/50 font-medium">{item.question}</p>
+                  <p className="text-white font-bold leading-snug">{item.answer}</p>
+                </div>
+              </div>
+            ))}
+            {/* Card largo — 5º item */}
+            <div
+              className="sm:col-span-2 rounded-2xl p-px"
+              style={{ background: 'linear-gradient(135deg, #6b00a8, #ff2dcc)' }}
+            >
+              <div className="rounded-2xl bg-[#0d0d1a] p-5 flex flex-col sm:flex-row sm:items-center gap-3">
+                <span className="text-3xl">⚡</span>
+                <div>
+                  <p className="text-sm text-white/50 font-medium">Constância sem resultado?</p>
+                  <p className="text-white font-bold leading-snug">
+                    Método + consistência = crescimento real —{' '}
+                    <span className="text-pink-400">não apenas posts no vazio.</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── SOLUÇÃO ─────────────────────────────────────────────── */}
       <section className="relative px-4 py-4 pb-20">
         <div className="pointer-events-none absolute inset-0 -z-10">
