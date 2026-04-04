@@ -566,7 +566,7 @@ export default function Convite() {
       </section>
 
       {/* ── COMPARATIVO ─────────────────────────────────────────── */}
-      <section className="px-4 py-12">
+      <section className="px-4 pt-4 pb-12">
         <div className="mx-auto max-w-3xl">
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10">
             Comparativo
