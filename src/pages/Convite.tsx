@@ -641,7 +641,18 @@ export default function Convite() {
       </section>
 
       {/* ── PROVA SOCIAL ─────────────────────────────────────────── */}
-      <section className="px-4 py-16">
+      <section
+        className="px-4 py-16"
+        style={{
+          background: `
+            radial-gradient(ellipse at 80% 20%, #ff2dcc 0%, transparent 50%),
+            radial-gradient(ellipse at 10% 60%, #6b00a8 0%, transparent 55%),
+            radial-gradient(ellipse at 50% 90%, #3d0080 0%, transparent 50%),
+            radial-gradient(ellipse at 90% 80%, #c0008a 0%, transparent 45%),
+            #0d0020
+          `,
+        }}
+      >
         <div className="mx-auto max-w-xs">
           <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">Resultados reais</p>
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10 leading-snug">
