@@ -607,6 +607,7 @@ export default function Convite() {
         className="px-4 py-12"
         style={{
           background: `
+            linear-gradient(rgba(0,0,0,0.62), rgba(0,0,0,0.62)),
             radial-gradient(ellipse at 100% 50%, #ff2dcc 0%, transparent 55%),
             radial-gradient(ellipse at 0% 80%, #ff3a00 0%, transparent 50%),
             radial-gradient(ellipse at 30% 10%, #7ecfff 0%, transparent 50%),
@@ -645,6 +646,7 @@ export default function Convite() {
         className="px-4 py-16"
         style={{
           background: `
+            linear-gradient(rgba(0,0,0,0.62), rgba(0,0,0,0.62)),
             radial-gradient(ellipse at 80% 20%, #ff2dcc 0%, transparent 50%),
             radial-gradient(ellipse at 10% 60%, #6b00a8 0%, transparent 55%),
             radial-gradient(ellipse at 50% 90%, #3d0080 0%, transparent 50%),
