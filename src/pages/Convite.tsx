@@ -467,52 +467,6 @@ export default function Convite() {
         </div>
       </section>
 
-      {/* ── COMPARATIVO ─────────────────────────────────────────── */}
-      <section className="px-4 py-12">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10">
-            Comparativo
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-red-500/5 border border-red-500/10 p-4">
-              <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                <X className="h-3.5 w-3.5" /> Sem ViralFlow
-              </p>
-              <div className="space-y-2.5">
-                {COMPARE.map(c => (
-                  <p key={c.without} className="text-xs text-zinc-500 flex items-start gap-2">
-                    <span className="text-red-500 shrink-0 mt-0.5">✕</span>
-                    {c.without}
-                  </p>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-4">
-              <p className="text-xs font-bold text-violet-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5" /> Com ViralFlow
-              </p>
-              <div className="space-y-2.5">
-                {COMPARE.map(c => (
-                  <p key={c.with} className="text-xs text-zinc-300 flex items-start gap-2">
-                    <span className="text-violet-400 shrink-0 mt-0.5">✓</span>
-                    {c.with}
-                  </p>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── IMAGEM PÓS-COMPARATIVO ──────────────────────────────── */}
-      <div className="px-4 pb-8">
-        <img
-          src="https://goupwin.com/wp-content/uploads/2026/04/Generated-Image-April-04-2026-1_17PM-Photoroom.png"
-          alt=""
-          className="mx-auto w-full max-w-sm rounded-2xl"
-        />
-      </div>
-
       {/* ── RESPOSTAS ÀS PERGUNTAS DA IMAGEM ───────────────────── */}
       <section className="px-4 pb-12">
         <div className="mx-auto max-w-2xl">
@@ -570,6 +524,52 @@ export default function Convite() {
                     <span className="text-pink-400">não apenas posts no vazio.</span>
                   </p>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── IMAGEM PÓS-RESPOSTAS ────────────────────────────────── */}
+      <div className="px-4 pb-8">
+        <img
+          src="https://goupwin.com/wp-content/uploads/2026/04/Generated-Image-April-04-2026-1_17PM-Photoroom.png"
+          alt=""
+          className="mx-auto w-full max-w-sm rounded-2xl"
+        />
+      </div>
+
+      {/* ── COMPARATIVO ─────────────────────────────────────────── */}
+      <section className="px-4 py-12">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10">
+            Comparativo
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-red-500/5 border border-red-500/10 p-4">
+              <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <X className="h-3.5 w-3.5" /> Sem ViralFlow
+              </p>
+              <div className="space-y-2.5">
+                {COMPARE.map(c => (
+                  <p key={c.without} className="text-xs text-zinc-500 flex items-start gap-2">
+                    <span className="text-red-500 shrink-0 mt-0.5">✕</span>
+                    {c.without}
+                  </p>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-4">
+              <p className="text-xs font-bold text-violet-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <Check className="h-3.5 w-3.5" /> Com ViralFlow
+              </p>
+              <div className="space-y-2.5">
+                {COMPARE.map(c => (
+                  <p key={c.with} className="text-xs text-zinc-300 flex items-start gap-2">
+                    <span className="text-violet-400 shrink-0 mt-0.5">✓</span>
+                    {c.with}
+                  </p>
+                ))}
               </div>
             </div>
           </div>
