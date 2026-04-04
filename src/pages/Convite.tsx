@@ -602,43 +602,6 @@ export default function Convite() {
         </div>
       </section>
 
-      {/* ── SOLUÇÃO ─────────────────────────────────────────────── */}
-      <section className="relative px-4 py-4 pb-20">
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-1/2 top-1/2 h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-600/10 blur-[120px]" />
-        </div>
-        <div className="mx-auto max-w-3xl">
-          <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">O que você tem acesso</p>
-          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-12 leading-snug">
-            8 ferramentas que{' '}
-            <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-              trabalham por você enquanto você cria
-            </span>
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {FEATURES.map(({ icon: Icon, title, desc, highlight }) => (
-              <div
-                key={title}
-                className="group rounded-2xl border border-white/8 bg-white/[0.03] p-5 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all"
-              >
-                <div className="flex items-start gap-4 mb-3">
-                  <div className="h-10 w-10 rounded-xl bg-violet-500/15 flex items-center justify-center shrink-0 group-hover:bg-violet-500/25 transition-colors">
-                    <Icon className="h-5 w-5 text-violet-400" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-white leading-snug">{title}</p>
-                    <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full">
-                      {highlight}
-                    </span>
-                  </div>
-                </div>
-                <p className="text-xs text-zinc-400 leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── PERFIS QUE DESTRAVARAM ───────────────────────────────── */}
       <section className="px-4 py-12">
         <div className="mx-auto max-w-lg">
@@ -697,6 +660,43 @@ export default function Convite() {
               <Star className="h-4 w-4 text-violet-400" />
               Ver mais resultados no Instagram →
             </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SOLUÇÃO ─────────────────────────────────────────────── */}
+      <section className="relative px-4 py-4 pb-20">
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute left-1/2 top-1/2 h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-600/10 blur-[120px]" />
+        </div>
+        <div className="mx-auto max-w-3xl">
+          <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">O que você tem acesso</p>
+          <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-12 leading-snug">
+            8 ferramentas que{' '}
+            <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
+              trabalham por você enquanto você cria
+            </span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {FEATURES.map(({ icon: Icon, title, desc, highlight }) => (
+              <div
+                key={title}
+                className="group rounded-2xl border border-white/8 bg-white/[0.03] p-5 hover:border-violet-500/30 hover:bg-violet-500/5 transition-all"
+              >
+                <div className="flex items-start gap-4 mb-3">
+                  <div className="h-10 w-10 rounded-xl bg-violet-500/15 flex items-center justify-center shrink-0 group-hover:bg-violet-500/25 transition-colors">
+                    <Icon className="h-5 w-5 text-violet-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-white leading-snug">{title}</p>
+                    <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full">
+                      {highlight}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">{desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
