@@ -603,7 +603,18 @@ export default function Convite() {
       </section>
 
       {/* ── PERFIS QUE DESTRAVARAM ───────────────────────────────── */}
-      <section className="px-4 py-12">
+      <section
+        className="px-4 py-12"
+        style={{
+          background: `
+            radial-gradient(ellipse at 100% 50%, #ff2dcc 0%, transparent 55%),
+            radial-gradient(ellipse at 0% 80%, #ff3a00 0%, transparent 50%),
+            radial-gradient(ellipse at 30% 10%, #7ecfff 0%, transparent 50%),
+            radial-gradient(ellipse at 60% 60%, #c0008a 0%, transparent 45%),
+            #1a0030
+          `,
+        }}
+      >
         <div className="mx-auto max-w-xs">
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-8 leading-snug">
             Perfis que destravaram e monetizaram
