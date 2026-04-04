@@ -146,7 +146,7 @@ function Carousel({ images, direction = 'forward' }: { images: string[]; directi
               key={i}
               src={src}
               alt={`Resultado ${i + 1}`}
-              className="w-full shrink-0 h-auto object-contain max-h-[520px]"
+              className="w-full shrink-0 h-auto"
               loading="lazy"
             />
           ))}
