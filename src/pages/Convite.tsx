@@ -604,7 +604,7 @@ export default function Convite() {
 
       {/* ── PERFIS QUE DESTRAVARAM ───────────────────────────────── */}
       <section className="px-4 py-12">
-        <div className="mx-auto max-w-lg">
+        <div className="mx-auto max-w-xs">
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-8 leading-snug">
             Perfis que destravaram e monetizaram
           </h2>
@@ -631,7 +631,7 @@ export default function Convite() {
 
       {/* ── PROVA SOCIAL ─────────────────────────────────────────── */}
       <section className="px-4 py-16">
-        <div className="mx-auto max-w-lg">
+        <div className="mx-auto max-w-xs">
           <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">Resultados reais</p>
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10 leading-snug">
             Criadores que usam o ViralFlow já estão colhendo resultados
