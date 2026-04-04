@@ -616,26 +616,30 @@ export default function Convite() {
           `,
         }}
       >
-        <div className="mx-auto max-w-xs">
+        <div className="mx-auto max-w-xs" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.8)' }}>
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-8 leading-snug">
             Perfis que destravaram e monetizaram
           </h2>
           <div className="space-y-6">
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3 text-center">TikTok</p>
-              <Carousel direction="forward" images={[
-                'https://membros.goupwin.com/wp-content/uploads/2026/02/II1.png',
-                'https://membros.goupwin.com/wp-content/uploads/2026/02/II2.png',
-                'https://membros.goupwin.com/wp-content/uploads/2026/02/II3.png',
-              ]} />
+              <div style={{ filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.7))' }}>
+                <Carousel direction="forward" images={[
+                  'https://membros.goupwin.com/wp-content/uploads/2026/02/II1.png',
+                  'https://membros.goupwin.com/wp-content/uploads/2026/02/II2.png',
+                  'https://membros.goupwin.com/wp-content/uploads/2026/02/II3.png',
+                ]} />
+              </div>
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3 text-center">Instagram</p>
-              <Carousel direction="forward" images={[
-                'https://membros.goupwin.com/wp-content/uploads/2026/02/perfil3.png',
-                'https://membros.goupwin.com/wp-content/uploads/2026/02/perfil2.png',
-                'https://membros.goupwin.com/wp-content/uploads/2026/02/PERFIL1.png',
-              ]} />
+              <div style={{ filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.7))' }}>
+                <Carousel direction="forward" images={[
+                  'https://membros.goupwin.com/wp-content/uploads/2026/02/perfil3.png',
+                  'https://membros.goupwin.com/wp-content/uploads/2026/02/perfil2.png',
+                  'https://membros.goupwin.com/wp-content/uploads/2026/02/PERFIL1.png',
+                ]} />
+              </div>
             </div>
           </div>
         </div>
@@ -655,23 +659,27 @@ export default function Convite() {
           `,
         }}
       >
-        <div className="mx-auto max-w-xs">
+        <div className="mx-auto max-w-xs" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.8)' }}>
           <p className="text-center text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">Resultados reais</p>
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white mb-10 leading-snug">
             Criadores que usam o ViralFlow já estão colhendo resultados
           </h2>
 
           <div className="space-y-6">
-            <Carousel direction="forward" images={[
-              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46-1.jpeg',
-              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46.jpeg',
-              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-3.jpeg',
-            ]} />
-            <Carousel direction="forward" images={[
-              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-2.jpeg',
-              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-1.jpeg',
-              'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45.jpeg',
-            ]} />
+            <div style={{ filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.7))' }}>
+              <Carousel direction="forward" images={[
+                'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46-1.jpeg',
+                'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.46.jpeg',
+                'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-3.jpeg',
+              ]} />
+            </div>
+            <div style={{ filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.7))' }}>
+              <Carousel direction="forward" images={[
+                'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-2.jpeg',
+                'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45-1.jpeg',
+                'https://goupwin.com/wp-content/uploads/2026/04/WhatsApp-Image-2026-04-01-at-23.54.45.jpeg',
+              ]} />
+            </div>
           </div>
 
           <div className="mt-8 text-center">
