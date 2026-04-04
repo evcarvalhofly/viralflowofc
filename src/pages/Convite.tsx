@@ -697,7 +697,7 @@ export default function Convite() {
       </section>
 
       {/* ── SOLUÇÃO ─────────────────────────────────────────────── */}
-      <section className="relative px-4 py-4 pb-20">
+      <section className="relative px-4 pt-12 pb-20">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute left-1/2 top-1/2 h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-600/10 blur-[120px]" />
         </div>
