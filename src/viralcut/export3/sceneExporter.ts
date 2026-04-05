@@ -29,6 +29,7 @@ import { detectBestExportConfig } from './mediaBunnyUtils';
 export interface SceneExportOptions {
   resolution:   '720p' | '1080p';
   fps:          30 | 60;
+  format?:      'mp4' | 'webm';
   projectName?: string;
 }
 
@@ -154,7 +155,12 @@ export async function exportScene(
 
   // ── 4. Detect best codec/container ─────────────────────────
   onProgress(16, 'Detectando suporte de codec…');
-  const config = await detectBestExportConfig(finalWidth, finalHeight, FPS);
+  const autoConfig = await detectBestExportConfig(finalWidth, finalHeight, FPS);
+  const config = opts.format === 'webm'
+    ? { ...autoConfig, videoCodec: 'vp9' as const, audioCodec: 'opus' as const, container: 'webm' as const }
+    : opts.format === 'mp4'
+    ? { ...autoConfig, videoCodec: 'avc' as const, audioCodec: 'aac' as const, container: 'mp4' as const }
+    : autoConfig;
   log('Codec config:', config);
 
   if (signal?.aborted) { renderer.dispose(); throw new Error('Exportação cancelada.'); }

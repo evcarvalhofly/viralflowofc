@@ -893,7 +893,7 @@ const ViralCut = () => {
       const blob = await exportProjectWithMediaBunny(
         project,
         mediaRef.current,
-        { resolution: opts.resolution, fps: opts.fps, projectName: project.name },
+        { resolution: opts.resolution, fps: opts.fps, format: opts.format, projectName: project.name },
         (progress, label) => setExportState({ status: 'encoding', progress, label }),
         abortCtrl.signal
       );

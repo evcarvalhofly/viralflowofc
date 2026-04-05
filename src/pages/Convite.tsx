@@ -302,45 +302,69 @@ export default function Convite() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
   const pricingRef = useRef<HTMLDivElement>(null);
-  const communityVidRef = useRef<HTMLVideoElement>(null);
+  const vidARef = useRef<HTMLVideoElement>(null);
+  const vidBRef = useRef<HTMLVideoElement>(null);
   const [vidReady, setVidReady] = useState(false);
+  const [activeVid, setActiveVid] = useState<'a' | 'b'>('a');
+  const activeVidRef = useRef<'a' | 'b'>('a');
 
   useEffect(() => {
-    const v = communityVidRef.current;
-    if (!v) return;
-    let blobUrl = '';
-    let rafId = 0;
+    const a = vidARef.current;
+    const b = vidBRef.current;
+    if (!a || !b) return;
 
-    const startLoop = () => {
-      const tick = () => {
-        if (v.duration && v.currentTime >= v.duration - 0.1) {
-          v.currentTime = 0;
-          v.play().catch(() => {});
-        }
-        rafId = requestAnimationFrame(tick);
-      };
-      rafId = requestAnimationFrame(tick);
+    // Double-buffer seamless loop:
+    // A plays (visible). When A is ~1s from end, B starts from 0.
+    // When A is ~0.3s from end, display switches to B (already decoded).
+    // Then A resets quietly for the next cycle.
+    const PRESTART = 1.0;   // seconds before end: start inactive video
+    const SWITCH   = 0.3;   // seconds before end: flip display
+
+    const onTimeA = () => {
+      if (!isFinite(a.duration) || a.duration <= 0) return;
+      if (activeVidRef.current !== 'a') return;
+      const left = a.duration - a.currentTime;
+      if (left <= PRESTART && b.paused) {
+        b.currentTime = 0;
+        b.play().catch(() => {});
+      }
+      if (left <= SWITCH) {
+        activeVidRef.current = 'b';
+        setActiveVid('b');
+        // Reset A silently for next handoff
+        setTimeout(() => { a.pause(); a.currentTime = 0; }, 400);
+      }
     };
 
-    fetch('https://goupwin.com/wp-content/uploads/2026/04/1.webm')
-      .then(r => r.blob())
-      .then(blob => {
-        blobUrl = URL.createObjectURL(blob);
-        v.src = blobUrl;
-        v.play().catch(() => {});
-        setVidReady(true);
-        startLoop();
-      })
-      .catch(() => {
-        v.src = 'https://goupwin.com/wp-content/uploads/2026/04/1.webm';
-        v.play().catch(() => {});
-        setVidReady(true);
-        startLoop();
-      });
+    const onTimeB = () => {
+      if (!isFinite(b.duration) || b.duration <= 0) return;
+      if (activeVidRef.current !== 'b') return;
+      const left = b.duration - b.currentTime;
+      if (left <= PRESTART && a.paused) {
+        a.currentTime = 0;
+        a.play().catch(() => {});
+      }
+      if (left <= SWITCH) {
+        activeVidRef.current = 'a';
+        setActiveVid('a');
+        setTimeout(() => { b.pause(); b.currentTime = 0; }, 400);
+      }
+    };
+
+    const onCanPlay = () => setVidReady(true);
+    a.addEventListener('canplay', onCanPlay);
+    a.addEventListener('timeupdate', onTimeA);
+    b.addEventListener('timeupdate', onTimeB);
+
+    // Start A only; B stays paused at 0 (preloaded via preload="auto")
+    a.play().catch(() => {});
 
     return () => {
-      cancelAnimationFrame(rafId);
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      a.removeEventListener('canplay', onCanPlay);
+      a.removeEventListener('timeupdate', onTimeA);
+      b.removeEventListener('timeupdate', onTimeB);
+      a.pause();
+      b.pause();
     };
   }, []);
 
@@ -785,10 +809,18 @@ export default function Convite() {
                 </div>
               )}
               <video
-                ref={communityVidRef}
-                muted playsInline
-                className="absolute inset-0 w-full h-full object-cover sm:object-contain"
-                style={{ opacity: vidReady ? 1 : 0 }}
+                ref={vidARef}
+                src="https://goupwin.com/wp-content/uploads/2026/04/2-1.mp4"
+                muted playsInline preload="auto"
+                className="absolute inset-0 w-full h-full object-cover sm:object-contain transition-opacity duration-200"
+                style={{ opacity: vidReady && activeVid === 'a' ? 1 : 0 }}
+              />
+              <video
+                ref={vidBRef}
+                src="https://goupwin.com/wp-content/uploads/2026/04/2-1.mp4"
+                muted playsInline preload="auto"
+                className="absolute inset-0 w-full h-full object-cover sm:object-contain transition-opacity duration-200"
+                style={{ opacity: vidReady && activeVid === 'b' ? 1 : 0 }}
               />
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
                 <span className="rounded-full border border-violet-400/30 bg-black/60 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-violet-300 whitespace-nowrap">

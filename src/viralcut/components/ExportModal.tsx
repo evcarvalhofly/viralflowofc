@@ -2,7 +2,7 @@
 // ExportModal – Export panel with resolution + fps options
 // ============================================================
 import { useState } from 'react';
-import { X, Download, Film, Gauge } from 'lucide-react';
+import { X, Download, Film, Gauge, FileVideo } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ExportState, Project } from '../types';
 import { cn } from '@/lib/utils';
@@ -28,6 +28,7 @@ type Fps = 30 | 60;
 export function ExportModal({ open, onClose, onExport, exportState, project }: ExportModalProps) {
   const [resolution, setResolution] = useState<Res>('1080p');
   const [fps, setFps] = useState<Fps>(30);
+  const [format, setFormat] = useState<'mp4' | 'webm'>('mp4');
 
   if (!open) return null;
 
@@ -162,8 +163,43 @@ export function ExportModal({ open, onClose, onExport, exportState, project }: E
                 </div>
               </div>
 
+              {/* Format */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <FileVideo className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold text-foreground">Formato</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'mp4',  label: 'MP4',  codec: 'H.264 / AAC', fast: true  },
+                    { value: 'webm', label: 'WebM', codec: 'VP9 / Opus',  fast: false },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setFormat(opt.value)}
+                      className={cn(
+                        'relative rounded-xl border-2 px-3 py-2.5 text-left transition-all',
+                        format === opt.value
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border bg-muted/30 hover:border-border/80'
+                      )}
+                    >
+                      {opt.fast && (
+                        <span className="absolute -top-2 right-2 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                          + rápido
+                        </span>
+                      )}
+                      <p className={cn('text-sm font-bold', format === opt.value ? 'text-primary' : 'text-foreground')}>
+                        {opt.label}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{opt.codec}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <p className="text-[10px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
-                ℹ️ O vídeo será exportado como <strong>MP4</strong> (H.264/AAC) com todas as suas edições aplicadas (cortes, velocidade, filtros).
+                ℹ️ Todas as edições serão aplicadas (cortes, velocidade, filtros).
               </p>
             </>
           )}
@@ -174,7 +210,7 @@ export function ExportModal({ open, onClose, onExport, exportState, project }: E
           <div className="px-5 pb-5">
             <Button
               className="w-full gradient-viral text-white border-0 gap-2 h-11"
-              onClick={() => onExport({ resolution, fps, format: 'webm' })}
+              onClick={() => onExport({ resolution, fps, format })}
             >
               <Download className="h-4 w-4" />
               Exportar {resolution} · {fps}fps
