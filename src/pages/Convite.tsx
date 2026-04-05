@@ -302,69 +302,57 @@ export default function Convite() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
   const pricingRef = useRef<HTMLDivElement>(null);
-  const vidARef = useRef<HTMLVideoElement>(null);
-  const vidBRef = useRef<HTMLVideoElement>(null);
+  const communityVidRef = useRef<HTMLVideoElement>(null);
   const [vidReady, setVidReady] = useState(false);
-  const [activeVid, setActiveVid] = useState<'a' | 'b'>('a');
-  const activeVidRef = useRef<'a' | 'b'>('a');
+  const [dlProgress, setDlProgress] = useState(0); // 0-100, -1 = done/hidden
 
   useEffect(() => {
-    const a = vidARef.current;
-    const b = vidBRef.current;
-    if (!a || !b) return;
+    const v = communityVidRef.current;
+    if (!v) return;
 
-    // Double-buffer seamless loop:
-    // A plays (visible). When A is ~1s from end, B starts from 0.
-    // When A is ~0.3s from end, display switches to B (already decoded).
-    // Then A resets quietly for the next cycle.
-    const PRESTART = 1.0;   // seconds before end: start inactive video
-    const SWITCH   = 0.3;   // seconds before end: flip display
+    const SRC = 'https://goupwin.com/wp-content/uploads/2026/04/2-1.mp4';
+    let blobUrl = '';
 
-    const onTimeA = () => {
-      if (!isFinite(a.duration) || a.duration <= 0) return;
-      if (activeVidRef.current !== 'a') return;
-      const left = a.duration - a.currentTime;
-      if (left <= PRESTART && b.paused) {
-        b.currentTime = 0;
-        b.play().catch(() => {});
-      }
-      if (left <= SWITCH) {
-        activeVidRef.current = 'b';
-        setActiveVid('b');
-        // Reset A silently for next handoff
-        setTimeout(() => { a.pause(); a.currentTime = 0; }, 400);
-      }
-    };
+    // Start playing immediately so user sees something
+    v.play().catch(() => {});
+    v.addEventListener('canplay', () => setVidReady(true), { once: true });
 
-    const onTimeB = () => {
-      if (!isFinite(b.duration) || b.duration <= 0) return;
-      if (activeVidRef.current !== 'b') return;
-      const left = b.duration - b.currentTime;
-      if (left <= PRESTART && a.paused) {
-        a.currentTime = 0;
-        a.play().catch(() => {});
-      }
-      if (left <= SWITCH) {
-        activeVidRef.current = 'a';
-        setActiveVid('a');
-        setTimeout(() => { b.pause(); b.currentTime = 0; }, 400);
-      }
-    };
+    // Fetch entire video as Blob → loop from memory (no seek lag, no network on loop)
+    fetch(SRC)
+      .then(res => {
+        if (!res.ok || !res.body) throw new Error('fetch failed');
+        const total = Number(res.headers.get('content-length') ?? 0);
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
 
-    const onCanPlay = () => setVidReady(true);
-    a.addEventListener('canplay', onCanPlay);
-    a.addEventListener('timeupdate', onTimeA);
-    b.addEventListener('timeupdate', onTimeB);
+        const pump = (): Promise<Blob> =>
+          reader.read().then(({ done, value }) => {
+            if (done) return new Blob(chunks, { type: 'video/mp4' });
+            chunks.push(value!);
+            received += value!.byteLength;
+            if (total > 0) setDlProgress(Math.round((received / total) * 100));
+            return pump();
+          });
 
-    // Start A only; B stays paused at 0 (preloaded via preload="auto")
-    a.play().catch(() => {});
+        return pump();
+      })
+      .then(blob => {
+        blobUrl = URL.createObjectURL(blob);
+        const t = v.currentTime;
+        v.src = blobUrl;
+        v.currentTime = t;
+        v.play().catch(() => {});
+        setDlProgress(-1); // hide progress
+      })
+      .catch(() => {
+        // CORS blocked or network error — native loop from CDN (best-effort)
+        setDlProgress(-1);
+      });
 
     return () => {
-      a.removeEventListener('canplay', onCanPlay);
-      a.removeEventListener('timeupdate', onTimeA);
-      b.removeEventListener('timeupdate', onTimeB);
-      a.pause();
-      b.pause();
+      v.pause();
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, []);
 
@@ -809,19 +797,20 @@ export default function Convite() {
                 </div>
               )}
               <video
-                ref={vidARef}
+                ref={communityVidRef}
                 src="https://goupwin.com/wp-content/uploads/2026/04/2-1.mp4"
-                muted playsInline preload="auto"
-                className="absolute inset-0 w-full h-full object-cover sm:object-contain transition-opacity duration-200"
-                style={{ opacity: vidReady && activeVid === 'a' ? 1 : 0 }}
+                loop muted playsInline preload="auto"
+                className="absolute inset-0 w-full h-full object-cover sm:object-contain"
+                style={{ opacity: vidReady ? 1 : 0 }}
               />
-              <video
-                ref={vidBRef}
-                src="https://goupwin.com/wp-content/uploads/2026/04/2-1.mp4"
-                muted playsInline preload="auto"
-                className="absolute inset-0 w-full h-full object-cover sm:object-contain transition-opacity duration-200"
-                style={{ opacity: vidReady && activeVid === 'b' ? 1 : 0 }}
-              />
+              {dlProgress >= 0 && dlProgress < 100 && vidReady && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-black/40">
+                  <div
+                    className="h-full bg-violet-400 transition-all duration-300"
+                    style={{ width: `${dlProgress}%` }}
+                  />
+                </div>
+              )}
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
                 <span className="rounded-full border border-violet-400/30 bg-black/60 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-violet-300 whitespace-nowrap">
                   Cada prédio é um criador · Cada carro = 1 usuário online
