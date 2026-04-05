@@ -302,6 +302,47 @@ export default function Convite() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
   const pricingRef = useRef<HTMLDivElement>(null);
+  const communityVidRef = useRef<HTMLVideoElement>(null);
+  const [vidReady, setVidReady] = useState(false);
+
+  useEffect(() => {
+    const v = communityVidRef.current;
+    if (!v) return;
+    let blobUrl = '';
+    let rafId = 0;
+
+    const startLoop = () => {
+      const tick = () => {
+        if (v.duration && v.currentTime >= v.duration - 0.1) {
+          v.currentTime = 0;
+          v.play().catch(() => {});
+        }
+        rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+    };
+
+    fetch('https://goupwin.com/wp-content/uploads/2026/04/1.webm')
+      .then(r => r.blob())
+      .then(blob => {
+        blobUrl = URL.createObjectURL(blob);
+        v.src = blobUrl;
+        v.play().catch(() => {});
+        setVidReady(true);
+        startLoop();
+      })
+      .catch(() => {
+        v.src = 'https://goupwin.com/wp-content/uploads/2026/04/1.webm';
+        v.play().catch(() => {});
+        setVidReady(true);
+        startLoop();
+      });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, []);
 
   useEffect(() => {
     const onScroll = () => {
@@ -734,24 +775,23 @@ export default function Convite() {
       </section>
 
       {/* ── COMUNIDADE DESTAQUE ──────────────────────────────────── */}
-      <section className="px-4 py-6 bg-gradient-to-b from-transparent via-violet-950/20 to-transparent">
-        <div className="mx-auto max-w-3xl">
-          <div className="overflow-hidden rounded-3xl border border-violet-500/20 bg-[#0f0f13]">
-            <div className="relative flex h-64 sm:h-80 items-center justify-center bg-gradient-to-br from-violet-950 via-purple-950/60 to-slate-900">
-              <div className="absolute inset-0 flex items-end justify-around px-8 pb-0 opacity-20">
-                {[28,18,42,22,36,16,30,24,38,20,44,14,26,40,18,32].map((h, i) => (
-                  <div key={i} className="flex-1 rounded-t bg-violet-400 mx-px" style={{ height: `${h * 2.5}px` }} />
-                ))}
-              </div>
-              {/* Carros / pontos online */}
-              <div className="absolute inset-x-0 bottom-12 flex justify-around">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className={`h-2 w-4 rounded-full bg-yellow-400 opacity-${i % 2 === 0 ? '80' : '40'}`} />
-                ))}
-              </div>
-              <div className="relative z-10 flex flex-col items-center gap-3 text-center px-6">
-                <span className="text-6xl">🏙️</span>
-                <span className="rounded-full border border-violet-400/30 bg-violet-500/20 px-4 py-1.5 text-xs font-semibold text-violet-300">
+      <section className="sm:px-4 py-6 bg-gradient-to-b from-transparent via-violet-950/20 to-transparent">
+        <div className="sm:mx-auto sm:max-w-3xl">
+          <div className="overflow-hidden sm:rounded-3xl sm:border border-violet-500/20 bg-[#0f0f13]">
+            <div className="relative overflow-hidden bg-black h-72 sm:h-[420px]">
+              {!vidReady && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black">
+                  <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+              <video
+                ref={communityVidRef}
+                muted playsInline
+                className="absolute inset-0 w-full h-full object-cover sm:object-contain"
+                style={{ opacity: vidReady ? 1 : 0 }}
+              />
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+                <span className="rounded-full border border-violet-400/30 bg-black/60 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-violet-300 whitespace-nowrap">
                   Cada prédio é um criador · Cada carro = 1 usuário online
                 </span>
               </div>
