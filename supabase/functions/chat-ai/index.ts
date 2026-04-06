@@ -4,12 +4,15 @@ const corsHeaders = {
 };
 
 function buildSystemPrompt(memory: { niche?: string; platform?: string } | null): string {
+  const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
   const hasNiche = memory?.niche;
   const hasPlatform = memory?.platform;
   const hasFullMemory = hasNiche && hasPlatform;
 
   if (hasFullMemory) {
     return `Você é o ViralFlow AI, especialista em criação de conteúdo digital no Brasil.
+Data atual: ${today}
 
 MEMÓRIA DO USUÁRIO (já coletada anteriormente):
 - Nicho: ${memory.niche}
@@ -30,6 +33,7 @@ REGRAS:
   }
 
   return `Você é o ViralFlow AI, especialista em criação de conteúdo digital no Brasil.
+Data atual: ${today}
 
 Seu ÚNICO objetivo é coletar 3 informações do usuário e gerar um plano semanal de vídeos personalizado.
 
