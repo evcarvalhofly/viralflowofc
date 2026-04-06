@@ -181,11 +181,11 @@ const Home = () => {
                 {/* Icon */}
                 <div
                   className={cn(
-                    "mb-4 flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-xl bg-gradient-to-br text-white text-xl md:text-2xl transition-transform duration-300 group-hover:scale-110",
+                    "mb-4 flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-xl bg-gradient-to-br text-white transition-transform duration-300 group-hover:scale-110",
                     mod.gradient
                   )}
                 >
-                  {mod.emoji}
+                  <Icon className="h-6 w-6 md:h-7 md:w-7" />
                 </div>
 
                 {/* Text */}
