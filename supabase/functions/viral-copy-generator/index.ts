@@ -17,9 +17,37 @@ Deno.serve(async (req: Request) => {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY não configurada.");
 
-    const now = new Date();
-    const today = `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}`;
-    const prompt = `Você é um Deus da viralização nas redes sociais (TikTok, Reels, Shorts) atuando no Brasil.\nData atual: ${today}. Use o ano correto ao mencionar datas em títulos e descrições.\n\nBaseado na seguinte descrição ou narração de um vídeo:\n"""\n${text}\n"""\n\nGere 3 textos criativos, curtos e projetados especificamente para EXPLODIR de acessos, curtidas, comentários e compartilhamentos.\nO formato de saída DEVE SER estritamente um JSON com a seguinte estrutura, sem markdown extra:\n\n{\n  "titulo": "string — Título viral extravagante e chamativo, com emojis.",\n  "descricao": "string — Descrição curta e engajadora para impulsionar o algoritmo, com hashtags táticas.",\n  "copy": "string — Copy/legenda direta focada 100% em induzir comentários/compartilhamentos, com uma CTA irresistível no final."\n}`;
+    const year = new Date().getFullYear();
+    const prompt = `Você é um estrategista de conteúdo viral especializado em TikTok, Instagram Reels e YouTube Shorts no Brasil. Ano atual: ${year}.
+
+A partir da descrição do vídeo abaixo, gere copy viral de alto impacto aplicando as melhores práticas de viralização:
+
+DESCRIÇÃO DO VÍDEO:
+"""
+${text}
+"""
+
+METODOLOGIA QUE VOCÊ DEVE APLICAR:
+1. HOOK (primeiros 1-2 segundos): Use uma das fórmulas comprovadas:
+   - Curiosidade: "Você não vai acreditar no que aconteceu quando..."
+   - Contrário: "Todo mundo erra nisso, mas poucos admitem..."
+   - Promessa de valor: "Depois disso, você nunca mais vai..."
+   - Choque/surpresa: fato inesperado ou virada que prende atenção
+
+2. CONTEÚDO: Adapte o tema central do vídeo para criar conexão emocional (humor, identificação, aprendizado, polêmica saudável)
+
+3. CTA IRRESISTÍVEL: Induza comentários ("Comente se você já passou por isso"), compartilhamentos ("Manda pra quem precisa ver") ou salvamentos ("Salva pra usar depois")
+
+4. HASHTAGS: Mix estratégico — 1-2 hashtags de nicho específico + 1-2 hashtags amplas de tendência
+
+Gere o JSON abaixo. Use o ano ${year} se mencionar datas. Responda APENAS com o JSON, sem markdown:
+
+{
+  "hook": "string — Frase de abertura explosiva para os primeiros segundos do vídeo (máx 15 palavras)",
+  "titulo": "string — Título/legenda principal viral com emojis estratégicos (máx 100 caracteres)",
+  "descricao": "string — Descrição completa otimizada para algoritmo com hashtags táticas (2-4 linhas)",
+  "copy": "string — Copy alternativa mais curta e direta com CTA forte no final"
+}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

@@ -19,6 +19,7 @@ declare global {
 }
 
 interface ViralResult {
+  hook: string;
   titulo: string;
   descricao: string;
   copy: string;
@@ -286,25 +287,34 @@ const GameOver = () => {
             </h2>
             
             <div className="grid gap-4">
-              <ResultCard 
-                title="Título Viral"
+              {result.hook && (
+                <ResultCard
+                  title="Hook de Abertura (primeiros 2s)"
+                  content={result.hook}
+                  icon={Zap}
+                  objKey="hook"
+                />
+              )}
+
+              <ResultCard
+                title="Título / Legenda Principal"
                 content={result.titulo}
-                icon={Zap} 
-                objKey="titulo" 
+                icon={Sparkles}
+                objKey="titulo"
               />
-              
-              <ResultCard 
-                title="Descrição Estratégica"
+
+              <ResultCard
+                title="Descrição + Hashtags"
                 content={result.descricao}
-                icon={Type} 
-                objKey="descricao" 
+                icon={Type}
+                objKey="descricao"
               />
-              
-              <ResultCard 
-                title="Copy Focada em Comentários"
+
+              <ResultCard
+                title="Copy Alternativa com CTA"
                 content={result.copy}
-                icon={Sparkles} 
-                objKey="copy" 
+                icon={CheckCircle2}
+                objKey="copy"
               />
             </div>
           </div>
