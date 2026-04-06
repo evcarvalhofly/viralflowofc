@@ -4,7 +4,8 @@ const corsHeaders = {
 };
 
 function buildSystemPrompt(memory: { niche?: string; platform?: string } | null): string {
-  const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const now = new Date();
+  const today = `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}`;
 
   const hasNiche = memory?.niche;
   const hasPlatform = memory?.platform;

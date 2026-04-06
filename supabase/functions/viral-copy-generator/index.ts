@@ -17,7 +17,8 @@ Deno.serve(async (req: Request) => {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY não configurada.");
 
-    const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const now = new Date();
+    const today = `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}`;
     const prompt = `Você é um Deus da viralização nas redes sociais (TikTok, Reels, Shorts) atuando no Brasil.\nData atual: ${today}. Use o ano correto ao mencionar datas em títulos e descrições.\n\nBaseado na seguinte descrição ou narração de um vídeo:\n"""\n${text}\n"""\n\nGere 3 textos criativos, curtos e projetados especificamente para EXPLODIR de acessos, curtidas, comentários e compartilhamentos.\nO formato de saída DEVE SER estritamente um JSON com a seguinte estrutura, sem markdown extra:\n\n{\n  "titulo": "string — Título viral extravagante e chamativo, com emojis.",\n  "descricao": "string — Descrição curta e engajadora para impulsionar o algoritmo, com hashtags táticas.",\n  "copy": "string — Copy/legenda direta focada 100% em induzir comentários/compartilhamentos, com uma CTA irresistível no final."\n}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
