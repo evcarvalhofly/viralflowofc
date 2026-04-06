@@ -147,12 +147,16 @@ const GameOver = () => {
       const { data, error } = await supabase.functions.invoke("viral-copy-generator", {
         body: { text: text.trim() },
       });
-      
-      if (error) throw new Error(error.message);
+
+      if (error) {
+        console.error("[GameOver] Supabase error:", error);
+        throw new Error(error.message + (error.context ? ` | ${JSON.stringify(error.context)}` : ''));
+      }
       if (!data.success) throw new Error(data.error || "Erro ao gerar copy viral.");
-      
+
       setResult(data.data);
     } catch (err: any) {
+      console.error("[GameOver] catch:", err);
       toast({ title: "Erro ao gerar", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
