@@ -302,57 +302,64 @@ export default function Convite() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
   const pricingRef = useRef<HTMLDivElement>(null);
-  const communityVidRef = useRef<HTMLVideoElement>(null);
+  const vidARef = useRef<HTMLVideoElement>(null);
+  const vidBRef = useRef<HTMLVideoElement>(null);
   const [vidReady, setVidReady] = useState(false);
-  const [dlProgress, setDlProgress] = useState(0); // 0-100, -1 = done/hidden
 
   useEffect(() => {
-    const v = communityVidRef.current;
-    if (!v) return;
+    const SRC = 'https://dzgotqyikomtapcgdgff.supabase.co/storage/v1/object/public/assets/community.mp4';
+    const vA = vidARef.current!;
+    const vB = vidBRef.current!;
+    let rafId = 0;
+    let active = vA;
+    let passive = vB;
+    let prepared = false;
 
-    const SRC = 'https://goupwin.com/wp-content/uploads/2026/04/2-1.mp4';
-    let blobUrl = '';
+    // Both videos load the same src simultaneously — passive buffers while active plays
+    vA.src = SRC;
+    vB.src = SRC;
+    vA.style.opacity = '0';
+    vB.style.opacity = '0';
 
-    // Start playing immediately so user sees something
-    v.play().catch(() => {});
-    v.addEventListener('canplay', () => setVidReady(true), { once: true });
+    vA.addEventListener('canplay', () => {
+      setVidReady(true);
+      vA.style.opacity = '1';
+      vA.play().catch(() => {});
+    }, { once: true });
 
-    // Fetch entire video as Blob → loop from memory (no seek lag, no network on loop)
-    fetch(SRC)
-      .then(res => {
-        if (!res.ok || !res.body) throw new Error('fetch failed');
-        const total = Number(res.headers.get('content-length') ?? 0);
-        const reader = res.body.getReader();
-        const chunks: Uint8Array[] = [];
-        let received = 0;
+    const tick = () => {
+      const dur = active.duration;
+      if (dur && !isNaN(dur)) {
+        const left = dur - active.currentTime;
 
-        const pump = (): Promise<Blob> =>
-          reader.read().then(({ done, value }) => {
-            if (done) return new Blob(chunks, { type: 'video/mp4' });
-            chunks.push(value!);
-            received += value!.byteLength;
-            if (total > 0) setDlProgress(Math.round((received / total) * 100));
-            return pump();
-          });
+        // 2s before end: start passive from 0 so it's already decoded when we switch
+        if (left <= 2 && !prepared) {
+          prepared = true;
+          passive.currentTime = 0;
+          passive.play().catch(() => {});
+        }
 
-        return pump();
-      })
-      .then(blob => {
-        blobUrl = URL.createObjectURL(blob);
-        const t = v.currentTime;
-        v.src = blobUrl;
-        v.currentTime = t;
-        v.play().catch(() => {});
-        setDlProgress(-1); // hide progress
-      })
-      .catch(() => {
-        // CORS blocked or network error — native loop from CDN (best-effort)
-        setDlProgress(-1);
-      });
+        // Switch at 0.08s left — passive is already playing, swap opacity via DOM only
+        if (left <= 0.08 && prepared) {
+          active.style.opacity = '0';
+          passive.style.opacity = '1';
+          active.pause();
+          active.currentTime = 0;
+          const tmp = active;
+          active = passive;
+          passive = tmp;
+          prepared = false;
+        }
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
 
     return () => {
-      v.pause();
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      cancelAnimationFrame(rafId);
+      vA.pause();
+      vB.pause();
     };
   }, []);
 
@@ -797,25 +804,20 @@ export default function Convite() {
                 </div>
               )}
               <video
-                ref={communityVidRef}
-                src="https://goupwin.com/wp-content/uploads/2026/04/2-1.mp4"
-                loop muted playsInline preload="auto"
+                ref={vidARef}
+                muted playsInline preload="auto"
                 className="absolute inset-0 w-full h-full object-cover sm:object-contain"
-                style={{ opacity: vidReady ? 1 : 0 }}
               />
-              {dlProgress >= 0 && dlProgress < 100 && vidReady && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-black/40">
-                  <div
-                    className="h-full bg-violet-400 transition-all duration-300"
-                    style={{ width: `${dlProgress}%` }}
-                  />
-                </div>
-              )}
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
-                <span className="rounded-full border border-violet-400/30 bg-black/60 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-violet-300 whitespace-nowrap">
-                  Cada prédio é um criador · Cada carro = 1 usuário online
-                </span>
-              </div>
+              <video
+                ref={vidBRef}
+                muted playsInline preload="auto"
+                className="absolute inset-0 w-full h-full object-cover sm:object-contain"
+              />
+            </div>
+            <div className="flex justify-center px-4 pt-4">
+              <span className="rounded-full border border-violet-400/30 bg-black/60 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-violet-300 whitespace-nowrap">
+                Cada prédio é um criador · Cada carro = 1 usuário online
+              </span>
             </div>
             <div className="p-6 sm:p-8 text-center">
               <h2 className="text-xl sm:text-2xl font-extrabold text-white leading-snug">
