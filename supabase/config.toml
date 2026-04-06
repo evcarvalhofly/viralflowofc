@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.mp-webhook]
 verify_jwt = false
+
+[functions.viral-copy-generator]
+verify_jwt = false
