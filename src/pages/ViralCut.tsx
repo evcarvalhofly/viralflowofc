@@ -893,7 +893,7 @@ const ViralCut = () => {
       const blob = await exportProjectWithMediaBunny(
         project,
         mediaRef.current,
-        { resolution: opts.resolution, fps: opts.fps, format: opts.format, projectName: project.name },
+        { resolution: opts.resolution, fps: opts.fps, format: opts.format, quality: opts.quality, projectName: project.name },
         (progress, label) => setExportState({ status: 'encoding', progress, label }),
         abortCtrl.signal
       );
@@ -984,9 +984,8 @@ const ViralCut = () => {
             <h2 className="text-xl font-bold text-foreground mb-1">Editor de vídeos curtos</h2>
             <p className="text-sm text-muted-foreground">Recomendamos edição em vídeos até no máximo 1 minuto</p>
           </div>
-          <button
-            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 hover:border-primary/60 transition-all px-5 py-4"
-            onClick={() => importRef.current?.click()}
+          <label htmlFor="vc-import"
+            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 hover:border-primary/60 transition-all px-5 py-4 cursor-pointer"
           >
             <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
               <Upload className="h-5 w-5 text-primary" />
@@ -995,10 +994,9 @@ const ViralCut = () => {
               <p className="text-sm font-semibold text-foreground">+ Adicione seu vídeo ou imagem</p>
               <p className="text-xs text-muted-foreground mt-0.5">Edição manual completa</p>
             </div>
-          </button>
-          <button
-            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/60 transition-all px-5 py-4"
-            onClick={() => autoCutImportRef.current?.click()}
+          </label>
+          <label htmlFor="vc-autocut"
+            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/60 transition-all px-5 py-4 cursor-pointer"
           >
             <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
               <Wand2 className="h-5 w-5 text-amber-500" />
@@ -1007,10 +1005,9 @@ const ViralCut = () => {
               <p className="text-sm font-semibold text-foreground">+ Cortes Automáticos</p>
               <p className="text-xs text-muted-foreground mt-0.5">Remove silêncios e pausas do vídeo</p>
             </div>
-          </button>
-          <button
-            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-violet-500/40 bg-violet-500/5 hover:bg-violet-500/10 hover:border-violet-500/60 transition-all px-5 py-4"
-            onClick={() => subtitleImportRef.current?.click()}
+          </label>
+          <label htmlFor="vc-subtitle"
+            className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-violet-500/40 bg-violet-500/5 hover:bg-violet-500/10 hover:border-violet-500/60 transition-all px-5 py-4 cursor-pointer"
           >
             <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center shrink-0">
               <Captions className="h-5 w-5 text-violet-400" />
@@ -1019,13 +1016,13 @@ const ViralCut = () => {
               <p className="text-sm font-semibold text-foreground">+ Legendas Automáticas</p>
               <p className="text-xs text-muted-foreground mt-0.5">Gerado por IA com Whisper</p>
             </div>
-          </button>
+          </label>
         </div>
-        <input ref={importRef} type="file" accept="video/*,audio/*,image/*" multiple className="hidden"
+        <input id="vc-import" ref={importRef} type="file" accept="video/*,image/*" className="hidden"
           onChange={(e) => e.target.files && handleImport(e.target.files)} />
-        <input ref={autoCutImportRef} type="file" accept="video/*" className="hidden"
+        <input id="vc-autocut" ref={autoCutImportRef} type="file" accept="video/*" className="hidden"
           onChange={(e) => e.target.files && handleAutoCutImport(e.target.files)} />
-        <input ref={subtitleImportRef} type="file" accept="video/*" className="hidden"
+        <input id="vc-subtitle" ref={subtitleImportRef} type="file" accept="video/*" className="hidden"
           onChange={async (e) => {
             if (e.target.files) {
               await handleImport(e.target.files);

@@ -80,12 +80,14 @@ export function getExportDimensions(
   return is1080 ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
 }
 
-export function getVideoBitrate(width: number, height: number, fps: number): number {
+export function getVideoBitrate(width: number, height: number, fps: number, quality: 'low' | 'medium' | 'high' = 'medium'): number {
   const pixels = width * height;
-  // Short social-media clips — slightly lower CBR still looks great
-  if (pixels >= 1920 * 1080) return fps >= 60 ? 10_000_000 : 6_000_000;
-  if (pixels >= 1280 * 720)  return fps >= 60 ? 7_000_000  : 4_000_000;
-  return 2_500_000;
+  const multiplier = quality === 'low' ? 0.45 : quality === 'high' ? 1.8 : 1.0;
+  let base: number;
+  if (pixels >= 1920 * 1080) base = fps >= 60 ? 10_000_000 : 6_000_000;
+  else if (pixels >= 1280 * 720) base = fps >= 60 ? 7_000_000 : 4_000_000;
+  else base = 2_500_000;
+  return Math.round(base * multiplier);
 }
 
 /**
@@ -96,9 +98,10 @@ export function getVideoBitrate(width: number, height: number, fps: number): num
 export async function detectBestExportConfig(
   width: number,
   height: number,
-  fps: number
+  fps: number,
+  quality: 'low' | 'medium' | 'high' = 'medium'
 ): Promise<ExportConfig> {
-  const videoBitrate = getVideoBitrate(width, height, fps);
+  const videoBitrate = getVideoBitrate(width, height, fps, quality);
 
   // Try AVC / H.264
   if (typeof VideoEncoder !== 'undefined') {

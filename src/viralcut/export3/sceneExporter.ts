@@ -30,6 +30,7 @@ export interface SceneExportOptions {
   resolution:   '720p' | '1080p';
   fps:          30 | 60;
   format?:      'mp4' | 'webm';
+  quality?:     'low' | 'medium' | 'high';
   projectName?: string;
 }
 
@@ -155,7 +156,7 @@ export async function exportScene(
 
   // ── 4. Detect best codec/container ─────────────────────────
   onProgress(16, 'Detectando suporte de codec…');
-  const autoConfig = await detectBestExportConfig(finalWidth, finalHeight, FPS);
+  const autoConfig = await detectBestExportConfig(finalWidth, finalHeight, FPS, opts.quality);
   const config = opts.format === 'webm'
     ? { ...autoConfig, videoCodec: 'vp9' as const, audioCodec: 'opus' as const, container: 'webm' as const }
     : opts.format === 'mp4'

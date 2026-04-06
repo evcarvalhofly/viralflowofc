@@ -772,21 +772,21 @@ export default function Convite() {
       {/* ── AFILIADOS DESTAQUE ───────────────────────────────────── */}
       <section className="px-4 py-12">
         <div className="mx-auto max-w-2xl">
-          <div className="rounded-3xl bg-gradient-to-br from-emerald-950/60 via-teal-950/40 to-slate-900/80 border border-emerald-500/20 p-8 text-center">
+          <div className="rounded-3xl bg-gradient-to-br from-emerald-950/60 via-teal-950/40 to-slate-900/80 border border-emerald-500/20 p-6 sm:p-8 text-center">
             <span className="text-4xl mb-4 block">💰</span>
-            <h2 className="text-2xl font-extrabold text-white mb-3">Indique e ganhe 50% por venda</h2>
+            <h2 className="text-xl sm:text-2xl font-extrabold text-white mb-3">Indique e ganhe 50% por venda</h2>
             <p className="text-sm text-zinc-400 max-w-md mx-auto leading-relaxed mb-6">
               O programa de afiliados do ViralFlow paga <strong className="text-emerald-400">50% de comissão</strong> por cada assinante que você indicar. Você acompanha tudo em tempo real no painel de afiliados.
             </p>
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
               {[
                 { v: '50%', l: 'de comissão' },
                 { v: 'R$18,95', l: 'por venda mensal' },
                 { v: 'R$148,50', l: 'por venda anual' },
               ].map(({ v, l }) => (
-                <div key={l} className="bg-white/5 rounded-xl py-3 px-2">
-                  <p className="text-lg font-extrabold text-emerald-400">{v}</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">{l}</p>
+                <div key={l} className="bg-white/5 rounded-xl py-3 px-1 sm:px-2">
+                  <p className="text-base sm:text-lg font-extrabold text-emerald-400 break-words">{v}</p>
+                  <p className="text-[11px] sm:text-xs text-zinc-500 mt-0.5 leading-tight">{l}</p>
                 </div>
               ))}
             </div>
