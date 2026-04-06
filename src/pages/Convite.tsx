@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Zap, Check, ArrowRight, Shield, Flame, Star, X,
   Brain, Calendar, Trophy, Film, Layers, Scissors,
@@ -292,6 +292,15 @@ function PricingCard({
   );
 }
 
+/* ─── Community Video ────────────────────────────────────────── */
+const CommunityVideo = React.memo(() => (
+  <video
+    src="https://goupwin.com/wp-content/uploads/2026/04/CORETO.mp4"
+    autoPlay loop muted playsInline
+    className="absolute inset-0 w-full h-full object-cover sm:object-contain"
+  />
+));
+
 /* ─── Page ───────────────────────────────────────────────────── */
 export default function Convite() {
   const [showCheckout, setShowCheckout] = useState(
@@ -302,66 +311,6 @@ export default function Convite() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
   const pricingRef = useRef<HTMLDivElement>(null);
-  const vidARef = useRef<HTMLVideoElement>(null);
-  const vidBRef = useRef<HTMLVideoElement>(null);
-  const [vidReady, setVidReady] = useState(false);
-
-  useEffect(() => {
-    const SRC = 'https://dzgotqyikomtapcgdgff.supabase.co/storage/v1/object/public/assets/community.mp4';
-    const vA = vidARef.current!;
-    const vB = vidBRef.current!;
-    let rafId = 0;
-    let active = vA;
-    let passive = vB;
-    let prepared = false;
-
-    // Both videos load the same src simultaneously — passive buffers while active plays
-    vA.src = SRC;
-    vB.src = SRC;
-    vA.style.opacity = '0';
-    vB.style.opacity = '0';
-
-    vA.addEventListener('canplay', () => {
-      setVidReady(true);
-      vA.style.opacity = '1';
-      vA.play().catch(() => {});
-    }, { once: true });
-
-    const tick = () => {
-      const dur = active.duration;
-      if (dur && !isNaN(dur)) {
-        const left = dur - active.currentTime;
-
-        // 2s before end: start passive from 0 so it's already decoded when we switch
-        if (left <= 2 && !prepared) {
-          prepared = true;
-          passive.currentTime = 0;
-          passive.play().catch(() => {});
-        }
-
-        // Switch at 0.08s left — passive is already playing, swap opacity via DOM only
-        if (left <= 0.08 && prepared) {
-          active.style.opacity = '0';
-          passive.style.opacity = '1';
-          active.pause();
-          active.currentTime = 0;
-          const tmp = active;
-          active = passive;
-          passive = tmp;
-          prepared = false;
-        }
-      }
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      vA.pause();
-      vB.pause();
-    };
-  }, []);
 
   useEffect(() => {
     const onScroll = () => {
@@ -798,21 +747,7 @@ export default function Convite() {
         <div className="sm:mx-auto sm:max-w-3xl">
           <div className="overflow-hidden sm:rounded-3xl sm:border border-violet-500/20 bg-[#0f0f13]">
             <div className="relative overflow-hidden bg-black h-72 sm:h-[420px]">
-              {!vidReady && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black">
-                  <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-              <video
-                ref={vidARef}
-                muted playsInline preload="auto"
-                className="absolute inset-0 w-full h-full object-cover sm:object-contain"
-              />
-              <video
-                ref={vidBRef}
-                muted playsInline preload="auto"
-                className="absolute inset-0 w-full h-full object-cover sm:object-contain"
-              />
+              <CommunityVideo />
             </div>
             <div className="flex justify-center px-4 pt-4">
               <span className="rounded-full border border-violet-400/30 bg-black/60 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-violet-300 whitespace-nowrap">
