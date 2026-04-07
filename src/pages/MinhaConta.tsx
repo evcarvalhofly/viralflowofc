@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { CheckoutModal } from '@/components/CheckoutModal';
 import {
   CreditCard, CalendarClock, CheckCircle2, AlertTriangle, Clock,
   Mail, User, KeyRound, Loader2, CheckCheck
@@ -17,7 +16,8 @@ export default function MinhaConta() {
     name_last_changed_at: string | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showCheckout, setShowCheckout] = useState(false);
+  const openCheckout = () =>
+    window.dispatchEvent(new CustomEvent('open-checkout', { detail: { plan: 'annual' } }));
 
   // Name change
   const [newName, setNewName] = useState('');
@@ -176,7 +176,7 @@ export default function MinhaConta() {
       {/* Renew / Subscribe button */}
       {user?.email !== 'evcarvalhodev@gmail.com' && (
         <button
-          onClick={() => setShowCheckout(true)}
+          onClick={openCheckout}
           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-sm hover:from-violet-500 hover:to-purple-500 transition-all active:scale-95"
         >
           <CreditCard className="h-4 w-4" />
@@ -260,12 +260,7 @@ export default function MinhaConta() {
         Pagamento 100% seguro · Processado pelo MercadoPago
       </p>
 
-      {showCheckout && (
-        <CheckoutModal
-          onClose={() => setShowCheckout(false)}
-          onSuccess={() => { setShowCheckout(false); fetchProfile(); }}
-        />
-      )}
+
     </div>
   );
 }
