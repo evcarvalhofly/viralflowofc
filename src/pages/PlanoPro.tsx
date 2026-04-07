@@ -1,8 +1,6 @@
 import { useState } from 'react';
 type Plan = 'monthly' | 'annual';
 import { Zap, Check, ArrowRight, Sparkles, Type, Scissors, MessageSquare, BarChart2, Users, Video, Layers, Share2 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { CheckoutModal } from '@/components/CheckoutModal';
 
 const FEATURES = [
   { icon: Scissors,      label: 'ViralCut — Editor de vídeo com IA' },
@@ -17,13 +15,10 @@ const FEATURES = [
 ];
 
 export default function PlanoPro() {
-  const { user } = useAuth();
-  const [showCheckout, setShowCheckout] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<Plan>('monthly');
 
-  const handleSuccess = () => {
-    // Only reload for logged-in users (renewals) — guests are redirected to /parabens by CheckoutModal
-    if (user) window.location.href = '/';
+  const openCheckout = (plan: Plan) => {
+    window.dispatchEvent(new CustomEvent('open-checkout', { detail: { plan, successRedirect: '/' } }));
   };
 
   return (
@@ -105,7 +100,7 @@ export default function PlanoPro() {
           {/* CTA */}
           <div className="px-5 pb-5">
             <button
-              onClick={() => setShowCheckout(true)}
+              onClick={() => openCheckout(selectedPlan)}
               className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold text-sm transition-all shadow-lg shadow-violet-500/30"
             >
               {selectedPlan === 'annual'
@@ -127,13 +122,6 @@ export default function PlanoPro() {
         </p>
       </div>
 
-      {showCheckout && (
-        <CheckoutModal
-          onClose={() => setShowCheckout(false)}
-          onSuccess={handleSuccess}
-          initialPlan={selectedPlan}
-        />
-      )}
     </div>
   );
 }

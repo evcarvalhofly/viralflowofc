@@ -1,10 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Zap, Check, ArrowRight, Shield, Flame, Star, X,
   Brain, Calendar, Trophy, Film, Layers, Scissors,
   Users, ShoppingBag, Handshake, ChevronDown, Play,
 } from 'lucide-react';
-import { CheckoutModal } from '@/components/CheckoutModal';
 
 type Plan = 'monthly' | 'annual';
 
@@ -303,10 +302,6 @@ const CommunityVideo = React.memo(() => (
 
 /* ─── Page ───────────────────────────────────────────────────── */
 export default function Convite() {
-  const [showCheckout, setShowCheckout] = useState(
-    () => sessionStorage.getItem('vf_checkout_open') === '1',
-  );
-  const [checkoutPlan, setCheckoutPlan] = useState<Plan>('annual');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('annual');
   const [scrollProgress, setScrollProgress] = useState(0);
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
@@ -355,20 +350,8 @@ export default function Convite() {
   }, []);
 
   const openCheckout = (plan: Plan) => {
-    setCheckoutPlan(plan);
-    sessionStorage.setItem('vf_checkout_open', '1');
-    setShowCheckout(true);
+    window.dispatchEvent(new CustomEvent('open-checkout', { detail: { plan, successRedirect: '/' } }));
   };
-
-  const closeCheckout = useCallback(() => {
-    sessionStorage.removeItem('vf_checkout_open');
-    setShowCheckout(false);
-  }, []);
-
-  const handleCheckoutSuccess = useCallback(() => {
-    sessionStorage.removeItem('vf_checkout_open');
-    window.location.href = '/auth';
-  }, []);
 
   const scrollToPricing = () =>
     pricingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -900,13 +883,6 @@ export default function Convite() {
         </p>
       </div>
 
-      {showCheckout && (
-        <CheckoutModal
-          onClose={closeCheckout}
-          onSuccess={handleCheckoutSuccess}
-          initialPlan={checkoutPlan}
-        />
-      )}
     </div>
   );
 }

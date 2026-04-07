@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -32,6 +32,7 @@ import Parabens from "./pages/Parabens";
 import ResetPassword from "./pages/ResetPassword";
 import { SubscriptionExpiredWall } from "./components/SubscriptionExpiredWall";
 import PainelGeralAdm from "./pages/PainelGeralAdm";
+import { CheckoutModal } from "./components/CheckoutModal";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,13 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
   const { pathname } = useLocation();
   const [showNotifModal, setShowNotifModal] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(
+    () => sessionStorage.getItem('vf_checkout_open') === '1',
+  );
+  const [checkoutPlan, setCheckoutPlan] = useState<'monthly' | 'annual'>(
+    () => (sessionStorage.getItem('vf_checkout_plan') as 'monthly' | 'annual') || 'annual',
+  );
+  const successRedirectRef = useRef('/');
 
   const BLOCKED_PATHS = ['/planopro', '/convite', '/parabens', '/reset-password'];
 
@@ -51,6 +59,33 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
 
   // Trata retorno do Checkout (?checkout=success/cancel)
   useCheckoutReturn();
+
+  // Abre checkout de qualquer página via CustomEvent
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { plan = 'annual', successRedirect = '/' } = (e as CustomEvent).detail ?? {};
+      sessionStorage.setItem('vf_checkout_open', '1');
+      sessionStorage.setItem('vf_checkout_plan', plan);
+      successRedirectRef.current = successRedirect;
+      setCheckoutPlan(plan);
+      setCheckoutOpen(true);
+    };
+    window.addEventListener('open-checkout', handler);
+    return () => window.removeEventListener('open-checkout', handler);
+  }, []);
+
+  const closeCheckout = useCallback(() => {
+    sessionStorage.removeItem('vf_checkout_open');
+    sessionStorage.removeItem('vf_checkout_plan');
+    setCheckoutOpen(false);
+  }, []);
+
+  const handleCheckoutSuccess = useCallback(() => {
+    sessionStorage.removeItem('vf_checkout_open');
+    sessionStorage.removeItem('vf_checkout_plan');
+    setCheckoutOpen(false);
+    window.location.href = successRedirectRef.current;
+  }, []);
 
   // Mostra modal de permissão de notificações quando usuário logado e permissão não concedida
   useEffect(() => {
@@ -70,6 +105,13 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
         <NotificationPermissionModal onClose={() => setShowNotifModal(false)} />
       )}
       {!BLOCKED_PATHS.includes(pathname) && <PWAInstallPrompt />}
+      {checkoutOpen && (
+        <CheckoutModal
+          onClose={closeCheckout}
+          onSuccess={handleCheckoutSuccess}
+          initialPlan={checkoutPlan}
+        />
+      )}
     </>
   );
 };
