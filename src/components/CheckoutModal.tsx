@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
 import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react';
@@ -34,7 +34,7 @@ interface CheckoutModalProps {
   initialPlan?: Plan;
 }
 
-export function CheckoutModal({ onClose, onSuccess, initialPlan = 'monthly' }: CheckoutModalProps) {
+function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: CheckoutModalProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [plan, setPlan] = useState<Plan>(initialPlan);
@@ -420,3 +420,5 @@ export function CheckoutModal({ onClose, onSuccess, initialPlan = 'monthly' }: C
     </div>
   );
 }
+
+export const CheckoutModal = memo(CheckoutModalInner);

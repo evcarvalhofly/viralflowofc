@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Zap, Check, ArrowRight, Shield, Flame, Star, X,
   Brain, Calendar, Trophy, Film, Layers, Scissors,
@@ -360,10 +360,15 @@ export default function Convite() {
     setShowCheckout(true);
   };
 
-  const closeCheckout = () => {
+  const closeCheckout = useCallback(() => {
     sessionStorage.removeItem('vf_checkout_open');
     setShowCheckout(false);
-  };
+  }, []);
+
+  const handleCheckoutSuccess = useCallback(() => {
+    sessionStorage.removeItem('vf_checkout_open');
+    window.location.href = '/auth';
+  }, []);
 
   const scrollToPricing = () =>
     pricingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -898,10 +903,7 @@ export default function Convite() {
       {showCheckout && (
         <CheckoutModal
           onClose={closeCheckout}
-          onSuccess={() => {
-            sessionStorage.removeItem('vf_checkout_open');
-            window.location.href = '/auth';
-          }}
+          onSuccess={handleCheckoutSuccess}
           initialPlan={checkoutPlan}
         />
       )}
