@@ -376,10 +376,16 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
               ) : MP_PUBLIC_KEY ? (
                 <>
                   {!submitting && !processing && (
-                    <div className="text-xs text-emerald-400 space-y-0.5">
-                      <p>✅ Após a compra permaneça nessa página</p>
-                      <p>✅ Enviaremos a compra no email cadastrado</p>
-                      <p>✅ Verifique também a Caixa de Spam</p>
+                    <div className="space-y-1">
+                      <div className="text-xs text-emerald-400 space-y-0.5">
+                        <p>✅ Após a compra permaneça nessa página</p>
+                        <p>✅ Enviaremos a compra no email cadastrado</p>
+                        <p>✅ Verifique também a Caixa de Spam</p>
+                      </div>
+                      <div className="flex items-start gap-1.5 text-[11px] text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mt-1">
+                        <span className="shrink-0">⚠️</span>
+                        <span>Tenha os dados do cartão em mãos antes de preencher. Trocar de aba ou minimizar o app limpará o formulário por segurança.</span>
+                      </div>
                     </div>
                   )}
                   {submitting || processing ? (

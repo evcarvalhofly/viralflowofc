@@ -42,10 +42,10 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   const { pathname } = useLocation();
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(
-    () => sessionStorage.getItem('vf_checkout_open') === '1',
+    () => localStorage.getItem('vf_checkout_open') === '1',
   );
   const [checkoutPlan, setCheckoutPlan] = useState<'monthly' | 'annual'>(
-    () => (sessionStorage.getItem('vf_checkout_plan') as 'monthly' | 'annual') || 'annual',
+    () => (localStorage.getItem('vf_checkout_plan') as 'monthly' | 'annual') || 'annual',
   );
   const successRedirectRef = useRef('/');
 
@@ -64,8 +64,8 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const handler = (e: Event) => {
       const { plan = 'annual', successRedirect = '/' } = (e as CustomEvent).detail ?? {};
-      sessionStorage.setItem('vf_checkout_open', '1');
-      sessionStorage.setItem('vf_checkout_plan', plan);
+      localStorage.setItem('vf_checkout_open', '1');
+      localStorage.setItem('vf_checkout_plan', plan);
       successRedirectRef.current = successRedirect;
       setCheckoutPlan(plan);
       setCheckoutOpen(true);
@@ -75,14 +75,14 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const closeCheckout = useCallback(() => {
-    sessionStorage.removeItem('vf_checkout_open');
-    sessionStorage.removeItem('vf_checkout_plan');
+    localStorage.removeItem('vf_checkout_open');
+    localStorage.removeItem('vf_checkout_plan');
     setCheckoutOpen(false);
   }, []);
 
   const handleCheckoutSuccess = useCallback(() => {
-    sessionStorage.removeItem('vf_checkout_open');
-    sessionStorage.removeItem('vf_checkout_plan');
+    localStorage.removeItem('vf_checkout_open');
+    localStorage.removeItem('vf_checkout_plan');
     setCheckoutOpen(false);
     window.location.href = successRedirectRef.current;
   }, []);
