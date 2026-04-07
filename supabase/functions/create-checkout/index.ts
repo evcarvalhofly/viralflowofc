@@ -150,6 +150,11 @@ Deno.serve(async (req) => {
           mp_preapproval_id: String(payment.id),
         })
         .eq('id', externalReference);
+
+      // Link to existing account if email matches
+      if (payerEmail) {
+        await activateExistingUser(admin, payerEmail, String(payment.id), plan, DAYS);
+      }
     }
 
     // For PIX, return QR code data
@@ -172,6 +177,24 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+// ── Activate existing user by email ───────────────────────────────────────────
+async function activateExistingUser(admin: any, email: string, paymentId: string, plan: string, days: number) {
+  try {
+    const { data: { users } } = await admin.auth.admin.listUsers();
+    const user = users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+    if (!user) return;
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    await admin.from('profiles').update({
+      subscription_status:     'active',
+      subscription_expires_at: expiresAt,
+      stripe_subscription_id:  paymentId,
+    }).eq('user_id', user.id);
+    console.log('Guest payment linked to existing user:', user.id, '| plan:', plan, '| expires:', expiresAt);
+  } catch (e) {
+    console.error('activateExistingUser error:', e);
+  }
+}
 
 // ── Affiliate commission helper ────────────────────────────────────────────────
 async function processCommission(admin: any, userId: string, paymentId: string, price = 37.90) {
