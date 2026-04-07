@@ -97,8 +97,10 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 
   // Logged-in user
   const userId  = externalRef;
-  // metadata.plan é o primário; fallback por valor (anual sempre > R$150 em prod)
-  const isAnnual = plan === 'annual' || (transactionAmount ?? 0) >= 150;
+  // metadata.plan é o primário; fallback por valor
+  // Produção: anual R$297 >= 150 | teste: 0.10 === anual, 0.08 === mensal
+  const amount = transactionAmount ?? 0;
+  const isAnnual = plan === 'annual' || amount >= 150 || amount === 0.10;
   const days    = isAnnual ? 365 : 30;
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
