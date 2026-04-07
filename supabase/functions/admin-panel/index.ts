@@ -26,12 +26,13 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization') ?? '';
     if (!authHeader) return json({ error: 'Sem autorização' });
 
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
-      global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user: caller }, error: authError } = await userClient.auth.getUser();
+    const { data: { user: caller }, error: authError } = await userClient.auth.getUser(token);
     if (authError || !caller?.email) return json({ error: `Auth falhou: ${authError?.message ?? 'sem usuário'}` });
     if (caller.email !== ADMIN_EMAIL) return json({ error: 'Acesso negado' });
 

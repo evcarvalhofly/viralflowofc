@@ -5,5 +5,5 @@ CREATE POLICY "Admin can moderate any product"
 ON public.products
 FOR UPDATE
 TO authenticated
-USING (auth.email() = 'evcarvalhodev@gmail.com')
-WITH CHECK (auth.email() = 'evcarvalhodev@gmail.com');
+USING ((auth.jwt() ->> 'email') = 'evcarvalhodev@gmail.com')
+WITH CHECK ((auth.jwt() ->> 'email') = 'evcarvalhodev@gmail.com');
