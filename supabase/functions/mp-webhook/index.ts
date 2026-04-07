@@ -177,17 +177,17 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 // ── Activate existing user by email ───────────────────────────────────────────
 async function activateExistingUser(admin: any, email: string, paymentId: string, days: number): Promise<string | null> {
   try {
-    const { data: { user } } = await admin.auth.admin.getUserByEmail(email);
-    if (!user) return null;
+    const { data: userId } = await admin.rpc('get_user_id_by_email', { p_email: email });
+    if (!userId) return null;
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
     await admin.from('profiles').update({
       subscription_status:     'active',
       subscription_expires_at: expiresAt,
       stripe_subscription_id:  paymentId,
       subscription_plan:       days >= 365 ? 'annual' : 'monthly',
-    }).eq('user_id', user.id);
-    console.log('Guest payment linked to existing user:', user.id, '| plan:', days >= 365 ? 'annual' : 'monthly', '| expires:', expiresAt);
-    return user.id;
+    }).eq('user_id', userId);
+    console.log('Guest payment linked to existing user:', userId, '| plan:', days >= 365 ? 'annual' : 'monthly', '| expires:', expiresAt);
+    return userId;
   } catch (e) {
     console.error('activateExistingUser error:', e);
     return null;
@@ -199,7 +199,7 @@ const ADMIN_EMAIL = 'evcarvalhodev@gmail.com';
 
 async function notifySale(admin: any, buyerUserId: string, amount: number, plan: string) {
   try {
-    const { data: { user: adminUser } } = await admin.auth.admin.getUserByEmail(ADMIN_EMAIL);
+    const { data: adminUserId } = await admin.rpc('get_user_id_by_email', { p_email: ADMIN_EMAIL });
 
     const { data: referral } = await admin
       .from('referrals')
@@ -244,9 +244,9 @@ async function notifySale(admin: any, buyerUserId: string, amount: number, plan:
       });
     }
 
-    if (adminUser) {
+    if (adminUserId) {
       rows.push({
-        user_id: adminUser.id,
+        user_id: adminUserId,
         amount,
         net_amount: parseFloat((amount - commissionAmount).toFixed(2)),
         plan,

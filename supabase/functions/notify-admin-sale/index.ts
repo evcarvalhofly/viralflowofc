@@ -23,9 +23,9 @@ Deno.serve(async (req) => {
     const amount = resolvedPlan === 'annual' ? 297.00 : 37.90;
     const planLabel = resolvedPlan === 'annual' ? 'Anual' : 'Mensal';
 
-    const { data: { user: adminUser }, error } = await admin.auth.admin.getUserByEmail(ADMIN_EMAIL);
-    if (error || !adminUser) {
-      console.warn('notify-admin-sale: admin user not found');
+    const { data: adminUserId, error } = await admin.rpc('get_user_id_by_email', { p_email: ADMIN_EMAIL });
+    if (error || !adminUserId) {
+      console.warn('notify-admin-sale: admin user not found', error);
       return new Response(JSON.stringify({ ok: false, reason: 'admin not found' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
     // Insert sale notification (triggers realtime in-app toast)
     await admin.from('sale_notifications').insert({
-      user_id:         adminUser.id,
+      user_id:         adminUserId,
       amount,
       net_amount:      amount,
       plan:            resolvedPlan,
@@ -46,13 +46,13 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
       body: JSON.stringify({
-        user_id: adminUser.id,
+        user_id: adminUserId,
         title: '💰 Nova venda!',
         body: `Plano ${planLabel} · R$${amount.toFixed(2).replace('.', ',')}`,
       }),
     });
 
-    console.log('notify-admin-sale | plan:', resolvedPlan, '| admin:', adminUser.id);
+    console.log('notify-admin-sale | plan:', resolvedPlan, '| admin:', adminUserId);
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
