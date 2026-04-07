@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -20,6 +21,23 @@ async function showBgNotification(title: string, body: string, url: string, tag:
 /** Escuta eventos do Supabase Realtime e mostra notificações em background */
 export const useBackgroundNotifications = () => {
   const { user } = useAuth();
+
+  // Listener para push de aviso recebido pelo Service Worker
+  useEffect(() => {
+    if (!user || !('serviceWorker' in navigator)) return;
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'PUSH_AVISO') return;
+      const d = event.data.data ?? {};
+      toast.info(d.title ?? '📢 Novo aviso', {
+        description: d.body ?? '',
+        duration: 8000,
+      });
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user || !('serviceWorker' in navigator)) return;

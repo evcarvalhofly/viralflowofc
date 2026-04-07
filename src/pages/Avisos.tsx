@@ -102,6 +102,12 @@ const Avisos = () => {
       setContent('');
       removeImage();
       loadAvisos();
+
+      // Envia push para todos os usuários
+      const preview = content.trim().slice(0, 100);
+      supabase.functions.invoke('notify-users-aviso', {
+        body: { title: '📢 Novo aviso ViralFlow', body: preview, url: '/avisos' },
+      }).catch(() => {});
     }
     setSending(false);
   };

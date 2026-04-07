@@ -29,10 +29,11 @@ self.addEventListener('push', (event) => {
         vibrate: [200, 100, 200],
         requireInteraction: false,
       }),
-      // Avisa o app (se estiver aberto) para tocar som + mostrar toast
+      // Avisa o app (se estiver aberto) com tipo da notificação
       self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        const msgType = data.notificationType === 'aviso' ? 'PUSH_AVISO' : 'PUSH_SALE';
         clients.forEach((client) => {
-          client.postMessage({ type: 'PUSH_SALE', data });
+          client.postMessage({ type: msgType, data });
         });
       }),
     ])
