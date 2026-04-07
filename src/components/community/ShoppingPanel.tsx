@@ -31,8 +31,11 @@ interface ShoppingPanelProps {
   onClose: () => void;
 }
 
+const ADMIN_EMAIL = 'evcarvalhodev@gmail.com';
+
 export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
   const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
   const [view, setView] = useState<"list" | "detail" | "sell" | "myproducts">("list");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,9 +154,12 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
   };
 
   const handleDelete = async (id: string) => {
-    const { error } = await db.from("products").update({ status: "inactive" })
-      .eq("id", id).eq("user_id", user!.id);
+    let query = db.from("products").update({ status: "inactive" }).eq("id", id);
+    // Admin pode remover qualquer produto; usuário normal só o próprio
+    if (!isAdmin) query = query.eq("user_id", user!.id);
+    const { error } = await query;
     if (!error) { toast.success("Removido"); fetchMyProducts(); fetchProducts(); }
+    else toast.error("Erro ao remover anúncio");
   };
 
   const memberSince = (dateStr: string) => {
@@ -384,6 +390,15 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
                   className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm hover:opacity-90 transition-opacity"
                 >
                   Tenho interesse 💬
+                </button>
+              )}
+              {isAdmin && selectedProduct && (
+                <button
+                  onClick={() => { handleDelete(selectedProduct.id); setView("list"); }}
+                  className="w-full py-3 rounded-xl bg-destructive/10 text-destructive font-bold text-sm hover:bg-destructive/20 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Remover anúncio (Admin)
                 </button>
               )}
             </div>
