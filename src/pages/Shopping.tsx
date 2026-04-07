@@ -27,8 +27,11 @@ interface SellerProfile {
 
 const CATEGORIES = ["Todos", "Edição", "Design", "Música", "Fotografia", "Roteiro", "Mentoria", "Templates", "Geral"];
 
+const ADMIN_EMAIL = 'evcarvalhodev@gmail.com';
+
 const Shopping = () => {
   const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -167,16 +170,19 @@ const Shopping = () => {
   const handleDeleteProduct = async (id: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = supabase as any;
-    const { error } = await db
-      .from("products")
-      .update({ status: "inactive" })
-      .eq("id", id)
-      .eq("user_id", user!.id);
+    let query = db.from("products").update({ status: "inactive" }).eq("id", id);
+    if (!isAdmin) query = query.eq("user_id", user!.id);
+
+    const { error } = await query;
 
     if (!error) {
       toast.success("Produto removido");
+      setSelectedProduct(null);
+      setSellerProfile(null);
       fetchMyProducts();
       fetchProducts();
+    } else {
+      toast.error("Erro ao remover produto");
     }
   };
 
@@ -495,6 +501,17 @@ const Shopping = () => {
                 >
                   Tenho interesse 💬
                 </button>
+
+                {/* Admin moderation button */}
+                {isAdmin && selectedProduct.user_id !== user!.id && (
+                  <button
+                    className="w-full py-2.5 rounded-xl border border-destructive/50 text-destructive text-sm font-semibold hover:bg-destructive/10 transition-colors flex items-center justify-center gap-2"
+                    onClick={() => handleDeleteProduct(selectedProduct.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remover anúncio (moderação)
+                  </button>
+                )}
               </div>
             </div>
           </div>
