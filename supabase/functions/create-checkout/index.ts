@@ -122,12 +122,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Pre-save plan for logged-in PIX (webhook needs it as fallback) ──────────
-    if (isPix && !isGuest && userId) {
-      await admin.from('profiles').update({ subscription_plan: plan }).eq('user_id', userId);
-      console.log('Pre-saved pending plan for PIX | user:', userId, '| plan:', plan);
-    }
-
     // ── On approval: activate subscription immediately for logged-in user ─────
     if (payment.status === 'approved' && !isGuest) {
       const expiresAt = new Date(Date.now() + DAYS * 24 * 60 * 60 * 1000).toISOString();

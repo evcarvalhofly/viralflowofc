@@ -97,15 +97,8 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 
   // Logged-in user
   const userId  = externalRef;
-
-  // Fallback: read stored plan from profiles (set by create-checkout pre-save for PIX)
-  let storedPlan: string | null = null;
-  if (plan !== 'annual') {
-    const { data: prof } = await admin.from('profiles').select('subscription_plan').eq('user_id', userId).maybeSingle();
-    storedPlan = prof?.subscription_plan ?? null;
-  }
-
-  const isAnnual = plan === 'annual' || storedPlan === 'annual' || (transactionAmount ?? 0) >= 200;
+  // metadata.plan é o primário; fallback por valor (anual sempre > R$150 em prod)
+  const isAnnual = plan === 'annual' || (transactionAmount ?? 0) >= 150;
   const days    = isAnnual ? 365 : 30;
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
