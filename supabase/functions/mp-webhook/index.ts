@@ -87,7 +87,8 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 
     // Link to existing account if email matches
     if (guestSession.payer_email) {
-      const isAnnual = plan === 'annual' || (transactionAmount ?? 0) >= 200;
+      const amt = transactionAmount ?? 0;
+      const isAnnual = plan === 'annual' || amt >= 150 || amt === 0.10;
       const days = isAnnual ? 365 : 30;
       const linkedId = await activateExistingUser(admin, guestSession.payer_email, paymentId, days);
       if (linkedId) await notifySale(admin, linkedId, transactionAmount ?? 37.90, isAnnual ? 'annual' : 'monthly');

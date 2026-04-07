@@ -115,6 +115,7 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
       {!BLOCKED_PATHS.includes(pathname) && <PWAInstallPrompt />}
       {checkoutOpen && (
         <CheckoutModal
+          key={checkoutPlan}
           onClose={closeCheckout}
           onSuccess={handleCheckoutSuccess}
           initialPlan={checkoutPlan}
