@@ -25,6 +25,7 @@ import { exportProjectWithMediaBunny } from '@/viralcut/export3/exportProjectWit
 import { useAuth } from '@/contexts/AuthContext';
 
 import { useIsMobile } from '@/hooks/use-mobile';
+import { toast } from 'sonner';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers,
   Upload, Plus, Wand2, X, ZoomIn, ZoomOut, Captions
@@ -307,10 +308,11 @@ const ViralCut = () => {
 
       if (mode === 'layer') {
         // Mobile Camada tab: import directly as overlay layer
+        let layerLimitReached = false;
         updateProject((p) => {
           const videoTracks = p.tracks.filter(t => t.type === 'video');
           if (targetType === 'video' && videoTracks.length >= 3) {
-            alert('Máximo de 2 camadas extras de vídeo atingido para manter a performance de exportação.');
+            layerLimitReached = true;
             return p;
           }
           const dur = duration > 0 ? duration : 5;
@@ -327,6 +329,9 @@ const ViralCut = () => {
           newTrack.items.push(item);
           return { ...p, tracks: [...p.tracks, newTrack] };
         }, { pushHistory: true });
+        if (layerLimitReached) {
+          toast.error('Máximo de 2 camadas extras de vídeo atingido.');
+        }
       } else {
         // mode === 'timeline': add to main timeline track
         // ── Capture project orientation state BEFORE updating ────────
@@ -461,18 +466,19 @@ const ViralCut = () => {
     const mf = media.find((m) => m.id === mediaId);
     if (!mf) return;
 
+    const targetType: Track['type'] = mf.type === 'audio' ? 'audio' : mf.type === 'image' ? 'image' : 'video';
+    let layerLimitReached = false;
+
     updateProject((p) => {
-      const targetType: Track['type'] = mf.type === 'audio' ? 'audio' : mf.type === 'image' ? 'image' : 'video';
-      
       const videoTracks = p.tracks.filter(t => t.type === 'video');
       if (targetType === 'video' && videoTracks.length >= 3) {
-        alert("Máximo de 2 camadas extras de vídeo atingido para manter a performance de exportação.");
-        return p; 
+        layerLimitReached = true;
+        return p;
       }
 
       const dur = mf.duration > 0 ? mf.duration : 5;
       const newTrack: Track = { id: createId(), type: targetType, items: [], locked: false, muted: false };
-      
+
       const item: TrackItem = {
         id: createId(), mediaId, trackId: newTrack.id,
         startTime: currentTime, endTime: currentTime + dur,
@@ -486,6 +492,11 @@ const ViralCut = () => {
       newTrack.items.push(item);
       return { ...p, tracks: [...p.tracks, newTrack] };
     }, { pushHistory: true });
+
+    if (layerLimitReached) {
+      toast.error('Máximo de 2 camadas extras de vídeo atingido.');
+      return;
+    }
 
     if (isMobile) setShowMobilePanel(false);
   }, [media, updateProject, currentTime, isMobile]);

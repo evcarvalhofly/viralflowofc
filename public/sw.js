@@ -65,7 +65,12 @@ self.addEventListener('notificationclick', (event) => {
       .then((clientList) => {
         for (const client of clientList) {
           if ('focus' in client) {
-            client.navigate(url);
+            // Só navega se não estiver na URL correta — evita recarregar a página
+            const clientUrl = new URL(client.url);
+            const targetUrl = new URL(url, self.location.origin);
+            if (clientUrl.pathname !== targetUrl.pathname) {
+              client.navigate(url);
+            }
             return client.focus();
           }
         }
