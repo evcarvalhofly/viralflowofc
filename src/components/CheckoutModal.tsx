@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, AlertCircle, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
 import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react';
@@ -51,6 +51,14 @@ export function CheckoutModal({ onClose, onSuccess, initialPlan = 'monthly' }: C
   const [submitting, setSubmitting] = useState(false);
   const [validating, setValidating] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Memoize para evitar que o brick do MercadoPago reinicialize a cada render
+  const cardInitialization = useMemo(() => ({ amount: AMOUNT }), [AMOUNT]);
+  const cardCustomization = useMemo(() => ({
+    visual: { style: { theme: 'dark' as const } },
+    paymentMethods: { maxInstallments: 1 },
+  }), []);
+  const handleCardError = useCallback((e: any) => console.warn('MP card error:', e), []);
 
   useEffect(() => {
     if (MP_PUBLIC_KEY) initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' });
@@ -381,13 +389,10 @@ export function CheckoutModal({ onClose, onSuccess, initialPlan = 'monthly' }: C
                     </div>
                   ) : (
                     <CardPayment
-                      initialization={{ amount: AMOUNT }}
-                      customization={{
-                        visual: { style: { theme: 'dark' } },
-                        paymentMethods: { maxInstallments: 1 },
-                      }}
+                      initialization={cardInitialization}
+                      customization={cardCustomization}
                       onSubmit={handleCardSubmit}
-                      onError={(e) => console.warn('MP card error:', e)}
+                      onError={handleCardError}
                     />
                   )}
                 </>

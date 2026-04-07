@@ -878,7 +878,7 @@ export default function Convite() {
             onClick={handleCtaClick}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-10 py-5 text-base font-bold text-white shadow-2xl shadow-violet-500/40 hover:from-violet-500 hover:to-purple-500 active:scale-95 transition-all"
           >
-            <Flame className="h-5 w-5" /> Começar agora com garantia de 7 dias
+            <Flame className="h-5 w-5" /> Quero começar agora
           </button>
           <p className="mt-4 text-xs text-zinc-600">
             Mais de 1.200 criadores já estão usando · Cancele quando quiser
