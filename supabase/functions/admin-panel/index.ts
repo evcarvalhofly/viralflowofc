@@ -22,23 +22,18 @@ Deno.serve(async (req) => {
     const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // ── Verifica JWT via endpoint direto do Supabase Auth ────────────────────
+    // ── Verifica JWT via createClient (abordagem moderna recomendada) ───────────
     const authHeader = req.headers.get('Authorization') ?? '';
     if (!authHeader) return json({ error: 'Sem autorização' });
 
-    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: {
-        'Authorization': authHeader,
-        'apikey': SUPABASE_ANON_KEY,
-      },
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: authHeader } },
     });
 
-    if (!authRes.ok) return json({ error: `Auth falhou: ${authRes.status}` });
-
-    const caller = await authRes.json();
-    if (!caller?.email || caller.email !== ADMIN_EMAIL) {
-      return json({ error: 'Acesso negado' });
-    }
+    const { data: { user: caller }, error: authError } = await userClient.auth.getUser();
+    if (authError || !caller?.email) return json({ error: `Auth falhou: ${authError?.message ?? 'sem usuário'}` });
+    if (caller.email !== ADMIN_EMAIL) return json({ error: 'Acesso negado' });
 
     // ── Cliente admin (service role) ─────────────────────────────────────────
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {

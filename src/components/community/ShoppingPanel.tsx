@@ -159,7 +159,7 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
     if (!isAdmin) query = query.eq("user_id", user!.id);
     const { error } = await query;
     if (!error) { toast.success("Removido"); fetchMyProducts(); fetchProducts(); }
-    else toast.error("Erro ao remover anúncio");
+    else toast.error(`Erro: ${error.message}`);
   };
 
   const memberSince = (dateStr: string) => {
