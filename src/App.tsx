@@ -23,6 +23,7 @@ import { NotificationPermissionModal } from "./components/NotificationPermission
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useBackgroundNotifications } from "./hooks/useBackgroundNotifications";
 import { useSaleNotifications } from "./hooks/useSaleNotifications";
+import { usePushSubscription } from "./hooks/usePushSubscription";
 import { useAffiliateTracking } from "./hooks/useAffiliateTracking";
 import { useCheckoutReturn } from "./hooks/useCheckoutReturn";
 import { useSubscription } from "./hooks/useSubscription";
@@ -57,6 +58,9 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
 
   // Notificações de venda com som (afiliados + admin)
   useSaleNotifications();
+
+  // Inscrição para Web Push (notificações mesmo com app fechado)
+  usePushSubscription();
 
   // Rastreia cliques em links de afiliado (?ref=CODIGO na URL)
   useAffiliateTracking();

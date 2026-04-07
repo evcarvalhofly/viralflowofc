@@ -248,9 +248,29 @@ async function notifySale(admin: any, buyerUserId: string, amount: number, plan:
       });
     }
 
-    if (rows.length > 0) await admin.from('sale_notifications').insert(rows);
+    if (rows.length > 0) {
+      await admin.from('sale_notifications').insert(rows);
+      const planLabel = plan === 'annual' ? 'Anual' : 'Mensal';
+      await Promise.all(rows.map(row =>
+        sendWebPush(row.user_id, '💰 Nova venda!', `Plano ${planLabel} · R$${row.net_amount.toFixed(2).replace('.', ',')}`)
+      ));
+    }
     console.log('notifySale done | rows:', rows.length);
   } catch (e) {
     console.error('notifySale error:', e);
+  }
+}
+
+async function sendWebPush(userId: string, title: string, body: string) {
+  try {
+    const SUPABASE_URL  = Deno.env.get('SUPABASE_URL')!;
+    const SERVICE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    await fetch(`${SUPABASE_URL}/functions/v1/send-web-push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+      body: JSON.stringify({ user_id: userId, title, body }),
+    });
+  } catch (e) {
+    console.warn('sendWebPush error:', e);
   }
 }
