@@ -83,6 +83,9 @@ const Auth = () => {
           await attributeReferral(signUpData.user.id);
 
           if (checkoutResult?.activated) {
+            supabase.functions.invoke('notify-admin-sale', {
+              body: { plan: checkoutResult.plan ?? 'monthly', is_affiliate: !!checkoutResult.ref_code },
+            }).catch(() => {});
             toast({
               title: "Assinatura ativada!",
               description: "Seu plano PRO está ativo. Bem-vindo ao ViralFlow!",

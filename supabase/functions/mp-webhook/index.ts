@@ -177,8 +177,7 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 // ── Activate existing user by email ───────────────────────────────────────────
 async function activateExistingUser(admin: any, email: string, paymentId: string, days: number): Promise<string | null> {
   try {
-    const { data: { users } } = await admin.auth.admin.listUsers();
-    const user = users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+    const { data: { user } } = await admin.auth.admin.getUserByEmail(email);
     if (!user) return null;
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
     await admin.from('profiles').update({
@@ -200,8 +199,7 @@ const ADMIN_EMAIL = 'evcarvalhodev@gmail.com';
 
 async function notifySale(admin: any, buyerUserId: string, amount: number, plan: string) {
   try {
-    const { data: { users } } = await admin.auth.admin.listUsers();
-    const adminUser = users?.find((u: any) => u.email === ADMIN_EMAIL);
+    const { data: { user: adminUser } } = await admin.auth.admin.getUserByEmail(ADMIN_EMAIL);
 
     const { data: referral } = await admin
       .from('referrals')

@@ -48,12 +48,18 @@ const Parabens = () => {
       if (error) throw error;
 
       if (signUpData.user?.id) {
-        await (supabase as any).rpc("activate_pending_checkout", {
+        const { data: activation } = await (supabase as any).rpc("activate_pending_checkout", {
           p_user_id: signUpData.user.id,
           p_user_email: email,
         });
         await attributeReferral(signUpData.user.id);
         sessionStorage.removeItem("vf_pix_data");
+
+        if (activation?.activated) {
+          supabase.functions.invoke("notify-admin-sale", {
+            body: { plan: activation.plan ?? "monthly", is_affiliate: !!activation.ref_code },
+          }).catch(() => {});
+        }
       }
 
       toast({
