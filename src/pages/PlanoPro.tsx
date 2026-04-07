@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 type Plan = 'monthly' | 'annual';
 import { Zap, Check, ArrowRight, Sparkles, Type, Scissors, MessageSquare, BarChart2, Users, Video, Layers, Share2 } from 'lucide-react';
 
@@ -17,12 +17,24 @@ const FEATURES = [
 export default function PlanoPro() {
   const [selectedPlan, setSelectedPlan] = useState<Plan>('monthly');
 
+  useEffect(() => {
+    const root = document.getElementById('root');
+    document.documentElement.style.overflow = 'auto';
+    document.body.style.overflow = 'auto';
+    if (root) root.style.overflow = 'auto';
+    return () => {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+      if (root) root.style.overflow = '';
+    };
+  }, []);
+
   const openCheckout = (plan: Plan) => {
     window.dispatchEvent(new CustomEvent('open-checkout', { detail: { plan, successRedirect: '/' } }));
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-md">
 
         {/* Logo / branding */}
