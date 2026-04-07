@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     const phone: string | null = body.phone ?? null;
     const refCode: string | null = body.ref_code ?? null;
     const plan: 'monthly' | 'annual' = body.plan === 'annual' ? 'annual' : 'monthly';
-    const AMOUNT = plan === 'annual' ? 0.10 : 0.08;
+    const AMOUNT = plan === 'annual' ? 297.00 : 37.90;
     const DAYS   = plan === 'annual' ? 365 : 30;
 
     // ── Create or find external_reference ─────────────────────────────────────
