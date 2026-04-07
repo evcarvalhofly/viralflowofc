@@ -47,6 +47,24 @@ function playMoneySound() {
 export const useSaleNotifications = () => {
   const { user } = useAuth();
 
+  // Listener para push recebido pelo Service Worker (app aberto em segundo plano)
+  useEffect(() => {
+    if (!user || !('serviceWorker' in navigator)) return;
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'PUSH_SALE') return;
+      const d = event.data.data ?? {};
+      playMoneySound();
+      toast.success(d.title ?? '💰 Nova venda!', {
+        description: d.body ?? '',
+        duration: 8000,
+      });
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user) return;
 

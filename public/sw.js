@@ -16,16 +16,26 @@ self.addEventListener('activate', (event) => {
 // ── Web Push (servidor → usuário quando app está fechado) ───────────
 self.addEventListener('push', (event) => {
   const data = event.data?.json() ?? {};
+
   event.waitUntil(
-    self.registration.showNotification(data.title ?? 'ViralFlow', {
-      body: data.body ?? '',
-      icon: '/pwa-icon.svg',
-      badge: '/pwa-icon.svg',
-      tag: data.tag ?? 'viralflow',
-      data: { url: data.url ?? '/' },
-      vibrate: [100, 50, 100],
-      requireInteraction: false,
-    })
+    Promise.all([
+      // Mostra notificação nativa
+      self.registration.showNotification(data.title ?? 'ViralFlow', {
+        body: data.body ?? '',
+        icon: '/pwa-icon.svg',
+        badge: '/pwa-icon.svg',
+        tag: data.tag ?? 'viralflow',
+        data: { url: data.url ?? '/' },
+        vibrate: [200, 100, 200],
+        requireInteraction: false,
+      }),
+      // Avisa o app (se estiver aberto) para tocar som + mostrar toast
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'PUSH_SALE', data });
+        });
+      }),
+    ])
   );
 });
 
