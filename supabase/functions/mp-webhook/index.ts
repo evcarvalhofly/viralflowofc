@@ -97,7 +97,15 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 
   // Logged-in user
   const userId  = externalRef;
-  const isAnnual = plan === 'annual' || (transactionAmount ?? 0) >= 200;
+
+  // Fallback: read stored plan from profiles (set by create-checkout pre-save for PIX)
+  let storedPlan: string | null = null;
+  if (plan !== 'annual') {
+    const { data: prof } = await admin.from('profiles').select('subscription_plan').eq('user_id', userId).maybeSingle();
+    storedPlan = prof?.subscription_plan ?? null;
+  }
+
+  const isAnnual = plan === 'annual' || storedPlan === 'annual' || (transactionAmount ?? 0) >= 200;
   const days    = isAnnual ? 365 : 30;
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
@@ -107,10 +115,11 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
       subscription_status:     'active',
       subscription_expires_at: expiresAt,
       stripe_subscription_id:  paymentId,
+      subscription_plan:       isAnnual ? 'annual' : 'monthly',
     })
     .eq('user_id', userId);
 
-  console.log('Subscription renewed | user:', userId, '| expires:', expiresAt);
+  console.log('Subscription renewed | user:', userId, '| plan:', isAnnual ? 'annual' : 'monthly', '| expires:', expiresAt);
 
   // Sale notification
   await notifySale(admin, userId, transactionAmount ?? 37.90, isAnnual ? 'annual' : 'monthly');
@@ -172,8 +181,9 @@ async function activateExistingUser(admin: any, email: string, paymentId: string
       subscription_status:     'active',
       subscription_expires_at: expiresAt,
       stripe_subscription_id:  paymentId,
+      subscription_plan:       days >= 365 ? 'annual' : 'monthly',
     }).eq('user_id', user.id);
-    console.log('Guest payment linked to existing user:', user.id, '| expires:', expiresAt);
+    console.log('Guest payment linked to existing user:', user.id, '| plan:', days >= 365 ? 'annual' : 'monthly', '| expires:', expiresAt);
     return user.id;
   } catch (e) {
     console.error('activateExistingUser error:', e);

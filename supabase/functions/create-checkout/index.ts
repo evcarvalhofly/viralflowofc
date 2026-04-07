@@ -122,19 +122,26 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── Pre-save plan for logged-in PIX (webhook needs it as fallback) ──────────
+    if (isPix && !isGuest && userId) {
+      await admin.from('profiles').update({ subscription_plan: plan }).eq('user_id', userId);
+      console.log('Pre-saved pending plan for PIX | user:', userId, '| plan:', plan);
+    }
+
     // ── On approval: activate subscription immediately for logged-in user ─────
     if (payment.status === 'approved' && !isGuest) {
       const expiresAt = new Date(Date.now() + DAYS * 24 * 60 * 60 * 1000).toISOString();
       await admin
         .from('profiles')
         .update({
-          subscription_status:    'active',
+          subscription_status:     'active',
           subscription_expires_at: expiresAt,
           stripe_subscription_id:  String(payment.id),
+          subscription_plan:       plan,
         })
         .eq('user_id', userId!);
 
-      console.log('Subscription activated for user:', userId, '| expires:', expiresAt);
+      console.log('Subscription activated for user:', userId, '| plan:', plan, '| expires:', expiresAt);
 
       // Process affiliate commission
       await processCommission(admin, userId!, String(payment.id), AMOUNT);
@@ -193,6 +200,7 @@ async function activateExistingUser(admin: any, email: string, paymentId: string
       subscription_status:     'active',
       subscription_expires_at: expiresAt,
       stripe_subscription_id:  paymentId,
+      subscription_plan:       plan,
     }).eq('user_id', user.id);
     console.log('Guest payment linked to existing user:', user.id, '| plan:', plan, '| expires:', expiresAt);
     return user.id;

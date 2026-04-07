@@ -11,6 +11,7 @@ export default function MinhaConta() {
   const [profile, setProfile] = useState<{
     subscription_status: string | null;
     subscription_expires_at: string | null;
+    subscription_plan: string | null;
     display_name: string | null;
     name_change_count: number;
     name_last_changed_at: string | null;
@@ -32,7 +33,7 @@ export default function MinhaConta() {
     if (!user) return;
     const { data } = await supabase
       .from('profiles')
-      .select('subscription_status, subscription_expires_at, display_name, name_change_count, name_last_changed_at')
+      .select('subscription_status, subscription_expires_at, subscription_plan, display_name, name_change_count, name_last_changed_at')
       .eq('user_id', user.id)
       .single();
     setProfile(data);
@@ -145,7 +146,11 @@ export default function MinhaConta() {
           {statusInfo.icon}
           <div>
             <p className={`font-semibold text-base ${statusInfo.color}`}>{statusInfo.label}</p>
-            <p className="text-xs text-muted-foreground">ViralFlow PRO — R$37,90/mês</p>
+            <p className="text-xs text-muted-foreground">
+              {profile?.subscription_plan === 'annual'
+                ? 'ViralFlow PRO — R$297,00/ano'
+                : 'ViralFlow PRO — R$37,90/mês'}
+            </p>
           </div>
         </div>
 
