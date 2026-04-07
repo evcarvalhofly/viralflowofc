@@ -82,6 +82,7 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
           sendWelcomeEmail(pixEmail);
           setTimeout(() => {
             if (!user) {
+              onClose();
               navigate(`/parabens?email=${encodeURIComponent(pixEmail)}&method=pix`);
             } else {
               onSuccess?.();
@@ -148,6 +149,7 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
         sendWelcomeEmail(cardEmail);
         setTimeout(() => {
           if (!user) {
+            onClose();
             navigate(`/parabens?email=${encodeURIComponent(cardEmail)}&method=card`);
           } else {
             onSuccess?.();
