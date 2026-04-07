@@ -49,12 +49,20 @@ Deno.serve(async (req) => {
       const status      = payment.status;
       const externalRef = payment.external_reference;
 
-      console.log('Payment status:', status, '| external_ref:', externalRef);
+      // Resolve plan: payment_plans table (most reliable) → metadata → amount fallback
+      const { data: paymentPlanRow } = await admin
+        .from('payment_plans')
+        .select('plan')
+        .eq('payment_id', String(eventId))
+        .maybeSingle();
+      const resolvedPlan = paymentPlanRow?.plan ?? payment.metadata?.plan;
+
+      console.log('Payment status:', status, '| external_ref:', externalRef, '| plan:', resolvedPlan, '| amount:', payment.transaction_amount);
 
       if (!externalRef) return new Response('ok', { headers: corsHeaders });
 
       if (status === 'approved') {
-        await handleApprovedPayment(admin, externalRef, String(eventId), payment.transaction_amount, payment.metadata?.plan);
+        await handleApprovedPayment(admin, externalRef, String(eventId), payment.transaction_amount, resolvedPlan);
       }
 
       return new Response('ok', { headers: corsHeaders });

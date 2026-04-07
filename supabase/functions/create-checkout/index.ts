@@ -114,6 +114,11 @@ Deno.serve(async (req) => {
     const payment = await mpRes.json();
     console.log('MP payment status:', payment.status, '| id:', payment.id, '| detail:', payment.status_detail);
 
+    // Persist plan by payment_id so the webhook always detects correctly
+    if (payment?.id) {
+      await admin.from('payment_plans').upsert({ payment_id: String(payment.id), plan });
+    }
+
     if (!mpRes.ok) {
       console.error('MP error:', JSON.stringify(payment));
       const cause = payment?.cause?.[0]?.description ?? payment?.message ?? 'Erro no pagamento';

@@ -16,10 +16,11 @@ async function saveSubscription(userId: string, sub: PushSubscription) {
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
   await supabase.from('push_subscriptions').upsert(
     {
-      user_id:  userId,
-      endpoint: json.endpoint,
-      p256dh:   json.keys.p256dh,
-      auth:     json.keys.auth,
+      user_id:      userId,
+      endpoint:     json.endpoint,
+      p256dh:       json.keys.p256dh,
+      auth:         json.keys.auth,
+      subscription: json,
     },
     { onConflict: 'user_id,endpoint' },
   );

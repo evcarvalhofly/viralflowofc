@@ -26,10 +26,12 @@ Deno.serve(async (req) => {
     const { user_id, title, body } = await req.json();
     if (!user_id) return new Response('missing user_id', { status: 400, headers: corsHeaders });
 
-    const { data: subs } = await admin
+    const { data: subs, error: subsError } = await admin
       .from('push_subscriptions')
-      .select('endpoint, p256dh, auth')
+      .select('endpoint, p256dh, auth, subscription')
       .eq('user_id', user_id);
+
+    if (subsError) console.warn('push_subscriptions fetch error:', subsError);
 
     if (!subs || subs.length === 0) {
       return new Response(JSON.stringify({ sent: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -41,9 +43,13 @@ Deno.serve(async (req) => {
 
     await Promise.all(
       subs.map(async (sub) => {
+        // Support both schema formats: separate columns OR nested subscription JSON
+        const p256dh = sub.p256dh ?? sub.subscription?.keys?.p256dh;
+        const auth   = sub.auth   ?? sub.subscription?.keys?.auth;
+        if (!p256dh || !auth) return;
         try {
           await webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            { endpoint: sub.endpoint, keys: { p256dh, auth } },
             payload,
           );
           sent++;
