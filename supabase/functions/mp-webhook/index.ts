@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
       if (!externalRef) return new Response('ok', { headers: corsHeaders });
 
       if (status === 'approved') {
-        await handleApprovedPayment(admin, externalRef, String(eventId), payment.transaction_amount);
+        await handleApprovedPayment(admin, externalRef, String(eventId), payment.transaction_amount, payment.metadata?.plan);
       }
 
       return new Response('ok', { headers: corsHeaders });
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
 });
 
 // ── Activate or renew subscription ────────────────────────────────────────────
-async function handleApprovedPayment(admin: any, externalRef: string, paymentId: string, transactionAmount?: number) {
+async function handleApprovedPayment(admin: any, externalRef: string, paymentId: string, transactionAmount?: number, plan?: string) {
   // Detect guest session (UUID from checkout_sessions) vs logged-in user
   const { data: guestSession } = await admin
     .from('checkout_sessions')
@@ -89,7 +89,7 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 
   // Logged-in user
   const userId  = externalRef;
-  const isAnnual = (transactionAmount ?? 0) >= 200;
+  const isAnnual = plan === 'annual' || (transactionAmount ?? 0) >= 200;
   const days    = isAnnual ? 365 : 30;
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 

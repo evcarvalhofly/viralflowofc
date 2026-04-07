@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
       },
       external_reference: externalReference,
       notification_url:   'https://dzgotqyikomtapcgdgff.supabase.co/functions/v1/mp-webhook',
+      metadata:           { plan },
     };
 
     if (!isPix) {
