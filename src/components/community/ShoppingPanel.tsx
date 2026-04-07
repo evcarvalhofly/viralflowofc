@@ -154,10 +154,20 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
   };
 
   const handleDelete = async (id: string) => {
-    let query = db.from("products").update({ status: "inactive" }).eq("id", id);
-    // Admin pode remover qualquer produto; usuário normal só o próprio
-    if (!isAdmin) query = query.eq("user_id", user!.id);
-    const { error } = await query;
+    if (isAdmin) {
+      const { data, error: fnError } = await supabase.functions.invoke('admin-panel', {
+        body: { action: 'delete_product', product_id: id },
+      });
+      if (fnError || data?.error) {
+        toast.error(`Erro: ${fnError?.message ?? data?.error}`);
+      } else {
+        toast.success("Removido");
+        fetchMyProducts();
+        fetchProducts();
+      }
+      return;
+    }
+    const { error } = await db.from("products").update({ status: "inactive" }).eq("id", id).eq("user_id", user!.id);
     if (!error) { toast.success("Removido"); fetchMyProducts(); fetchProducts(); }
     else toast.error(`Erro: ${error.message}`);
   };

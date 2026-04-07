@@ -199,6 +199,20 @@ Deno.serve(async (req) => {
       return json({ ok: true, subscription_expires_at: newExpiry.toISOString(), subscription_status: newStatus });
     }
 
+    // ── DELETE_PRODUCT ───────────────────────────────────────────────────
+    if (action === 'delete_product') {
+      const { product_id } = body;
+      if (!product_id) return json({ error: 'product_id é obrigatório' });
+
+      const { error } = await admin
+        .from('products')
+        .update({ status: 'inactive' })
+        .eq('id', product_id);
+
+      if (error) return json({ error: error.message });
+      return json({ ok: true });
+    }
+
     return json({ error: 'Ação desconhecida' });
 
   } catch (err: any) {
