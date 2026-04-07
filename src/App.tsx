@@ -22,6 +22,7 @@ import NotFound from "./pages/NotFound";
 import { NotificationPermissionModal } from "./components/NotificationPermissionModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useBackgroundNotifications } from "./hooks/useBackgroundNotifications";
+import { useSaleNotifications } from "./hooks/useSaleNotifications";
 import { useAffiliateTracking } from "./hooks/useAffiliateTracking";
 import { useCheckoutReturn } from "./hooks/useCheckoutReturn";
 import { useSubscription } from "./hooks/useSubscription";
@@ -53,6 +54,9 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
 
   // Escuta eventos Supabase e mostra notificações em background
   useBackgroundNotifications();
+
+  // Notificações de venda com som (afiliados + admin)
+  useSaleNotifications();
 
   // Rastreia cliques em links de afiliado (?ref=CODIGO na URL)
   useAffiliateTracking();

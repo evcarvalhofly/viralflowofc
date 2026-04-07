@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     const phone: string | null = body.phone ?? null;
     const refCode: string | null = body.ref_code ?? null;
     const plan: 'monthly' | 'annual' = body.plan === 'annual' ? 'annual' : 'monthly';
-    const AMOUNT = plan === 'annual' ? 297.00 : 37.90;
+    const AMOUNT = plan === 'annual' ? 0.10 : 0.08;
     const DAYS   = plan === 'annual' ? 365 : 30;
 
     // ── Create or find external_reference ─────────────────────────────────────
@@ -138,6 +138,9 @@ Deno.serve(async (req) => {
 
       // Process affiliate commission
       await processCommission(admin, userId!, String(payment.id), AMOUNT);
+
+      // Sale notification
+      await notifySale(admin, userId!, AMOUNT, plan);
     }
 
     if (payment.status === 'approved' && isGuest) {
@@ -151,9 +154,10 @@ Deno.serve(async (req) => {
         })
         .eq('id', externalReference);
 
-      // Link to existing account if email matches
+      // Link to existing account if email matches + sale notification
       if (payerEmail) {
-        await activateExistingUser(admin, payerEmail, String(payment.id), plan, DAYS);
+        const linkedId = await activateExistingUser(admin, payerEmail, String(payment.id), plan, DAYS);
+        if (linkedId) await notifySale(admin, linkedId, AMOUNT, plan);
       }
     }
 
@@ -179,11 +183,11 @@ Deno.serve(async (req) => {
 });
 
 // ── Activate existing user by email ───────────────────────────────────────────
-async function activateExistingUser(admin: any, email: string, paymentId: string, plan: string, days: number) {
+async function activateExistingUser(admin: any, email: string, paymentId: string, plan: string, days: number): Promise<string | null> {
   try {
     const { data: { users } } = await admin.auth.admin.listUsers();
     const user = users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
-    if (!user) return;
+    if (!user) return null;
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
     await admin.from('profiles').update({
       subscription_status:     'active',
@@ -191,8 +195,10 @@ async function activateExistingUser(admin: any, email: string, paymentId: string
       stripe_subscription_id:  paymentId,
     }).eq('user_id', user.id);
     console.log('Guest payment linked to existing user:', user.id, '| plan:', plan, '| expires:', expiresAt);
+    return user.id;
   } catch (e) {
     console.error('activateExistingUser error:', e);
+    return null;
   }
 }
 
@@ -245,5 +251,77 @@ async function processCommission(admin: any, userId: string, paymentId: string, 
     console.log('Comissão criada | afiliado:', affiliate.id, '| valor:', commAmount, '| tipo:', commType);
   } catch (e) {
     console.error('processCommission error:', e);
+  }
+}
+
+// ── Sale notifications ─────────────────────────────────────────────────────────
+const ADMIN_EMAIL = 'evcarvalhodev@gmail.com';
+
+async function notifySale(admin: any, buyerUserId: string, amount: number, plan: string) {
+  try {
+    const { data: { users } } = await admin.auth.admin.listUsers();
+    const adminUser = users?.find((u: any) => u.email === ADMIN_EMAIL);
+
+    // Find affiliate for this buyer
+    const { data: referral } = await admin
+      .from('referrals')
+      .select('affiliate_id')
+      .eq('referred_user_id', buyerUserId)
+      .neq('status', 'cancelled')
+      .maybeSingle();
+
+    let affiliateUserId: string | null = null;
+    let affiliateName: string | null = null;
+    let commissionAmount = 0;
+
+    if (referral?.affiliate_id) {
+      const { data: affiliate } = await admin
+        .from('affiliates')
+        .select('user_id, commission_rate')
+        .eq('id', referral.affiliate_id)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (affiliate) {
+        affiliateUserId = affiliate.user_id;
+        commissionAmount = parseFloat(((affiliate.commission_rate / 100) * amount).toFixed(2));
+        const { data: profile } = await admin
+          .from('profiles')
+          .select('display_name')
+          .eq('user_id', affiliate.user_id)
+          .maybeSingle();
+        affiliateName = profile?.display_name ?? 'Afiliado';
+      }
+    }
+
+    const rows: any[] = [];
+
+    // Notify affiliate — net = their commission
+    if (affiliateUserId) {
+      rows.push({
+        user_id: affiliateUserId,
+        amount,
+        net_amount: commissionAmount,
+        plan,
+        is_affiliate_sale: true,
+        affiliate_name: affiliateName,
+      });
+    }
+
+    // Notify admin — net = amount minus commission paid out
+    if (adminUser) {
+      rows.push({
+        user_id: adminUser.id,
+        amount,
+        net_amount: parseFloat((amount - commissionAmount).toFixed(2)),
+        plan,
+        is_affiliate_sale: !!affiliateUserId,
+        affiliate_name: affiliateName,
+      });
+    }
+
+    if (rows.length > 0) await admin.from('sale_notifications').insert(rows);
+    console.log('notifySale done | rows:', rows.length);
+  } catch (e) {
+    console.error('notifySale error:', e);
   }
 }
