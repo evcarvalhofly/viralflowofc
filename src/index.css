@@ -35,7 +35,6 @@
 html, body, #root {
   height: 100%;
   height: -webkit-fill-available;
-  overflow: hidden;
 }
 
 /* Use dvh where supported, fallback to svh then vh */
