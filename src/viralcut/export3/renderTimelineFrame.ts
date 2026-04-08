@@ -7,8 +7,70 @@
 // Contain-fit (letterbox) is still applied. No stretching.
 // ============================================================
 
-import { Project, MediaFile, TrackItem } from '../types';
+import { Project, MediaFile, TrackItem, AnimationPreset } from '../types';
 import { drawTextItemOnCanvas } from './textLayout';
+
+// ── Text animation helpers ─────────────────────────────────
+const ANIM_IN_DURATION  = 0.35;
+const ANIM_OUT_DURATION = 0.28;
+
+function easeOut(t: number): number {
+  return 1 - Math.pow(1 - t, 2);
+}
+
+interface AnimTransform {
+  opacity: number;
+  translateX: number;
+  translateY: number;
+  scale: number;
+}
+
+function getAnimTransform(timeSec: number, item: TrackItem, canvasH: number): AnimTransform {
+  const result: AnimTransform = { opacity: 1, translateX: 0, translateY: 0, scale: 1 };
+  const elapsed   = timeSec - item.startTime;
+  const remaining = item.endTime - timeSec;
+  const inP  = easeOut(Math.min(1, elapsed   / ANIM_IN_DURATION));
+  const outP = easeOut(Math.min(1, remaining / ANIM_OUT_DURATION));
+
+  const applyAnim = (preset: AnimationPreset | undefined, progress: number) => {
+    if (!preset || preset === 'none') return;
+    const shift = canvasH * 0.08;
+    switch (preset) {
+      case 'fadeIn':
+      case 'fadeOut':
+        result.opacity *= progress;
+        break;
+      case 'slideUp':
+        result.opacity    *= progress;
+        result.translateY  = (1 - progress) * shift;
+        break;
+      case 'slideDown':
+        result.opacity    *= progress;
+        result.translateY  = -(1 - progress) * shift;
+        break;
+      case 'slideLeft':
+        result.opacity    *= progress;
+        result.translateX  = (1 - progress) * shift;
+        break;
+      case 'slideRight':
+        result.opacity    *= progress;
+        result.translateX  = -(1 - progress) * shift;
+        break;
+      case 'zoomIn':
+        result.opacity *= progress;
+        result.scale   *= 0.7 + 0.3 * progress;
+        break;
+      case 'zoomOut':
+        result.opacity *= progress;
+        result.scale   *= 1.3 - 0.3 * progress;
+        break;
+    }
+  };
+
+  applyAnim(item.animationIn,  inP);
+  applyAnim(item.animationOut, outP);
+  return result;
+}
 
 export interface FrameRenderAssets {
   videoFrames: Map<string, HTMLVideoElement | null>;
@@ -203,6 +265,20 @@ export function renderTimelineFrame({
 
   // ── Text overlays ──────────────────────────────────────────
   for (const textItem of textItems) {
-    drawTextItemOnCanvas(ctx, textItem, width, height);
+    const anim = getAnimTransform(timeSec, textItem, height);
+    const hasTransform = anim.translateX !== 0 || anim.translateY !== 0 || anim.scale !== 1;
+
+    if (hasTransform) {
+      const cx = ((textItem.textDetails?.posX ?? 50) / 100) * width;
+      const cy = ((textItem.textDetails?.posY ?? 50) / 100) * height;
+      ctx.save();
+      ctx.translate(cx + anim.translateX, cy + anim.translateY);
+      ctx.scale(anim.scale, anim.scale);
+      ctx.translate(-cx, -cy);
+      drawTextItemOnCanvas(ctx, textItem, width, height, anim.opacity);
+      ctx.restore();
+    } else {
+      drawTextItemOnCanvas(ctx, textItem, width, height, anim.opacity);
+    }
   }
 }

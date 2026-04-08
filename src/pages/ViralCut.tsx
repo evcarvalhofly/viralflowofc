@@ -10,6 +10,9 @@ import { createId, createDefaultProject } from '@/viralcut/store';
 import { sanitizeTracks, sanitizeProject, MIN_CLIP_DURATION } from '@/viralcut/utils/sanitize';
 import { useEditorHistory } from '@/viralcut/hooks/useEditorHistory';
 import { useProjectPersistence } from '@/viralcut/hooks/useProjectPersistence';
+import { saveMediaFile, getAllMediaFiles, deleteMediaFile, pruneOrphanMedia } from '@/viralcut/hooks/useMediaStorage';
+import { saveProjectData, loadProjectData, MediaMeta } from '@/viralcut/hooks/useProjectStorage';
+import { ViralCutProjects } from '@/viralcut/components/ViralCutProjects';
 import { MediaPanel } from '@/viralcut/components/MediaPanel';
 import { PreviewPanel } from '@/viralcut/components/PreviewPanel';
 import { Timeline } from '@/viralcut/components/Timeline';
@@ -136,6 +139,9 @@ const ViralCut = () => {
   const subtitleImportRef = useRef<HTMLInputElement>(null);
   const splitAllRef = useRef<(() => void) | null>(null);
 
+  // ── Projects screen ───────────────────────────────────────
+  const [showProjects, setShowProjects] = useState(true);
+
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
   const [media, setMedia] = useState<MediaFile[]>([]);
@@ -195,8 +201,110 @@ const ViralCut = () => {
   const canUndo = history.canUndo();
   const canRedo = history.canRedo();
 
-  // ── Persistence (no-op stub — autosave removed) ───────────
-  const persistence = useProjectPersistence(project, () => {});
+  // ── Persistence ───────────────────────────────────────────
+  // Media metadata saved to localStorage (no File/url — not serializable)
+  const MEDIA_META_KEY = 'viralcut_media_meta_v1';
+  type MediaMeta = Omit<MediaFile, 'file' | 'url'>;
+
+  // Skip the very first effect run (media = []) so we don't overwrite
+  // saved metadata before handleRestoreProject has a chance to read it.
+  const mediaSaveSkipRef = useRef(true);
+  useEffect(() => {
+    if (mediaSaveSkipRef.current) { mediaSaveSkipRef.current = false; return; }
+    const meta: MediaMeta[] = media.map(({ file: _f, url: _u, ...rest }) => rest);
+    try { localStorage.setItem(MEDIA_META_KEY, JSON.stringify(meta)); } catch { /* quota */ }
+  }, [media]);
+
+  const handleRestoreProject = useCallback((restored: Project) => {
+    setProjectRaw(sanitizeProject(restored));
+    setSelectedItemId(null);
+    setCurrentTime(0);
+    setIsPlaying(false);
+
+    // Restore media files from IndexedDB
+    const metaRaw = localStorage.getItem(MEDIA_META_KEY);
+    if (!metaRaw) { setMedia([]); return; }
+    try {
+      const mediaMeta: MediaMeta[] = JSON.parse(metaRaw);
+      getAllMediaFiles().then((filesMap) => {
+        const restoredMedia: MediaFile[] = [];
+        for (const m of mediaMeta) {
+          const file = filesMap.get(m.id);
+          if (!file) continue;
+          restoredMedia.push({ ...m, file, url: URL.createObjectURL(file) });
+        }
+        setMedia(restoredMedia);
+        // Remove orphan files from IndexedDB
+        const keepIds = new Set(mediaMeta.map((m) => m.id));
+        pruneOrphanMedia(keepIds).catch(() => {});
+      }).catch(() => { setMedia([]); });
+    } catch { setMedia([]); }
+  }, []);
+  const persistence = useProjectPersistence(project, handleRestoreProject);
+
+  // ── Multi-project: autosave to IndexedDB ─────────────────
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEditorActiveRef = useRef(false); // only save when editor is open
+  useEffect(() => {
+    if (!isEditorActiveRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      const meta: MediaMeta[] = mediaRef.current.map(({ file: _f, url: _u, ...rest }) => rest);
+      saveProjectData(project, meta).catch(() => {});
+    }, 2000);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  }, [project, media]);
+
+  // ── Open a saved project ──────────────────────────────────
+  const handleOpenProject = useCallback(async (projectId: string) => {
+    try {
+      const data = await loadProjectData(projectId);
+      if (!data) { toast.error('Projeto não encontrado.'); return; }
+      const { project: savedProject, mediaMeta } = data;
+      // Revoke old URLs
+      mediaRef.current.forEach((m) => URL.revokeObjectURL(m.url));
+      setProjectRaw(sanitizeProject(savedProject));
+      setSelectedItemId(null);
+      setCurrentTime(0);
+      setIsPlaying(false);
+      // Restore media files from IndexedDB
+      const filesMap = await getAllMediaFiles();
+      const restoredMedia: MediaFile[] = [];
+      for (const m of mediaMeta) {
+        const file = filesMap.get(m.id);
+        if (!file) continue;
+        restoredMedia.push({ ...m, file, url: URL.createObjectURL(file) });
+      }
+      setMedia(restoredMedia);
+      isEditorActiveRef.current = true;
+      setShowProjects(false);
+    } catch {
+      toast.error('Erro ao abrir o projeto.');
+    }
+  }, []);
+
+  // ── Create a new blank project ────────────────────────────
+  const handleNewProject = useCallback(() => {
+    mediaRef.current.forEach((m) => URL.revokeObjectURL(m.url));
+    const fresh = sanitizeProject(createDefaultProject());
+    setProjectRaw(fresh);
+    setMedia([]);
+    setSelectedItemId(null);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    isEditorActiveRef.current = true;
+    setShowProjects(false);
+  }, []);
+
+  // ── Go back to projects screen (save first) ───────────────
+  const handleGoToProjects = useCallback(() => {
+    setIsPlaying(false);
+    // Immediate save before leaving editor
+    const meta: MediaMeta[] = mediaRef.current.map(({ file: _f, url: _u, ...rest }) => rest);
+    saveProjectData(project, meta).catch(() => {});
+    isEditorActiveRef.current = false;
+    setShowProjects(true);
+  }, [project]);
 
   // ── Keyboard shortcuts ────────────────────────────────────
   useEffect(() => {
@@ -231,6 +339,8 @@ const ViralCut = () => {
   // ── Playback ticker ───────────────────────────────────────
   const tickRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
+  const durationRef = useRef(project.duration);
+  useEffect(() => { durationRef.current = project.duration; }, [project.duration]);
   useEffect(() => {
     if (isPlaying) {
       const tick = (ts: number) => {
@@ -238,9 +348,9 @@ const ViralCut = () => {
           const dt = (ts - lastTsRef.current) / 1000;
           setCurrentTime((t) => {
             const next = t + dt;
-            if (project.duration > 0 && next >= project.duration) {
+            if (durationRef.current > 0 && next >= durationRef.current) {
               setIsPlaying(false);
-              return project.duration;
+              return durationRef.current;
             }
             return next;
           });
@@ -254,7 +364,7 @@ const ViralCut = () => {
       lastTsRef.current = null;
     }
     return () => { if (tickRef.current) cancelAnimationFrame(tickRef.current); };
-  }, [isPlaying, project.duration]);
+  }, [isPlaying]);
 
   // ── Memoised derived data ─────────────────────────────────
   const stableTracks = useMemo(() => project.tracks, [project.tracks]);
@@ -297,6 +407,9 @@ const ViralCut = () => {
         width, height,
         orientation,
       };
+
+      // ── Persist file to IndexedDB ──────────
+      saveMediaFile(mf.id, file).catch(() => {});
 
       // ── Add to media library immediately ──
       setMedia((prev) => [...prev, mf]);
@@ -407,6 +520,7 @@ const ViralCut = () => {
       if (mf) URL.revokeObjectURL(mf.url);
       return prev.filter((m) => m.id !== id);
     });
+    deleteMediaFile(id).catch(() => {});
     updateProject((p) => ({
       ...p,
       tracks: p.tracks.map((t) => ({ ...t, items: t.items.filter((i) => i.mediaId !== id) })),
@@ -608,7 +722,7 @@ const ViralCut = () => {
       // If this is a subtitle position change, apply the same delta to ALL subtitle items
       if (updates.textDetails?.posX !== undefined || updates.textDetails?.posY !== undefined) {
         const movedItem = p.tracks.flatMap((t) => t.items).find((i) => i.id === itemId);
-        if (movedItem?.name === 'Legenda' && movedItem.textDetails && updates.textDetails) {
+        if (movedItem?.isSubtitle === true && movedItem.textDetails && updates.textDetails) {
           const dx = (updates.textDetails.posX ?? movedItem.textDetails.posX) - movedItem.textDetails.posX;
           const dy = (updates.textDetails.posY ?? movedItem.textDetails.posY) - movedItem.textDetails.posY;
           return {
@@ -616,7 +730,7 @@ const ViralCut = () => {
             tracks: p.tracks.map((t) => ({
               ...t,
               items: t.items.map((i) => {
-                if (i.name !== 'Legenda' || !i.textDetails) return i;
+                if (!i.isSubtitle || !i.textDetails) return i;
                 if (i.id === itemId) return { ...i, ...updates };
                 return {
                   ...i,
@@ -788,6 +902,7 @@ const ViralCut = () => {
               name: `Legenda`, type: 'text' as const,
               textDetails: { ...DEFAULT_TEXT_DETAILS, ...styleDetails, text: seg.text },
               animationIn: SUBTITLE_ANIMATION[style],
+              isSubtitle: true,
             } as TrackItem);
           }
           return results;
@@ -817,7 +932,7 @@ const ViralCut = () => {
     if (!selectedItemId) return false;
     for (const track of project.tracks) {
       const item = track.items.find(i => i.id === selectedItemId);
-      if (item && item.name === 'Legenda') return true;
+      if (item?.isSubtitle === true) return true;
     }
     return false;
   }, [selectedItemId, project.tracks]);
@@ -826,7 +941,7 @@ const ViralCut = () => {
     if (!selectedItemId) return null;
     for (const track of project.tracks) {
       const item = track.items.find((i) => i.id === selectedItemId);
-      if (item?.name === 'Legenda') return item.textDetails ?? null;
+      if (item?.isSubtitle === true) return item.textDetails ?? null;
     }
     return null;
   }, [selectedItemId, project.tracks]);
@@ -839,7 +954,7 @@ const ViralCut = () => {
       tracks: p.tracks.map((track) => ({
         ...track,
         items: track.items.map((item) => {
-          if (item.name !== 'Legenda' || !item.textDetails) return item;
+          if (!item.isSubtitle || !item.textDetails) return item;
           return {
             ...item,
             textDetails: { ...item.textDetails, ...styleDetails },
@@ -856,7 +971,7 @@ const ViralCut = () => {
       tracks: p.tracks.map((track) => ({
         ...track,
         items: track.items.map((item) => {
-          if (item.name !== 'Legenda' || !item.textDetails) return item;
+          if (!item.isSubtitle || !item.textDetails) return item;
           return { ...item, textDetails: { ...item.textDetails, ...patch } };
         }),
       })),
@@ -945,7 +1060,7 @@ const ViralCut = () => {
   const handleItemDoubleClick = useCallback((id: string) => {
     setSelectedItemId(id);
     // Subtitle items use the floating panel — don't open properties for them
-    const isSubtitle = project.tracks.some((t) => t.items.some((i) => i.id === id && i.name === 'Legenda'));
+    const isSubtitle = project.tracks.some((t) => t.items.some((i) => i.id === id && i.isSubtitle === true));
     if (isSubtitle) return;
     if (isMobile) { setMobileTab('editar'); setShowMobilePanel(true); }
     else { setShowProperties(true); }
@@ -976,6 +1091,16 @@ const ViralCut = () => {
     [subtitleVideoItem, media]
   );
 
+  // ── Projects screen ───────────────────────────────────────
+  if (showProjects) {
+    return (
+      <ViralCutProjects
+        onOpenProject={handleOpenProject}
+        onNewProject={handleNewProject}
+      />
+    );
+  }
+
   // ── Mobile: no media yet ──────────────────────────────────
   if (isMobile && !hasMedia) {
     return (
@@ -1002,8 +1127,8 @@ const ViralCut = () => {
               <Upload className="h-5 w-5 text-primary" />
             </div>
             <div className="text-left">
-              <p className="text-sm font-semibold text-foreground">+ Adicione seu vídeo ou imagem</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Edição manual completa</p>
+              <p className="text-sm font-semibold text-foreground">+ Novo Projeto</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Escolha um vídeo ou imagem</p>
             </div>
           </label>
           <label htmlFor="vc-autocut"
@@ -1028,6 +1153,12 @@ const ViralCut = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Gerado por IA com Whisper</p>
             </div>
           </label>
+          <button
+            onClick={() => setShowProjects(true)}
+            className="w-full text-center text-xs text-muted-foreground hover:text-primary transition-colors py-2"
+          >
+            Ver projetos salvos →
+          </button>
         </div>
         <input id="vc-import" ref={importRef} type="file" accept="video/*,image/*" className="hidden"
           onChange={(e) => e.target.files && handleImport(e.target.files)} />
@@ -1286,6 +1417,7 @@ const ViralCut = () => {
         onSave={persistence.saveNow}
         onExportJson={persistence.exportJson}
         onImportJson={() => importJsonRef.current?.click()}
+        onProjects={handleGoToProjects}
       />
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -1417,7 +1549,7 @@ const ViralCut = () => {
       </div>
 
       {/* Hidden file inputs */}
-      <input ref={importJsonRef} type="file" accept=".json" className="hidden"
+      <input ref={importJsonRef} type="file" accept=".json,.vcproject" className="hidden"
         onChange={(e) => { if (e.target.files?.[0]) { persistence.importJson(e.target.files[0]); e.target.value = ''; } }} />
 
       <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />

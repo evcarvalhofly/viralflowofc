@@ -23,6 +23,7 @@ export function useEditorHistory(initialTracks: Track[]) {
     historyRef.current.push(next);
     if (historyRef.current.length > MAX_HISTORY) {
       historyRef.current.shift();
+      indexRef.current = historyRef.current.length - 1;
     } else {
       indexRef.current = historyRef.current.length - 1;
     }

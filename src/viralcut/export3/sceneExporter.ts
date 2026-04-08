@@ -234,6 +234,8 @@ export async function exportScene(
 
   log(`Rendering ${totalFrames} frames @ ${FPS}fps`);
 
+  let failedFrames = 0;
+
   for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
     if (signal?.aborted) {
       await output.cancel().catch(() => {});
@@ -243,8 +245,14 @@ export async function exportScene(
 
     const timeSec = frameIdx * frameDuration;
 
-    await renderer.renderFrame(project, timeSec);
-    await videoSource.add(timeSec, frameDuration);
+    try {
+      await renderer.renderFrame(project, timeSec);
+      await videoSource.add(timeSec, frameDuration);
+    } catch (frameErr) {
+      failedFrames++;
+      log(`Frame ${frameIdx} (${timeSec.toFixed(3)}s) failed — skipping: ${frameErr}`);
+      // Continue to next frame instead of aborting the entire export
+    }
 
     if (frameIdx % Math.max(1, Math.floor(totalFrames / 100)) === 0) {
       const pct = 30 + Math.round((frameIdx / totalFrames) * 65);
@@ -253,6 +261,10 @@ export async function exportScene(
         `Renderizando… ${timeSec.toFixed(1)}s / ${totalDuration.toFixed(1)}s`
       );
     }
+  }
+
+  if (failedFrames > 0) {
+    log(`Export completed with ${failedFrames} skipped frame(s).`);
   }
 
   log('Frame render complete');

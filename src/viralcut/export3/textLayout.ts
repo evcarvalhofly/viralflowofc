@@ -7,7 +7,8 @@ export function drawTextItemOnCanvas(
   ctx: CanvasRenderingContext2D,
   item: TrackItem,
   canvasW: number,
-  canvasH: number
+  canvasH: number,
+  extraOpacity = 1
 ) {
   const td = item.textDetails;
   if (!td) return;
@@ -19,7 +20,7 @@ export function drawTextItemOnCanvas(
   if (fontSize < 1) return;
 
   ctx.save();
-  ctx.globalAlpha = td.opacity ?? 1;
+  ctx.globalAlpha = (td.opacity ?? 1) * extraOpacity;
 
   const fontStr = `${td.fontWeight ?? 'bold'} ${fontSize}px ${td.fontFamily || 'Inter, Arial, sans-serif'}`;
   ctx.font = fontStr;

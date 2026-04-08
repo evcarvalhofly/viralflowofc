@@ -115,6 +115,8 @@ export interface TrackItem {
   animationOut?: AnimationPreset;
   transitionIn?: TransitionType;
   transitionOut?: TransitionType;
+  // Flag para identificar legendas geradas automaticamente
+  isSubtitle?: boolean;
 }
 
 export interface Track {

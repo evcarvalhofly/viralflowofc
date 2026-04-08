@@ -84,11 +84,12 @@ export function PropertiesPanel({
   const canSplit = selectedItem && selectedTrackId &&
     currentTime > selectedItem.startTime && currentTime < selectedItem.endTime;
 
-  // Get details with defaults
-  const vd = selectedItem?.videoDetails ?? DEFAULT_VIDEO_DETAILS;
-  const ad = selectedItem?.audioDetails ?? DEFAULT_AUDIO_DETAILS;
-  const td = selectedItem?.textDetails ?? DEFAULT_TEXT_DETAILS;
-  const imgd = selectedItem?.imageDetails ?? DEFAULT_IMAGE_DETAILS;
+  // Get details with defaults — spread merge ensures partial objects (e.g. from old JSON imports)
+  // never leave fields as undefined/null (which breaks sliders)
+  const vd   = { ...DEFAULT_VIDEO_DETAILS,  ...selectedItem?.videoDetails  };
+  const ad   = { ...DEFAULT_AUDIO_DETAILS,  ...selectedItem?.audioDetails  };
+  const td   = { ...DEFAULT_TEXT_DETAILS,   ...selectedItem?.textDetails   };
+  const imgd = { ...DEFAULT_IMAGE_DETAILS,  ...selectedItem?.imageDetails  };
 
   const updateVideo = (patch: Partial<typeof vd>) => {
     if (!selectedItem || !selectedTrackId) return;

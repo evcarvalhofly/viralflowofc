@@ -1,7 +1,7 @@
 // ============================================================
 // Toolbar – Top bar with project name, zoom, export, save
 // ============================================================
-import { Scissors, Download, Undo2, Redo2, Edit2, Check, Save, FileDown, FileUp } from 'lucide-react';
+import { Scissors, Download, Undo2, Redo2, Edit2, Check, Save, FileDown, FileUp, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
@@ -16,6 +16,7 @@ interface ToolbarProps {
   onSave?: () => void;
   onExportJson?: () => void;
   onImportJson?: () => void;
+  onProjects?: () => void;
 }
 
 export function Toolbar({
@@ -29,6 +30,7 @@ export function Toolbar({
   onSave,
   onExportJson,
   onImportJson,
+  onProjects,
 }: ToolbarProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(projectName);
@@ -76,6 +78,17 @@ export function Toolbar({
       </div>
 
       <div className="flex-1" />
+
+      {/* Projects button */}
+      {onProjects && (
+        <button
+          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          onClick={onProjects}
+          title="Meus projetos"
+        >
+          <FolderOpen className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {/* Save / JSON project buttons */}
       {(onSave || onExportJson || onImportJson) && (
