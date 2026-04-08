@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import DirectChatWindow from "./DirectChatWindow";
+import { compressImage } from "@/lib/utils/compressImage";
 
 interface Product {
   id: string;
@@ -120,10 +121,10 @@ export const ShoppingPanel = ({ onClose }: ShoppingPanelProps) => {
     try {
       let imageUrl: string | null = null;
       if (sellImage) {
-        const ext = sellImage.name.split(".").pop();
-        const path = `${user.id}/${Date.now()}.${ext}`;
+        const compressed = await compressImage(sellImage);
+        const path = `${user.id}/${Date.now()}.webp`;
         const { error: uploadError } = await supabase.storage
-          .from("products").upload(path, sellImage, { upsert: true });
+          .from("products").upload(path, compressed, { upsert: true, contentType: 'image/webp' });
         if (!uploadError) {
           const { data: urlData } = supabase.storage.from("products").getPublicUrl(path);
           imageUrl = urlData.publicUrl;
