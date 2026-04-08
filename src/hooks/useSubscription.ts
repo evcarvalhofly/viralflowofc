@@ -15,7 +15,9 @@ export function useSubscription() {
   useEffect(() => {
     if (!user) { setStatus(null); setLoading(false); return; }
 
-    setLoading(true);
+    // Só mostra loading na primeira carga (status ainda null)
+    // Re-fetch silencioso se já temos status, para não desmontar componentes filhos
+    if (status === null) setLoading(true);
     let ignore = false;
 
     const fetch = async () => {
