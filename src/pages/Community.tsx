@@ -28,7 +28,8 @@ const Community = () => {
   const loadProfiles = useCallback(async () => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*');
+      .select('*')
+      .not('subscription_expires_at', 'is', null);
     if (!error && data) {
       const validProfiles = data.filter((p: any) => p.pos_x !== null && p.pos_y !== null);
       setProfiles(validProfiles);
