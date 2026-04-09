@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo, startTransition } from 'react';
 import ProfileModal from './ProfileModal';
-import { cn } from '@/lib/utils';
 
 interface Profile {
   id: string;
@@ -32,10 +31,12 @@ interface CommunityMapProps {
 const CELL_SIZE = 140;
 const BASE_MAP_LIMIT = 5;
 
-// CSS estático: tráfego + cursor + drag otimization (fora do componente — injetado uma só vez)
+// CSS estático: tráfego + drag + night (fora do componente — injetado uma só vez)
 const TRAFFIC_CSS = `
 .map-container.is-dragging { cursor: grabbing !important; }
 .map-container.is-dragging .building { transition: none !important; pointer-events: none !important; }
+.light-pole { display: none; }
+.map-container.is-night .light-pole { display: block; }
 
 @keyframes routeE {
   0%   { transform: translate(-4000px, 20px)   rotate(0deg); }
@@ -90,7 +91,7 @@ const TRAFFIC_CSS = `
 
 const EmptyLot = React.memo(({ x, y }: { x: number; y: number }) => (
   <div
-    className="absolute flex flex-col items-center justify-center pointer-events-none"
+    className="absolute flex items-center justify-center pointer-events-none"
     style={{
       left: x * CELL_SIZE,
       top: y * CELL_SIZE,
@@ -100,13 +101,8 @@ const EmptyLot = React.memo(({ x, y }: { x: number; y: number }) => (
     }}
   >
     <div
-      className="rounded-xl border-dashed flex flex-col items-center justify-center shadow-inner opacity-70"
-      style={{ width: 110, height: 110, backgroundColor: '#8bc34a', borderWidth: 3, borderColor: '#7cb342' }}
-    >
-      <div className="relative opacity-60" style={{ width: 12, height: 16, borderLeftWidth: 3, borderLeftColor: 'rgba(120,53,15,0.4)' }}>
-        <div className="absolute rounded-[2px] shadow-sm" style={{ top: 0, left: -10, width: 20, height: 12, backgroundColor: 'rgba(254,243,199,0.8)', border: '1px solid rgba(120,53,15,0.3)' }} />
-      </div>
-    </div>
+      style={{ width: 110, height: 110, backgroundColor: '#8bc34a', borderRadius: 12, border: '3px dashed #7cb342', opacity: 0.7 }}
+    />
   </div>
 ));
 
@@ -132,18 +128,19 @@ const StreetCell = React.memo(({ x, y }: { x: number; y: number }) => (
   </div>
 ));
 
-// LightPole simplificado: 1 div em vez de SVG com 4 elementos — ~80% menos nós DOM
+// LightPole: oculto de dia (CSS .light-pole { display:none }), visível à noite
 const LightPole = React.memo(({ x, y }: { x: number; y: number }) => (
   <div
-    className="absolute pointer-events-none z-0"
+    className="light-pole absolute pointer-events-none"
     style={{
-      left: x * CELL_SIZE - 4,
-      top: y * CELL_SIZE - 8,
-      width: 8,
-      height: 8,
+      left: x * CELL_SIZE - 5,
+      top: y * CELL_SIZE - 10,
+      width: 10,
+      height: 10,
       borderRadius: '50%',
       backgroundColor: '#fef08a',
-      boxShadow: '0 0 6px 2px rgba(254,240,138,0.5)',
+      boxShadow: '0 0 8px 3px rgba(254,240,138,0.6)',
+      zIndex: 18,
     }}
   />
 ));
@@ -405,8 +402,12 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
     const next = !isNightRef.current;
     isNightRef.current = next;
     setIsNightBtn(next);
-    if (containerRef.current)
-      containerRef.current.style.backgroundColor = next ? '#0f172a' : '#7cb342';
+    const el = containerRef.current;
+    if (el) {
+      el.style.backgroundColor = next ? '#0f172a' : '#7cb342';
+      if (next) el.classList.add('is-night');
+      else el.classList.remove('is-night');
+    }
     if (nightOverlayRef.current)
       nightOverlayRef.current.style.opacity = next ? '1' : '0';
   }, []);
@@ -630,17 +631,6 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
         </div>
       </div>
 
-      {/* Overlay de noite — opacity via ref, zero re-render em filhos */}
-      <div
-        ref={nightOverlayRef}
-        className="absolute inset-0 pointer-events-none z-10"
-        style={{
-          backgroundColor: 'rgba(15,23,42,0.55)',
-          opacity: 0,
-          transition: 'opacity 800ms ease',
-        }}
-      />
-
       {/* Container de zoom — transform gerenciado pelo ref, não pelo React */}
       <div ref={zoomDivRef} className="absolute left-1/2 top-1/2 w-0 h-0" style={{ willChange: 'transform' }}>
         {/* Layer do mapa — transform gerenciado pelo ref, não pelo React */}
@@ -693,6 +683,22 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
               <TrafficLayer onlineCount={onlineCount} />
             </div>
           </div>
+
+          {/* Overlay de noite — z-15: escurece chão/ruas mas prédios (z-20+) ficam acima */}
+          <div
+            ref={nightOverlayRef}
+            className="absolute pointer-events-none"
+            style={{
+              left: -5000,
+              top: -5000,
+              width: 10000,
+              height: 10000,
+              backgroundColor: 'rgba(15,23,42,0.55)',
+              opacity: 0,
+              transition: 'opacity 800ms ease',
+              zIndex: 15,
+            }}
+          />
 
           {/* Prédios */}
           {visibleProfiles.map(p => (
