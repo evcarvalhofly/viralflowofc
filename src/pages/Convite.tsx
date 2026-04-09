@@ -82,11 +82,11 @@ function BuyNotifications() {
 
   return (
     <div
-      className="fixed bottom-20 left-4 z-50 flex items-center gap-3 rounded-2xl border border-white/10 bg-[#111116]/95 backdrop-blur-md px-4 py-3 shadow-2xl max-w-[270px]"
+      className="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl border border-white/10 bg-[#111116]/95 backdrop-blur-md px-4 py-3 shadow-2xl max-w-[300px] w-[calc(100%-2rem)]"
       style={{
         transition: 'opacity 0.4s ease, transform 0.4s ease',
         opacity: notif.visible ? 1 : 0,
-        transform: notif.visible ? 'translateY(0)' : 'translateY(8px)',
+        transform: notif.visible ? 'translateY(0)' : 'translateY(-16px)',
       }}
     >
       {/* Avatar */}
