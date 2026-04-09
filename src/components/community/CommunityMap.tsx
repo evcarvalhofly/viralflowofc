@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo, startTransition } from 'react';
 import ProfileModal from './ProfileModal';
 import { cn } from '@/lib/utils';
 
@@ -213,7 +213,7 @@ const IsometricBuilding = React.memo(({ nivel, isOnline }: { nivel: number; isOn
       <svg width={dims.w} height={dims.h} viewBox={viewBox} className="overflow-visible">
         {svgContent}
       </svg>
-      {isOnline && <div className="absolute -top-3 w-2 h-2 bg-green-500 rounded-full border border-black animate-bounce" />}
+      {isOnline && <div className="absolute -top-3 w-2 h-2 bg-green-500 rounded-full border border-black" />}
     </div>
   );
 });
@@ -388,8 +388,9 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   const initialZoomParams = useRef({ dist: 0, zoom: 1 });
   const hasAutoCentered = useRef(false);
   const mapLimitRef = useRef(BASE_MAP_LIMIT);
+  const rafRef = useRef<number | null>(null);
 
-  // Aplica transform direto no DOM sem React re-render
+  // Aplica transform direto no DOM sem React re-render, throttled por RAF
   const applyCamera = useCallback((
     x = panRef.current.x,
     y = panRef.current.y,
@@ -397,10 +398,14 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   ) => {
     panRef.current  = { x, y };
     zoomRef.current = z;
-    if (mapLayerRef.current)
-      mapLayerRef.current.style.transform = `translate3d(${x}px,${y}px,0)`;
-    if (zoomDivRef.current)
-      zoomDivRef.current.style.transform = `scale(${z})`;
+    if (rafRef.current !== null) return; // já agendado
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (mapLayerRef.current)
+        mapLayerRef.current.style.transform = `translate3d(${panRef.current.x}px,${panRef.current.y}px,0)`;
+      if (zoomDivRef.current)
+        zoomDivRef.current.style.transform = `scale(${zoomRef.current})`;
+    });
   }, []);
 
   // Sincroniza DOM quando pan/zoom STATE muda (auto-center, etc.)
@@ -489,7 +494,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   }, [profiles, currentUserId]);
 
   // ── Pointer handlers (zero setState durante o drag) ───────────────────────────
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+  const handlePointerDown = useCallback((e: PointerEvent) => {
     if ((e.target as HTMLElement).closest('.building')) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -504,7 +509,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
     }
   }, []);
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+  const handlePointerMove = useCallback((e: PointerEvent) => {
     if (!activePointers.current.has(e.pointerId)) return;
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -527,27 +532,48 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
     }
   }, [applyCamera]);
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  const handlePointerUp = useCallback((e: PointerEvent) => {
     activePointers.current.delete(e.pointerId);
     try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
 
     if (activePointers.current.size === 0) {
       draggingRef.current = false;
       setIsDraggingCursor(false);
-      // Única atualização de state: sincroniza para re-calcular culling
-      setPan({ ...panRef.current });
-      setZoom(zoomRef.current);
+      // Baixa prioridade: re-calcula culling sem bloquear o frame atual
+      startTransition(() => {
+        setPan({ ...panRef.current });
+        setZoom(zoomRef.current);
+      });
     } else if (activePointers.current.size === 1) {
       const remaining = Array.from(activePointers.current.values())[0];
       lastPos.current = { x: remaining.x, y: remaining.y };
     }
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
     const newZoom = Math.max(0.4, Math.min(zoomRef.current + (e.deltaY > 0 ? -0.1 : 0.1), 2.0));
     applyCamera(panRef.current.x, panRef.current.y, newZoom);
-    setZoom(newZoom);
+    startTransition(() => setZoom(newZoom));
   }, [applyCamera]);
+
+  // Listeners nativos — passive: true no move evita janela de scroll no mobile
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener('pointerdown',   handlePointerDown, { passive: false });
+    el.addEventListener('pointermove',   handlePointerMove, { passive: true });
+    el.addEventListener('pointerup',     handlePointerUp);
+    el.addEventListener('pointercancel', handlePointerUp);
+    el.addEventListener('wheel',         handleWheel,       { passive: false });
+    return () => {
+      el.removeEventListener('pointerdown',   handlePointerDown);
+      el.removeEventListener('pointermove',   handlePointerMove);
+      el.removeEventListener('pointerup',     handlePointerUp);
+      el.removeEventListener('pointercancel', handlePointerUp);
+      el.removeEventListener('wheel',         handleWheel);
+    };
+  }, [handlePointerDown, handlePointerMove, handlePointerUp, handleWheel]);
 
   const handleBuildingClick = useCallback((p: Profile) => {
     setSelectedProfile(p);
@@ -557,13 +583,8 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   return (
     <div
       ref={containerRef}
-      className={cn('w-full h-full relative overflow-hidden transition-colors duration-1000 touch-none', isDraggingCursor ? 'cursor-grabbing' : 'cursor-grab')}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      onWheel={handleWheel}
-      style={{ backgroundColor: isNight ? '#0f172a' : '#7cb342' }}
+      className={cn('w-full h-full relative overflow-hidden touch-none', isDraggingCursor ? 'cursor-grabbing' : 'cursor-grab')}
+      style={{ backgroundColor: isNight ? '#0f172a' : '#7cb342', transition: 'background-color 1000ms ease' }}
     >
       {/* Controles */}
       <div className="absolute flex items-center gap-1" style={{ right: '0.75rem', bottom: '0.75rem', zIndex: 60 }}>
@@ -588,17 +609,23 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
         </div>
       </div>
 
+      {/* Overlay de noite — separado da camada de transform para não quebrar composição GPU */}
+      <div
+        className="absolute inset-0 pointer-events-none z-10"
+        style={{
+          backgroundColor: 'rgba(15,23,42,0.45)',
+          opacity: isNight ? 1 : 0,
+          transition: 'opacity 1000ms ease',
+        }}
+      />
+
       {/* Container de zoom — transform gerenciado pelo ref, não pelo React */}
       <div ref={zoomDivRef} className="absolute left-1/2 top-1/2 w-0 h-0" style={{ willChange: 'transform' }}>
         {/* Layer do mapa — transform gerenciado pelo ref, não pelo React */}
         <div
           ref={mapLayerRef}
           className="absolute left-0 top-0 pointer-events-none"
-          style={{
-            willChange: 'transform',
-            filter: isNight ? 'brightness(0.6) contrast(1.1) saturate(1.2)' : 'none',
-            transition: 'filter 1000ms ease',
-          }}
+          style={{ willChange: 'transform' }}
         >
           <TrafficStyles />
 
