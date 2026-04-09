@@ -5,7 +5,7 @@ import { useState } from 'react';
 import {
   Sliders, Scissors, Trash2, Volume2, Eye, FlipHorizontal2, FlipVertical2,
   Gauge, Type, AlignLeft, AlignCenter, AlignRight, Strikethrough, Underline,
-  Sun, Contrast, Droplets, ChevronDown, ChevronUp
+  Sun, Contrast, Droplets, ChevronDown, ChevronUp, Bold
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -14,6 +14,49 @@ import {
   DEFAULT_VIDEO_DETAILS, DEFAULT_AUDIO_DETAILS, DEFAULT_TEXT_DETAILS, DEFAULT_IMAGE_DETAILS
 } from '../types';
 import { cn } from '@/lib/utils';
+
+// ── Shared style options (same as SubtitleStylePanel) ──────────
+const FONT_OPTIONS = [
+  { label: 'Inter',            family: 'Inter, sans-serif' },
+  { label: 'Roboto',           family: '"Roboto", sans-serif' },
+  { label: 'Poppins',          family: '"Poppins", sans-serif' },
+  { label: 'Montserrat',       family: '"Montserrat", sans-serif' },
+  { label: 'Lato',             family: '"Lato", sans-serif' },
+  { label: 'Nunito',           family: '"Nunito", sans-serif' },
+  { label: 'Raleway',          family: '"Raleway", sans-serif' },
+  { label: 'Oswald',           family: '"Oswald", sans-serif' },
+  { label: 'Anton',            family: '"Anton", sans-serif' },
+  { label: 'Bebas Neue',       family: '"Bebas Neue", sans-serif' },
+  { label: 'Abril Fatface',    family: '"Abril Fatface", serif' },
+  { label: 'Black Han Sans',   family: '"Black Han Sans", sans-serif' },
+  { label: 'Playfair',         family: '"Playfair Display", Georgia, serif' },
+  { label: 'Bangers',          family: '"Bangers", cursive' },
+  { label: 'Pacifico',         family: '"Pacifico", cursive' },
+  { label: 'Lobster',          family: '"Lobster", cursive' },
+  { label: 'Permanent Marker', family: '"Permanent Marker", cursive' },
+];
+
+const QUICK_COLORS = ['#ffffff', '#facc15', '#00f5ff', '#ff4444', '#44ff88', '#ff88ff', '#000000', '#f97316'];
+
+type BgType = 'filled' | 'stroke' | 'shadow' | 'clean';
+
+const BG_OPTIONS: { type: BgType; label: string; previewBg: string; previewShadow?: string }[] = [
+  { type: 'filled',  label: 'Com fundo', previewBg: 'rgba(0,0,0,0.75)' },
+  { type: 'stroke',  label: 'Traçado',   previewBg: '#1a1a1a', previewShadow: '1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000' },
+  { type: 'shadow',  label: 'Sombra',    previewBg: '#1a1a1a', previewShadow: '0 2px 6px #000,0 0 2px #000' },
+  { type: 'clean',   label: 'Sem fundo', previewBg: '#333' },
+];
+
+const TEXT_STYLE_PRESETS = [
+  { label: 'Clássico',  color: '#ffffff', bg: 'rgba(0,0,0,0.75)', font: 'Inter, sans-serif',                   weight: '700', stroke: 0 },
+  { label: 'Viral',     color: '#facc15', bg: 'rgba(0,0,0,0.82)', font: 'Inter, sans-serif',                   weight: '700', stroke: 0 },
+  { label: 'Neon',      color: '#00f5ff', bg: 'transparent',      font: 'Inter, sans-serif',                   weight: '700', stroke: 0, shadow: { color: '#00f5ff', x: 0, y: 0, blur: 8 } },
+  { label: 'Bold',      color: '#ffffff', bg: 'transparent',      font: '"Anton", sans-serif',                 weight: '400', stroke: 3, strokeColor: '#000000' },
+  { label: 'Elegante',  color: '#f5f0e8', bg: 'transparent',      font: '"Playfair Display", Georgia, serif',  weight: '700', stroke: 0, shadow: { color: '#000000', x: 1, y: 1, blur: 4 } },
+  { label: 'Fire',      color: '#ffffff', bg: 'rgba(220,38,38,0.88)', font: '"Oswald", sans-serif',            weight: '700', stroke: 0 },
+  { label: 'Pop',       color: '#ffffff', bg: 'rgba(220,0,120,0.9)',  font: '"Bangers", cursive',              weight: '400', stroke: 0 },
+  { label: 'Destaque',  color: '#000000', bg: '#FFE500',              font: 'Inter, sans-serif',               weight: '700', stroke: 0 },
+];
 
 interface PropertiesPanelProps {
   selectedItem: TrackItem | null;
@@ -191,7 +234,34 @@ export function PropertiesPanel({
           )}
 
           {/* ── TEXT controls ── */}
-          {selectedItem.type === 'text' && (
+          {selectedItem.type === 'text' && (() => {
+            const detectBgType = (): BgType => {
+              if ((td.strokeWidth ?? 0) > 0) return 'stroke';
+              if ((td.boxShadow?.blur ?? 0) > 0) return 'shadow';
+              if (td.backgroundColor && td.backgroundColor !== 'transparent') return 'filled';
+              return 'clean';
+            };
+            const bgType = detectBgType();
+            const applyBgType = (type: BgType) => {
+              const zero = { color: '#000000', x: 0, y: 0, blur: 0 } as const;
+              if (type === 'filled')  updateText({ backgroundColor: 'rgba(0,0,0,0.75)', strokeWidth: 0, strokeColor: undefined, boxShadow: zero });
+              if (type === 'stroke')  updateText({ backgroundColor: 'transparent',      strokeWidth: 3, strokeColor: '#000000', boxShadow: zero });
+              if (type === 'shadow')  updateText({ backgroundColor: 'transparent',      strokeWidth: 0, strokeColor: undefined, boxShadow: { color: '#000000', x: 0, y: 0, blur: 8 } });
+              if (type === 'clean')   updateText({ backgroundColor: 'transparent',      strokeWidth: 0, strokeColor: undefined, boxShadow: zero });
+            };
+            const applyPreset = (p: typeof TEXT_STYLE_PRESETS[number]) => {
+              updateText({
+                color: p.color,
+                backgroundColor: p.bg,
+                fontFamily: p.font,
+                fontWeight: p.weight,
+                strokeWidth: p.stroke,
+                strokeColor: p.strokeColor ?? '#000000',
+                boxShadow: p.shadow ?? { color: '#000000', x: 0, y: 0, blur: 0 },
+              });
+            };
+
+            return (
             <>
               <Section title="Texto">
                 <textarea
@@ -201,21 +271,134 @@ export function PropertiesPanel({
                   onChange={(e) => updateText({ text: e.target.value })}
                 />
               </Section>
-              <Section title="Estilo">
-                <div className="space-y-1">
-                  <span className="text-[10px] text-muted-foreground">Tamanho da fonte (%)</span>
-                  <div className="flex items-center gap-2">
-                    <Slider min={1} max={30} step={0.5} value={[td.fontSize]} onValueChange={([v]) => updateText({ fontSize: v })} className="flex-1 h-4" />
-                    <span className="text-[10px] font-mono w-8 text-right">{td.fontSize.toFixed(1)}%</span>
-                  </div>
+
+              {/* Presets */}
+              <Section title="Modelos">
+                <div className="grid grid-cols-4 gap-1.5">
+                  {TEXT_STYLE_PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      onClick={() => applyPreset(p)}
+                      className="flex flex-col items-center gap-1 p-1.5 rounded-xl border border-border/50 bg-muted/50 hover:border-primary/50 hover:bg-muted transition-all"
+                    >
+                      <div
+                        className="w-full h-7 rounded-lg flex items-center justify-center overflow-hidden"
+                        style={{ background: p.bg === 'transparent' ? '#1a1a1a' : p.bg }}
+                      >
+                        <span
+                          className="text-[9px] font-bold px-0.5 leading-none"
+                          style={{
+                            color: p.color,
+                            fontFamily: p.font,
+                            fontWeight: p.weight,
+                            WebkitTextStroke: p.stroke > 0 ? `${p.stroke}px ${p.strokeColor ?? '#000'}` : undefined,
+                            textShadow: p.shadow ? `${p.shadow.x}px ${p.shadow.y}px ${p.shadow.blur}px ${p.shadow.color}` : undefined,
+                          }}
+                        >
+                          Abc
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-muted-foreground leading-none truncate w-full text-center">{p.label}</span>
+                    </button>
+                  ))}
                 </div>
-                <div className="space-y-1">
+              </Section>
+
+              <Section title="Estilo">
+                {/* Text color */}
+                <div className="space-y-1.5">
                   <span className="text-[10px] text-muted-foreground">Cor do texto</span>
                   <div className="flex items-center gap-2">
-                    <input type="color" value={td.color} onChange={(e) => updateText({ color: e.target.value })} className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" />
-                    <span className="text-[10px] font-mono text-foreground">{td.color}</span>
+                    <label className="relative cursor-pointer shrink-0">
+                      <input
+                        type="color"
+                        value={td.color}
+                        onChange={(e) => updateText({ color: e.target.value })}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                      />
+                      <div className="w-7 h-7 rounded-lg border-2 border-border shadow-sm" style={{ background: td.color }} />
+                    </label>
+                    <div className="flex gap-1 flex-wrap">
+                      {QUICK_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => updateText({ color: c })}
+                          className={cn('w-5 h-5 rounded-full border-2 transition-transform hover:scale-110', td.color === c ? 'border-primary scale-110' : 'border-border/50')}
+                          style={{ background: c }}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
+
+                {/* Background type */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-muted-foreground">Estilo de fundo</span>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {BG_OPTIONS.map(({ type, label, previewBg, previewShadow }) => (
+                      <button
+                        key={type}
+                        onClick={() => applyBgType(type)}
+                        className={cn(
+                          'flex flex-col items-center gap-1 p-1.5 rounded-xl border transition-all',
+                          bgType === type
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border/50 bg-muted/50 hover:border-primary/50 hover:bg-muted'
+                        )}
+                      >
+                        <div className="w-full h-6 rounded-lg flex items-center justify-center" style={{ background: previewBg }}>
+                          <span className="text-[8px] font-bold text-white leading-none" style={{ textShadow: previewShadow }}>Abc</span>
+                        </div>
+                        <span className="text-[8px] text-muted-foreground leading-none text-center">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Font weight */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-muted-foreground">Peso da fonte</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[{ value: '300', label: 'Leve' }, { value: '400', label: 'Normal' }, { value: '700', label: 'Negrito' }].map(
+                      ({ value, label }) => (
+                        <button
+                          key={value}
+                          onClick={() => updateText({ fontWeight: value })}
+                          className={cn(
+                            'py-1.5 rounded-xl border text-xs transition-all',
+                            (td.fontWeight ?? '700') === value
+                              ? 'border-primary bg-primary/10 text-foreground'
+                              : 'border-border/50 bg-muted/50 text-muted-foreground hover:border-primary/50'
+                          )}
+                          style={{ fontWeight: value }}
+                        >
+                          {label}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* Font size */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">Tamanho</span>
+                    <span className="text-[10px] font-mono text-foreground tabular-nums">{td.fontSize.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateText({ fontSize: Math.max(1, parseFloat((td.fontSize - 0.5).toFixed(1))) })}
+                      className="w-6 h-6 rounded-lg border border-border/50 bg-muted/50 text-foreground hover:bg-muted flex items-center justify-center text-xs font-bold shrink-0"
+                    >-</button>
+                    <Slider min={1} max={30} step={0.5} value={[td.fontSize]} onValueChange={([v]) => updateText({ fontSize: v })} className="flex-1 h-4" />
+                    <button
+                      onClick={() => updateText({ fontSize: Math.min(30, parseFloat((td.fontSize + 0.5).toFixed(1))) })}
+                      className="w-6 h-6 rounded-lg border border-border/50 bg-muted/50 text-foreground hover:bg-muted flex items-center justify-center text-xs font-bold shrink-0"
+                    >+</button>
+                  </div>
+                </div>
+
+                {/* Alignment */}
                 <div className="space-y-1">
                   <span className="text-[10px] text-muted-foreground">Alinhamento</span>
                   <div className="flex gap-1">
@@ -226,8 +409,49 @@ export function PropertiesPanel({
                     ))}
                   </div>
                 </div>
+
                 <SliderRow label="Opacidade" value={td.opacity} min={0} max={1} onChange={(v) => updateText({ opacity: v })} format={(v) => `${Math.round(v * 100)}%`} />
               </Section>
+
+              {/* Font family */}
+              <Section title="Fonte">
+                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-0.5">
+                  {FONT_OPTIONS.map((f) => {
+                    const isActive = td.fontFamily === f.family;
+                    return (
+                      <button
+                        key={f.family}
+                        onClick={() => updateText({ fontFamily: f.family })}
+                        className={cn(
+                          'flex items-center justify-center h-8 rounded-xl border text-xs transition-all px-2',
+                          isActive
+                            ? 'border-primary bg-primary/10 text-foreground'
+                            : 'border-border/50 bg-muted/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                        )}
+                        style={{ fontFamily: f.family }}
+                        title={f.label}
+                      >
+                        <span className="truncate">{f.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Section>
+
+              {/* Stroke */}
+              <Section title="Traçado (Outline)" defaultOpen={false}>
+                <SliderRow label="Espessura" value={td.strokeWidth ?? 0} min={0} max={10} step={0.5} onChange={(v) => updateText({ strokeWidth: v })} format={(v) => `${v.toFixed(1)}px`} />
+                {(td.strokeWidth ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground">Cor do traçado</span>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={td.strokeColor ?? '#000000'} onChange={(e) => updateText({ strokeColor: e.target.value })} className="w-7 h-7 rounded cursor-pointer bg-transparent border-0" />
+                      <span className="text-[10px] font-mono text-foreground">{td.strokeColor ?? '#000000'}</span>
+                    </div>
+                  </div>
+                )}
+              </Section>
+
               <Section title="Posição" defaultOpen={false}>
                 <SliderRow label="X (%)" value={td.posX} min={0} max={100} step={1} onChange={(v) => updateText({ posX: v })} format={(v) => `${Math.round(v)}%`} />
                 <SliderRow label="Y (%)" value={td.posY} min={0} max={100} step={1} onChange={(v) => updateText({ posY: v })} format={(v) => `${Math.round(v)}%`} />
@@ -243,7 +467,8 @@ export function PropertiesPanel({
                 <SliderRow label="Blur" value={td.boxShadow.blur} min={0} max={40} step={1} onChange={(v) => updateText({ boxShadow: { ...td.boxShadow, blur: v } })} format={(v) => `${Math.round(v)}px`} />
               </Section>
             </>
-          )}
+            );
+          })()}
 
           {/* ── IMAGE controls ── */}
           {selectedItem.type === 'image' && (
