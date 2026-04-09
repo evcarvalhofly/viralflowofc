@@ -645,7 +645,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
         <div
           ref={mapLayerRef}
           className="absolute left-0 top-0 pointer-events-none"
-          style={{ willChange: 'transform', contain: 'layout style paint' }}
+          style={{ willChange: 'transform' }}
         >
           <TrafficStyles />
           {/* Desativa transitions de hover durante o drag para reduzir work de compositing */}
