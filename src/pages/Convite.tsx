@@ -7,6 +7,104 @@ import {
 
 type Plan = 'monthly' | 'annual';
 
+/* ─── Notificações de compra ─────────────────────────────────── */
+const BUYERS = [
+  { name: 'Lucas M.', city: 'São Paulo' },
+  { name: 'Fernanda R.', city: 'Rio de Janeiro' },
+  { name: 'Gabriel S.', city: 'Belo Horizonte' },
+  { name: 'Juliana C.', city: 'Curitiba' },
+  { name: 'Rafael T.', city: 'Brasília' },
+  { name: 'Camila O.', city: 'Salvador' },
+  { name: 'Thiago N.', city: 'Fortaleza' },
+  { name: 'Beatriz L.', city: 'Porto Alegre' },
+  { name: 'Felipe A.', city: 'Recife' },
+  { name: 'Mariana F.', city: 'Manaus' },
+  { name: 'Diego P.', city: 'Goiânia' },
+  { name: 'Larissa V.', city: 'Florianópolis' },
+  { name: 'Rodrigo H.', city: 'Campinas' },
+  { name: 'Priscila M.', city: 'Natal' },
+  { name: 'André B.', city: 'Maceió' },
+  { name: 'Isabela Q.', city: 'Campo Grande' },
+  { name: 'Vinícius K.', city: 'Belém' },
+  { name: 'Natália E.', city: 'Teresina' },
+  { name: 'Gustavo W.', city: 'São Luís' },
+  { name: 'Aline D.', city: 'João Pessoa' },
+];
+
+const PLANS_LABEL = ['Plano Mensal', 'Plano Anual', 'Plano Anual', 'Plano Anual']; // anual mais frequente
+
+interface BuyNotif {
+  id: number;
+  name: string;
+  city: string;
+  plan: string;
+  visible: boolean;
+}
+
+function BuyNotifications() {
+  const [notif, setNotif] = useState<BuyNotif | null>(null);
+  const counterRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showNext = () => {
+    const buyer = BUYERS[Math.floor(Math.random() * BUYERS.length)];
+    const plan = PLANS_LABEL[Math.floor(Math.random() * PLANS_LABEL.length)];
+    const id = ++counterRef.current;
+
+    setNotif({ id, name: buyer.name, city: buyer.city, plan, visible: true });
+
+    // Oculta após 4.5s (fade-out)
+    setTimeout(() => {
+      setNotif(prev => prev?.id === id ? { ...prev, visible: false } : prev);
+    }, 4500);
+
+    // Remove do DOM após fade-out e agenda o próximo (45–90s)
+    const next = 45_000 + Math.random() * 45_000;
+    timerRef.current = setTimeout(() => {
+      setNotif(null);
+      timerRef.current = setTimeout(showNext, 500);
+    }, 5200 + next - 5200); // limpa após fade, aguarda próximo intervalo
+    // simplificado:
+    timerRef.current = setTimeout(() => {
+      setNotif(null);
+      timerRef.current = setTimeout(showNext, next);
+    }, 5200);
+  };
+
+  useEffect(() => {
+    // Primeira notificação aparece entre 10–20s
+    const delay = 10_000 + Math.random() * 10_000;
+    timerRef.current = setTimeout(showNext, delay);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, []);
+
+  if (!notif) return null;
+
+  return (
+    <div
+      className="fixed bottom-20 left-4 z-50 flex items-center gap-3 rounded-2xl border border-white/10 bg-[#111116]/95 backdrop-blur-md px-4 py-3 shadow-2xl max-w-[270px]"
+      style={{
+        transition: 'opacity 0.4s ease, transform 0.4s ease',
+        opacity: notif.visible ? 1 : 0,
+        transform: notif.visible ? 'translateY(0)' : 'translateY(8px)',
+      }}
+    >
+      {/* Avatar */}
+      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-violet-600 to-purple-700 flex items-center justify-center shrink-0 text-sm font-bold text-white">
+        {notif.name.charAt(0)}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[12px] font-semibold text-white leading-snug truncate">
+          {notif.name} <span className="font-normal text-zinc-400">de {notif.city}</span>
+        </p>
+        <p className="text-[11px] text-emerald-400 font-medium">
+          acaba de assinar o {notif.plan} ✓
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Dados ─────────────────────────────────────────────────── */
 
 const PAIN_POINTS = [
@@ -846,6 +944,22 @@ export default function Convite() {
         </div>
       </section>
 
+      {/* ── WHATSAPP PÓS-FAQ ─────────────────────────────────────── */}
+      <div className="px-4 pb-10 text-center">
+        <a
+          href="https://wa.me/5512992275476?text=Ol%C3%A1!%20tenho%20interesse%20no%20ViralFlow"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-6 py-3 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current shrink-0" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+            <path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.554 4.124 1.523 5.86L.057 23.571a.75.75 0 0 0 .921.921l5.703-1.464A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.718 9.718 0 0 1-4.964-1.362l-.356-.213-3.685.946.969-3.558-.233-.368A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+          </svg>
+          Não encontrou sua resposta? Fale no WhatsApp →
+        </a>
+      </div>
+
       {/* ── CTA FINAL ────────────────────────────────────────────── */}
       <section className="relative px-4 pb-24 pt-12 text-center overflow-hidden">
         <div className="pointer-events-none absolute inset-0 -z-10">
@@ -882,6 +996,23 @@ export default function Convite() {
           <a href="/auth" className="text-violet-400 hover:underline">Entrar no app</a>
         </p>
       </div>
+
+      {/* ── NOTIFICAÇÕES DE COMPRA ───────────────────────────────── */}
+      <BuyNotifications />
+
+      {/* ── BOTÃO FLUTUANTE WHATSAPP ──────────────────────────────── */}
+      <a
+        href="https://wa.me/5512992275476?text=Ol%C3%A1!%20tenho%20interesse%20no%20ViralFlow"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-5 right-5 z-50 flex items-center justify-center h-14 w-14 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 active:scale-95 transition-all"
+        aria-label="Suporte via WhatsApp"
+      >
+        <svg viewBox="0 0 24 24" className="h-7 w-7 fill-white" xmlns="http://www.w3.org/2000/svg">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+          <path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.554 4.124 1.523 5.86L.057 23.571a.75.75 0 0 0 .921.921l5.703-1.464A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.718 9.718 0 0 1-4.964-1.362l-.356-.213-3.685.946.969-3.558-.233-.368A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+        </svg>
+      </a>
 
     </div>
   );
