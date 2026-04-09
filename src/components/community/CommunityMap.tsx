@@ -107,7 +107,8 @@ const EmptyLot = React.memo(({ x, y }: { x: number; y: number }) => (
   </div>
 ));
 
-const StreetCell = React.memo(({ x, y, isNight }: { x: number; y: number; isNight: boolean }) => (
+// isNight removido — overlay CSS cuida do escurecimento, evitando re-render de todos os cells
+const StreetCell = React.memo(({ x, y }: { x: number; y: number }) => (
   <div
     className="absolute pointer-events-none z-0 overflow-hidden"
     style={{
@@ -115,28 +116,33 @@ const StreetCell = React.memo(({ x, y, isNight }: { x: number; y: number; isNigh
       top: y * CELL_SIZE,
       width: CELL_SIZE,
       height: CELL_SIZE,
-      backgroundColor: isNight ? '#334155' : '#94a3b8',
+      backgroundColor: '#94a3b8',
       transform: 'translate(-50%, -50%)',
     }}
   >
     {x === 0 && Math.abs(y) > 1 && (
-      <div className="absolute top-0 bottom-0 left-1/2 w-1 -translate-x-1/2" style={{ borderLeft: '2px dashed #cbd5e1', opacity: isNight ? 0.3 : 1 }} />
+      <div className="absolute top-0 bottom-0 left-1/2 w-1 -translate-x-1/2" style={{ borderLeft: '2px dashed #cbd5e1' }} />
     )}
     {y === 0 && Math.abs(x) > 1 && (
-      <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2" style={{ borderTop: '2px dashed #cbd5e1', opacity: isNight ? 0.3 : 1 }} />
+      <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2" style={{ borderTop: '2px dashed #cbd5e1' }} />
     )}
   </div>
 ));
 
+// LightPole simplificado: 1 div em vez de SVG com 4 elementos — ~80% menos nós DOM
 const LightPole = React.memo(({ x, y }: { x: number; y: number }) => (
-  <div className="absolute pointer-events-none z-0" style={{ left: x * CELL_SIZE, top: y * CELL_SIZE }}>
-    <svg width="24" height="50" viewBox="0 0 24 50" className="absolute -translate-x-1/2 -translate-y-[90%]">
-      <rect x="10" y="45" width="4" height="5" fill="#334155" />
-      <rect x="11" y="10" width="2" height="35" fill="#64748b" />
-      <rect x="12" y="10" width="8" height="3" fill="#334155" />
-      <circle cx="20" cy="12" r="4" fill="#fef08a" />
-    </svg>
-  </div>
+  <div
+    className="absolute pointer-events-none z-0"
+    style={{
+      left: x * CELL_SIZE - 4,
+      top: y * CELL_SIZE - 8,
+      width: 8,
+      height: 8,
+      borderRadius: '50%',
+      backgroundColor: '#fef08a',
+      boxShadow: '0 0 6px 2px rgba(254,240,138,0.5)',
+    }}
+  />
 ));
 
 const Block = React.memo(({ cx, cy, rx, ry, h, top, left, right }: any) => (
@@ -375,7 +381,9 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   const [pan,  setPan]  = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [isDraggingCursor, setIsDraggingCursor] = useState(false);
-  const [isNight, setIsNight] = useState(false);
+  const [isNightBtn, setIsNightBtn] = useState(false); // só para o ícone do botão
+  const isNightRef = useRef(false);
+  const nightOverlayRef = useRef<HTMLDivElement>(null);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
 
@@ -389,6 +397,17 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   const hasAutoCentered = useRef(false);
   const mapLimitRef = useRef(BASE_MAP_LIMIT);
   const rafRef = useRef<number | null>(null);
+
+  // Modo noite sem re-render: manipula DOM direto
+  const toggleNight = useCallback(() => {
+    const next = !isNightRef.current;
+    isNightRef.current = next;
+    setIsNightBtn(next);
+    if (containerRef.current)
+      containerRef.current.style.backgroundColor = next ? '#0f172a' : '#7cb342';
+    if (nightOverlayRef.current)
+      nightOverlayRef.current.style.opacity = next ? '1' : '0';
+  }, []);
 
   // Aplica transform direto no DOM sem React re-render, throttled por RAF
   const applyCamera = useCallback((
@@ -583,8 +602,8 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   return (
     <div
       ref={containerRef}
-      className={cn('w-full h-full relative overflow-hidden touch-none', isDraggingCursor ? 'cursor-grabbing' : 'cursor-grab')}
-      style={{ backgroundColor: isNight ? '#0f172a' : '#7cb342', transition: 'background-color 1000ms ease' }}
+      className={cn('w-full h-full relative overflow-hidden touch-none', isDraggingCursor ? 'cursor-grabbing is-dragging' : 'cursor-grab')}
+      style={{ backgroundColor: '#7cb342', transition: 'background-color 1000ms ease', contain: 'layout style' }}
     >
       {/* Controles */}
       <div className="absolute flex items-center gap-1" style={{ right: '0.75rem', bottom: '0.75rem', zIndex: 60 }}>
@@ -594,7 +613,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
             if (me) setPan({ x: -me.pos_x * CELL_SIZE, y: -me.pos_y * CELL_SIZE });
           }} className="text-white transition-all flex items-center justify-center gap-1 hover:opacity-80 active:scale-90 px-2" style={{ height: 32, fontSize: 11, fontWeight: 600 }}>🏠 <span className="hidden sm:inline">Meu Prédio</span></button>
           <div style={{ width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.2)' }} />
-          <button onClick={() => setIsNight(n => !n)} className="text-white transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: 32, height: 32, fontSize: 16 }}>{isNight ? '🌙' : '☀️'}</button>
+          <button onClick={toggleNight} className="text-white transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: 32, height: 32, fontSize: 16 }}>{isNightBtn ? '🌙' : '☀️'}</button>
           <div style={{ width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.2)' }} />
           <button onClick={() => { const z = Math.min(zoomRef.current + 0.2, 2.0); applyCamera(panRef.current.x, panRef.current.y, z); setZoom(z); }} className="text-white font-bold text-lg transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: 32, height: 32 }}>+</button>
           <button onClick={() => { const z = Math.max(zoomRef.current - 0.2, 0.4); applyCamera(panRef.current.x, panRef.current.y, z); setZoom(z); }} className="text-white font-bold text-lg transition-all flex items-center justify-center hover:opacity-80 active:scale-90" style={{ width: 32, height: 32 }}>−</button>
@@ -609,13 +628,14 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
         </div>
       </div>
 
-      {/* Overlay de noite — separado da camada de transform para não quebrar composição GPU */}
+      {/* Overlay de noite — opacity via ref, zero re-render em filhos */}
       <div
+        ref={nightOverlayRef}
         className="absolute inset-0 pointer-events-none z-10"
         style={{
-          backgroundColor: 'rgba(15,23,42,0.45)',
-          opacity: isNight ? 1 : 0,
-          transition: 'opacity 1000ms ease',
+          backgroundColor: 'rgba(15,23,42,0.55)',
+          opacity: 0,
+          transition: 'opacity 800ms ease',
         }}
       />
 
@@ -625,16 +645,18 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
         <div
           ref={mapLayerRef}
           className="absolute left-0 top-0 pointer-events-none"
-          style={{ willChange: 'transform' }}
+          style={{ willChange: 'transform', contain: 'layout style paint' }}
         >
           <TrafficStyles />
+          {/* Desativa transitions de hover durante o drag para reduzir work de compositing */}
+          {isDraggingCursor && <style>{`.building { transition: none !important; pointer-events: none !important; }`}</style>}
 
           {/* Chão: ruas, lotes vazios, postes */}
           {visibleCells.map(({ x, y }) => {
             if (Math.abs(x) > mapLimit || Math.abs(y) > mapLimit) return null;
             if (isInvalidLot(x, y)) {
               if (x === 0 && y === 0) return null;
-              return <StreetCell key={`s-${x}-${y}`} x={x} y={y} isNight={isNight} />;
+              return <StreetCell key={`s-${x}-${y}`} x={x} y={y} />;
             }
             return (
               <React.Fragment key={`c-${x}-${y}`}>
