@@ -617,7 +617,7 @@ export default function Convite() {
             {[
               {
                 question: 'Editar é cansativo?',
-                answer: 'Edição automática com IA — você aprova, o ViralFlow faz.',
+                answer: 'Edição automática com IA — Cortes e Legendas automáticos ilimitados!',
                 icon: '🎬',
               },
               {
