@@ -32,8 +32,11 @@ interface CommunityMapProps {
 const CELL_SIZE = 140;
 const BASE_MAP_LIMIT = 5;
 
-// CSS de tráfego fora do componente para não ser reinjetado a cada render
+// CSS estático: tráfego + cursor + drag otimization (fora do componente — injetado uma só vez)
 const TRAFFIC_CSS = `
+.map-container.is-dragging { cursor: grabbing !important; }
+.map-container.is-dragging .building { transition: none !important; pointer-events: none !important; }
+
 @keyframes routeE {
   0%   { transform: translate(-4000px, 20px)   rotate(0deg); }
   46%  { transform: translate(-140px,  20px)   rotate(0deg); }
@@ -377,10 +380,9 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   const zoomDivRef    = useRef<HTMLDivElement>(null);
   const mapLayerRef   = useRef<HTMLDivElement>(null);
 
-  // Estado React usado APENAS para culling e cursor (não para o transform)
+  // Estado React usado APENAS para culling (não para o transform nem cursor)
   const [pan,  setPan]  = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [isDraggingCursor, setIsDraggingCursor] = useState(false);
   const [isNightBtn, setIsNightBtn] = useState(false); // só para o ícone do botão
   const isNightRef = useRef(false);
   const nightOverlayRef = useRef<HTMLDivElement>(null);
@@ -488,7 +490,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   // ── Culling — só recalcula no drag end (pan state só muda aí) ─────────────────
   const { startX, endX, startY, endY, visibleCells } = useMemo(() => {
     if (viewport.width === 0) return { startX: -3, endX: 3, startY: -3, endY: 3, visibleCells: [] };
-    const margin = 2;
+    const margin = 3;
     const sX = Math.floor((-viewport.width / 2 / zoom - pan.x) / CELL_SIZE) - margin;
     const eX = Math.ceil((viewport.width  / 2 / zoom - pan.x) / CELL_SIZE) + margin;
     const sY = Math.floor((-viewport.height / 2 / zoom - pan.y) / CELL_SIZE) - margin;
@@ -520,7 +522,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
 
     if (activePointers.current.size === 1) {
       draggingRef.current = true;
-      setIsDraggingCursor(true);
+      containerRef.current?.classList.add('is-dragging');
       lastPos.current = { x: e.clientX, y: e.clientY };
     } else if (activePointers.current.size === 2) {
       const pts = Array.from(activePointers.current.values());
@@ -557,7 +559,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
 
     if (activePointers.current.size === 0) {
       draggingRef.current = false;
-      setIsDraggingCursor(false);
+      containerRef.current?.classList.remove('is-dragging');
       // Baixa prioridade: re-calcula culling sem bloquear o frame atual
       startTransition(() => {
         setPan({ ...panRef.current });
@@ -602,7 +604,7 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
   return (
     <div
       ref={containerRef}
-      className={cn('w-full h-full relative overflow-hidden touch-none', isDraggingCursor ? 'cursor-grabbing is-dragging' : 'cursor-grab')}
+      className="map-container w-full h-full relative overflow-hidden touch-none cursor-grab"
       style={{ backgroundColor: '#7cb342', transition: 'background-color 1000ms ease', contain: 'layout style' }}
     >
       {/* Controles */}
@@ -648,8 +650,6 @@ const CommunityMap: React.FC<CommunityMapProps> = ({ profiles, currentUserId, on
           style={{ willChange: 'transform' }}
         >
           <TrafficStyles />
-          {/* Desativa transitions de hover durante o drag para reduzir work de compositing */}
-          {isDraggingCursor && <style>{`.building { transition: none !important; pointer-events: none !important; }`}</style>}
 
           {/* Chão: ruas, lotes vazios, postes */}
           {visibleCells.map(({ x, y }) => {
