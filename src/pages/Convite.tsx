@@ -10,28 +10,29 @@ type Plan = 'monthly' | 'annual';
 /* ─── Notificações de compra ─────────────────────────────────── */
 const BUYERS = [
   { name: 'Lucas M.', city: 'São Paulo' },
-  { name: 'Fernanda R.', city: 'Rio de Janeiro' },
   { name: 'Gabriel S.', city: 'Belo Horizonte' },
-  { name: 'Juliana C.', city: 'Curitiba' },
   { name: 'Rafael T.', city: 'Brasília' },
-  { name: 'Camila O.', city: 'Salvador' },
   { name: 'Thiago N.', city: 'Fortaleza' },
-  { name: 'Beatriz L.', city: 'Porto Alegre' },
   { name: 'Felipe A.', city: 'Recife' },
-  { name: 'Mariana F.', city: 'Manaus' },
   { name: 'Diego P.', city: 'Goiânia' },
-  { name: 'Larissa V.', city: 'Florianópolis' },
   { name: 'Rodrigo H.', city: 'Campinas' },
-  { name: 'Priscila M.', city: 'Natal' },
   { name: 'André B.', city: 'Maceió' },
-  { name: 'Isabela Q.', city: 'Campo Grande' },
   { name: 'Vinícius K.', city: 'Belém' },
-  { name: 'Natália E.', city: 'Teresina' },
   { name: 'Gustavo W.', city: 'São Luís' },
-  { name: 'Aline D.', city: 'João Pessoa' },
+  { name: 'Mateus C.', city: 'Curitiba' },
+  { name: 'Bruno L.', city: 'Porto Alegre' },
+  { name: 'Henrique O.', city: 'Salvador' },
+  { name: 'Caio F.', city: 'Natal' },
+  { name: 'Eduardo V.', city: 'Florianópolis' },
+  { name: 'Leandro R.', city: 'Manaus' },
+  { name: 'Jonathan P.', city: 'Rio de Janeiro' },
+  { name: 'Fernanda R.', city: 'São Paulo' },
+  { name: 'Juliana C.', city: 'Campo Grande' },
+  { name: 'Camila O.', city: 'Teresina' },
 ];
 
-const PLANS_LABEL = ['Plano Mensal', 'Plano Anual', 'Plano Anual', 'Plano Anual']; // anual mais frequente
+// Mensal mais frequente (mais realista), anual aparece ocasionalmente
+const PLANS_LABEL = ['Plano Mensal', 'Plano Mensal', 'Plano Mensal', 'Plano Anual'];
 
 interface BuyNotif {
   id: number;
@@ -53,22 +54,17 @@ function BuyNotifications() {
 
     setNotif({ id, name: buyer.name, city: buyer.city, plan, visible: true });
 
-    // Oculta após 4.5s (fade-out)
-    setTimeout(() => {
+    // Inicia fade-out após 5s de exibição
+    timerRef.current = setTimeout(() => {
       setNotif(prev => prev?.id === id ? { ...prev, visible: false } : prev);
-    }, 4500);
 
-    // Remove do DOM após fade-out e agenda o próximo (45–90s)
-    const next = 45_000 + Math.random() * 45_000;
-    timerRef.current = setTimeout(() => {
-      setNotif(null);
-      timerRef.current = setTimeout(showNext, 500);
-    }, 5200 + next - 5200); // limpa após fade, aguarda próximo intervalo
-    // simplificado:
-    timerRef.current = setTimeout(() => {
-      setNotif(null);
-      timerRef.current = setTimeout(showNext, next);
-    }, 5200);
+      // Remove do DOM após o fade-out (400ms) e agenda próxima notificação (45–90s)
+      timerRef.current = setTimeout(() => {
+        setNotif(null);
+        const next = 45_000 + Math.random() * 45_000;
+        timerRef.current = setTimeout(showNext, next);
+      }, 450);
+    }, 5_000);
   };
 
   useEffect(() => {
