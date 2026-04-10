@@ -1,20 +1,16 @@
 // ============================================================
-// ViralCut Export3 – Video Frame Cache (v10 — fast precise seeking)
+// ViralCut Export3 – Video Frame Cache (v8 — HTMLVideoElement-based)
 //
 // Draws the browser-decoded <video> element directly onto canvas.
 // No createImageBitmap, no rotation, no metadata.
 // The browser already handles orientation correctly for display.
-//
-// v10: Tight seek epsilon for precision, lightweight seek flow
-//      for speed. No requestVideoFrameCallback (adds vsync delay).
 // ============================================================
 
-const SEEK_EPSILON_SEC = 1 / 500;  // ~2ms — tight enough for 60fps
-const SEEK_TIMEOUT_MS  = 3000;     // 3s timeout
+const SEEK_EPSILON_SEC = 1 / 50;  // ~20ms — skip seek if already within one frame (~30fps)
+const SEEK_TIMEOUT_MS  = 4000;   // 4s is generous; 8s was causing slow exports
 
 export class VideoFrameCache {
   private videos = new Map<string, HTMLVideoElement>();
-  private lastSeekTime = new Map<string, number>(); // track last captured time per video
 
   async prepare(id: string, url: string): Promise<void> {
     if (this.videos.has(id)) return;
@@ -43,14 +39,12 @@ export class VideoFrameCache {
     });
 
     this.videos.set(id, el);
-    this.lastSeekTime.set(id, -1);
     console.log('[VideoFrameCache] prepared', id,
       el.videoWidth, 'x', el.videoHeight,
       el.videoHeight > el.videoWidth ? 'portrait' : 'landscape'
     );
   }
 
-  /** Seek and wait for the browser to decode the frame. */
   private waitSeek(el: HTMLVideoElement, time: number): Promise<void> {
     return new Promise<void>((resolve) => {
       if (Math.abs(el.currentTime - time) <= SEEK_EPSILON_SEC && el.readyState >= 2) {
@@ -80,16 +74,8 @@ export class VideoFrameCache {
     const el = this.videos.get(id);
     if (!el) return null;
 
-    let targetTime = Math.max(0, Math.min(time, Math.max(0, (el.duration || 9999) - 0.001)));
-
-    // Anti-duplicate: if target would land on the same time as last frame, nudge +1ms
-    const lastTime = this.lastSeekTime.get(id) ?? -1;
-    if (lastTime >= 0 && Math.abs(targetTime - lastTime) > SEEK_EPSILON_SEC && Math.abs(el.currentTime - lastTime) < SEEK_EPSILON_SEC) {
-      targetTime += 0.001;
-    }
-
+    const targetTime = Math.max(0, Math.min(time, Math.max(0, (el.duration || 9999) - 0.001)));
     await this.waitSeek(el, targetTime);
-    this.lastSeekTime.set(id, el.currentTime);
 
     if (el.videoWidth === 0 || el.videoHeight === 0) return null;
     return el;
@@ -100,6 +86,5 @@ export class VideoFrameCache {
       try { el.pause(); el.removeAttribute('src'); el.load(); } catch { /* ignore */ }
     });
     this.videos.clear();
-    this.lastSeekTime.clear();
   }
 }
