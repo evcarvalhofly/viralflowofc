@@ -22,6 +22,14 @@ export function drawTextItemOnCanvas(
   ctx.save();
   ctx.globalAlpha = (td.opacity ?? 1) * extraOpacity;
 
+  // Apply rotation around the text center
+  const rot = ((td.rotation ?? 0) * Math.PI) / 180;
+  if (rot !== 0) {
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.translate(-x, -y);
+  }
+
   const fontStr = `${td.fontWeight ?? 'bold'} ${fontSize}px ${td.fontFamily || 'Inter, Arial, sans-serif'}`;
   ctx.font = fontStr;
   ctx.textAlign = (td.textAlign as CanvasTextAlign) || 'center';

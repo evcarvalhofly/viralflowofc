@@ -4,7 +4,7 @@
 // is ZERO seek delay visible to the user (no black flash).
 // ============================================================
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Move } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCw } from 'lucide-react';
 import { Track, TrackItem, MediaFile, TextDetails, ImageDetails } from '../types';
 import { cn } from '@/lib/utils';
 
@@ -53,7 +53,7 @@ function previewSize(w?: number, h?: number): { w: number; h: number } {
 }
 
 
-// ── Direct-manipulation overlay for a text or image item ──────────────────
+// ── Transform handles overlay (CapCut-style: 4 corners + rotation) ────────
 interface OverlayHandleProps {
   item: TrackItem;
   trackId: string;
@@ -65,127 +65,202 @@ interface OverlayHandleProps {
   children: React.ReactNode;
 }
 
-function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenProperties, onUpdate, children }: OverlayHandleProps) {
-  const td = item.textDetails;
-  const imgd = item.imageDetails;
-  const vd = item.videoDetails;
+const HANDLE_SIZE = 14; // px diameter
+const HANDLE_HALF = HANDLE_SIZE / 2;
+const HANDLE_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  width: HANDLE_SIZE,
+  height: HANDLE_SIZE,
+  borderRadius: '50%',
+  background: 'white',
+  border: '2px solid #2dd4bf',
+  zIndex: 30,
+  touchAction: 'none',
+  cursor: 'pointer',
+};
 
-  const posX = td?.posX ?? imgd?.posX ?? vd?.posX ?? 50;
-  const posY = td?.posY ?? imgd?.posY ?? vd?.posY ?? 50;
-  const width = td?.width ?? imgd?.width ?? vd?.width ?? 50;
+function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenProperties, onUpdate, children }: OverlayHandleProps) {
+  const td   = item.textDetails;
+  const imgd = item.imageDetails;
+  const vd   = item.videoDetails;
+
+  const posX     = td?.posX     ?? imgd?.posX     ?? vd?.posX     ?? 50;
+  const posY     = td?.posY     ?? imgd?.posY     ?? vd?.posY     ?? 50;
+  const width    = td?.width    ?? imgd?.width    ?? vd?.width    ?? 50;
+  const rotation = td?.rotation ?? imgd?.rotation ?? vd?.rotation ?? 0;
 
   const lastTapRef = useRef<number>(0);
 
-  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+  // ── helpers ──────────────────────────────────────────────────────────────
+  function clientPos(e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) {
+    if ('touches' in e) {
+      const te = e as TouchEvent | React.TouchEvent;
+      return { x: te.touches[0].clientX, y: te.touches[0].clientY };
+    }
+    return { x: (e as MouseEvent | React.MouseEvent).clientX, y: (e as MouseEvent | React.MouseEvent).clientY };
+  }
+
+  function addListeners(
+    onMove: (e: MouseEvent | TouchEvent) => void,
+    onUp:   (e: MouseEvent | TouchEvent) => void
+  ) {
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',   onUp);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend',  onUp);
+  }
+
+  function removeListeners(
+    onMove: (e: MouseEvent | TouchEvent) => void,
+    onUp:   (e: MouseEvent | TouchEvent) => void
+  ) {
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup',   onUp);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('touchend',  onUp);
+  }
+
+  // ── Move (drag body) ──────────────────────────────────────────────────────
+  const handleBodyDrag = (e: React.MouseEvent | React.TouchEvent) => {
+    if ('touches' in e && (e as React.TouchEvent).touches.length >= 2) return;
     e.stopPropagation();
     onSelect();
     const container = containerRef.current;
     if (!container) return;
-    if ('touches' in e && e.touches.length >= 2) return;
 
-    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const origPosX = posX;
-    const origPosY = posY;
+    const start   = clientPos(e);
+    const origX   = posX;
+    const origY   = posY;
 
     const onMove = (ev: MouseEvent | TouchEvent) => {
-      if ('touches' in ev && (ev as TouchEvent).touches.length >= 2) return;
       ev.preventDefault();
-      const cx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
-      const cy = 'touches' in ev ? (ev as TouchEvent).touches[0].clientY : (ev as MouseEvent).clientY;
+      const cur  = clientPos(ev);
       const rect = container.getBoundingClientRect();
-      const dx = ((cx - startX) / rect.width) * 100;
-      const dy = ((cy - startY) / rect.height) * 100;
-      const newPosX = Math.max(0, Math.min(100, origPosX + dx));
-      const newPosY = Math.max(0, Math.min(100, origPosY + dy));
-      if (td) onUpdate({ textDetails: { ...td, posX: newPosX, posY: newPosY } });
-      else if (imgd) onUpdate({ imageDetails: { ...imgd, posX: newPosX, posY: newPosY } });
-      else if (vd) onUpdate({ videoDetails: { ...vd, posX: newPosX, posY: newPosY } });
+      const nx   = Math.max(0, Math.min(100, origX + ((cur.x - start.x) / rect.width)  * 100));
+      const ny   = Math.max(0, Math.min(100, origY + ((cur.y - start.y) / rect.height) * 100));
+      if (td)   onUpdate({ textDetails:  { ...td,   posX: nx, posY: ny } });
+      else if (imgd) onUpdate({ imageDetails: { ...imgd, posX: nx, posY: ny } });
+      else if (vd)   onUpdate({ videoDetails: { ...vd,   posX: nx, posY: ny } });
     };
-
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onUp);
+    const onUp = () => removeListeners(onMove, onUp);
+    addListeners(onMove, onUp);
   };
 
+  // ── Pinch-to-scale (touch) ────────────────────────────────────────────────
   const handlePinchStart = (e: React.TouchEvent) => {
     if (e.touches.length < 2) return;
     onSelect();
     e.stopPropagation();
     e.preventDefault();
-
     const origWidth = width;
     const origFontSize = td?.fontSize ?? 3.5;
-    const t0 = e.touches[0];
-    const t1 = e.touches[1];
-    const startDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-
+    const startDist = Math.hypot(
+      e.touches[1].clientX - e.touches[0].clientX,
+      e.touches[1].clientY - e.touches[0].clientY
+    );
     const onMove = (ev: TouchEvent) => {
       if (ev.touches.length < 2) return;
       ev.preventDefault();
-      const a = ev.touches[0];
-      const b = ev.touches[1];
-      const dist = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+      const dist  = Math.hypot(ev.touches[1].clientX - ev.touches[0].clientX, ev.touches[1].clientY - ev.touches[0].clientY);
       const ratio = dist / startDist;
-      if (td) {
-        const newFontSize = Math.max(0.5, Math.min(30, origFontSize * ratio));
-        onUpdate({ textDetails: { ...td, fontSize: newFontSize } });
-      } else if (imgd) {
-        const newW = Math.max(5, Math.min(100, origWidth * ratio));
-        onUpdate({ imageDetails: { ...imgd, width: newW } });
-      } else if (vd) {
-        const newW = Math.max(5, Math.min(100, origWidth * ratio));
-        onUpdate({ videoDetails: { ...vd, width: newW } });
-      }
+      if (td)        onUpdate({ textDetails:  { ...td,   fontSize: Math.max(0.5, Math.min(30, origFontSize * ratio)) } });
+      else if (imgd) onUpdate({ imageDetails: { ...imgd, width: Math.max(5, Math.min(100, origWidth * ratio)) } });
+      else if (vd)   onUpdate({ videoDetails: { ...vd,   width: Math.max(5, Math.min(100, origWidth * ratio)) } });
     };
-
-    const onUp = () => {
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
-    };
-
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onUp);
+    const onUp = () => removeListeners(onMove, onUp);
+    addListeners(onMove, onUp);
   };
 
-  const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
+  // ── Corner resize ─────────────────────────────────────────────────────────
+  // Math: element center at (posX, posY)% of container. Width = width%.
+  // Dragging any corner by (dx%, dy%):
+  //   newPosX = origPosX + dx/2   (center follows mid-point of edge movement)
+  //   newWidth  = origWidth ± dx  (+ for right corners, – for left corners)
+  //   newPosY = origPosY + dy/2
+  //   newHeight = origHeight ± dy (+ for bottom corners, – for top corners)
+  type Corner = 'tl' | 'tr' | 'bl' | 'br';
+
+  const handleCorner = (corner: Corner) => (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     const container = containerRef.current;
     if (!container) return;
 
-    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const origWidth = width;
+    const start     = clientPos(e);
+    const origPosX  = posX;
+    const origPosY  = posY;
+    const origW     = width;
+    const isLeft    = corner === 'tl' || corner === 'bl';
+    const isTop     = corner === 'tl' || corner === 'tr';
+
+    // For proportional resize of images/videos
+    const aspectH   = imgd?.height ?? vd?.height;
+    const aspectW   = imgd?.width  ?? vd?.width;
+    const aspectRatio = (aspectH && aspectW) ? aspectH / aspectW : 1;
 
     const onMove = (ev: MouseEvent | TouchEvent) => {
       ev.preventDefault();
-      const cx = 'touches' in ev ? (ev as TouchEvent).touches[0].clientX : (ev as MouseEvent).clientX;
+      const cur  = clientPos(ev);
       const rect = container.getBoundingClientRect();
-      const dx = ((cx - startX) / rect.width) * 100 * 2;
-      const newW = Math.max(5, Math.min(100, origWidth + dx));
-      if (td) onUpdate({ textDetails: { ...td, width: newW } });
-      else if (imgd) onUpdate({ imageDetails: { ...imgd, width: newW } });
-      else if (vd) onUpdate({ videoDetails: { ...vd, width: newW } });
-    };
+      const dx   = ((cur.x - start.x) / rect.width)  * 100;
+      const dy   = ((cur.y - start.y) / rect.height) * 100;
 
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
-    };
+      const dw   = isLeft ? -dx : dx;
+      const newW = Math.max(5, Math.min(100, origW + dw));
+      const newX = Math.max(0, Math.min(100, origPosX + dx / 2));
 
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onUp);
+      if (td) {
+        // Text: resize width only (height is auto)
+        onUpdate({ textDetails: { ...td, width: newW, posX: newX } });
+      } else if (imgd) {
+        const dh   = isTop ? -dy : dy;
+        const newH = Math.max(5, Math.min(200, (imgd.height ?? origW * aspectRatio) + dh));
+        const newY = Math.max(0, Math.min(100, origPosY + dy / 2));
+        onUpdate({ imageDetails: { ...imgd, width: newW, height: newH, posX: newX, posY: newY } });
+      } else if (vd) {
+        const dh   = isTop ? -dy : dy;
+        const newH = Math.max(5, Math.min(200, ((vd.height ?? origW * aspectRatio)) + dh));
+        const newY = Math.max(0, Math.min(100, origPosY + dy / 2));
+        onUpdate({ videoDetails: { ...vd, width: newW, height: newH, posX: newX, posY: newY } });
+      }
+    };
+    const onUp = () => removeListeners(onMove, onUp);
+    addListeners(onMove, onUp);
+  };
+
+  // ── Rotation ──────────────────────────────────────────────────────────────
+  const handleRotation = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    const container = containerRef.current;
+    if (!container) return;
+
+    const rect     = container.getBoundingClientRect();
+    // Center of the element in screen coords
+    const cx = rect.left + (posX / 100) * rect.width;
+    const cy = rect.top  + (posY / 100) * rect.height;
+
+    const start      = clientPos(e);
+    const startAngle = Math.atan2(start.y - cy, start.x - cx) * (180 / Math.PI);
+    const origRot    = rotation;
+
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      ev.preventDefault();
+      const cur      = clientPos(ev);
+      const angle    = Math.atan2(cur.y - cy, cur.x - cx) * (180 / Math.PI);
+      const newRot   = ((origRot + angle - startAngle) % 360 + 360) % 360;
+      if (td)        onUpdate({ textDetails:  { ...td,   rotation: newRot } });
+      else if (imgd) onUpdate({ imageDetails: { ...imgd, rotation: newRot } });
+      else if (vd)   onUpdate({ videoDetails: { ...vd,   rotation: newRot } });
+    };
+    const onUp = () => removeListeners(onMove, onUp);
+    addListeners(onMove, onUp);
+  };
+
+  // ── Corner positions ──────────────────────────────────────────────────────
+  const cornerStyles: Record<Corner, React.CSSProperties> = {
+    tl: { top: -HANDLE_HALF, left:  -HANDLE_HALF, cursor: 'nw-resize' },
+    tr: { top: -HANDLE_HALF, right: -HANDLE_HALF, cursor: 'ne-resize' },
+    bl: { bottom: -HANDLE_HALF, left:  -HANDLE_HALF, cursor: 'sw-resize' },
+    br: { bottom: -HANDLE_HALF, right: -HANDLE_HALF, cursor: 'se-resize' },
   };
 
   return (
@@ -195,15 +270,12 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
         left: `${posX}%`,
         top: `${posY}%`,
         width: `${width}%`,
-        transform: 'translate(-50%, -50%)',
+        transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
         cursor: 'move',
-        outline: isSelected ? '2px solid hsl(var(--primary))' : '2px solid transparent',
-        outlineOffset: 2,
-        borderRadius: 4,
         userSelect: 'none',
         touchAction: 'none',
       }}
-      onMouseDown={handleDragStart}
+      onMouseDown={handleBodyDrag}
       onTouchStart={(e) => {
         if (e.touches.length >= 2) {
           handlePinchStart(e);
@@ -215,7 +287,7 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
             return;
           }
           lastTapRef.current = now;
-          handleDragStart(e);
+          handleBodyDrag(e);
         }
       }}
       onClick={(e) => {
@@ -230,46 +302,69 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
         onSelect();
       }}
     >
-      {children}
-
+      {/* Bounding box border */}
       {isSelected && (
-        <div
-          style={{
-            position: 'absolute',
-            right: -8,
-            bottom: -8,
-            width: 16,
-            height: 16,
-            borderRadius: '50%',
-            background: 'hsl(var(--primary))',
-            border: '2px solid white',
-            cursor: 'se-resize',
-            zIndex: 30,
-            touchAction: 'none',
-          }}
-          onMouseDown={(e) => { e.stopPropagation(); handleResizeStart(e); }}
-          onTouchStart={(e) => { e.stopPropagation(); handleResizeStart(e); }}
-        />
+        <div style={{
+          position: 'absolute',
+          inset: -1,
+          border: '1.5px solid #2dd4bf',
+          borderRadius: 2,
+          pointerEvents: 'none',
+          zIndex: 20,
+        }} />
       )}
 
-      {isSelected && (
+      {children}
+
+      {/* 4 corner handles */}
+      {isSelected && (['tl', 'tr', 'bl', 'br'] as Corner[]).map((corner) => (
         <div
-          style={{
+          key={corner}
+          style={{ ...HANDLE_STYLE, ...cornerStyles[corner] }}
+          onMouseDown={(e) => { e.stopPropagation(); handleCorner(corner)(e); }}
+          onTouchStart={(e) => { e.stopPropagation(); handleCorner(corner)(e); }}
+        />
+      ))}
+
+      {/* Rotation handle — below bottom center */}
+      {isSelected && (
+        <>
+          {/* Line connecting to rotation handle */}
+          <div style={{
             position: 'absolute',
-            top: -20,
+            bottom: -20,
             left: '50%',
             transform: 'translateX(-50%)',
-            background: 'hsl(var(--primary))',
-            borderRadius: 4,
-            padding: '1px 6px',
-            fontSize: 9,
-            color: 'white',
-            whiteSpace: 'nowrap',
+            width: 1,
+            height: 12,
+            background: '#2dd4bf',
             pointerEvents: 'none',
-          }}
-        >
-          <Move style={{ display: 'inline', width: 10, height: 10 }} /> mover · 2x clique = editar
-        </div>
+            zIndex: 20,
+          }} />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: -34,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: HANDLE_SIZE + 4,
+              height: HANDLE_SIZE + 4,
+              borderRadius: '50%',
+              background: 'white',
+              border: '2px solid #2dd4bf',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'grab',
+              zIndex: 30,
+              touchAction: 'none',
+            }}
+            onMouseDown={(e) => { e.stopPropagation(); handleRotation(e); }}
+            onTouchStart={(e) => { e.stopPropagation(); handleRotation(e); }}
+          >
+            <RotateCw size={10} color="#2dd4bf" strokeWidth={2.5} />
+          </div>
+        </>
       )}
     </div>
   );

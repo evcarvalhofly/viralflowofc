@@ -46,6 +46,7 @@ export interface TextDetails {
   strokeWidth?: number;   // text outline (webkit-text-stroke)
   strokeColor?: string;
   fontWeight?: string;
+  rotation?: number;      // degrees
 }
 
 export interface VideoDetails {
@@ -66,6 +67,7 @@ export interface VideoDetails {
   posY?: number;
   width?: number;
   height?: number;
+  rotation?: number;      // degrees
 }
 
 export interface AudioDetails {
@@ -90,6 +92,7 @@ export interface ImageDetails {
   posY: number;
   width: number;
   height: number;
+  rotation?: number;      // degrees
 }
 
 export type AnimationPreset = 'none' | 'fadeIn' | 'fadeOut' | 'slideLeft' | 'slideRight' | 'slideUp' | 'slideDown' | 'zoomIn' | 'zoomOut';

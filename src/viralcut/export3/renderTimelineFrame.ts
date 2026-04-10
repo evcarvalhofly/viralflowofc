@@ -204,22 +204,22 @@ export function renderTimelineFrame({
   for (const imgItem of imageItems) {
     const bmp = assets.images.get(imgItem.mediaId);
     if (!bmp) continue;
-    const id = imgItem.imageDetails;
+    const id   = imgItem.imageDetails;
     const srcW = bmp.width;
     const srcH = bmp.height;
-    
-    const ox = ((id?.posX   ?? 50) / 100) * width;
-    const oy = ((id?.posY   ?? 50) / 100) * height;
-    const dw = ((id?.width  ?? 50) / 100) * width;
-    const dh = dw * (srcH / srcW);
+
+    const ox  = ((id?.posX  ?? 50) / 100) * width;
+    const oy  = ((id?.posY  ?? 50) / 100) * height;
+    const dw  = ((id?.width ?? 50) / 100) * width;
+    const dh  = dw * (srcH / srcW);
+    const rot = ((id?.rotation ?? 0) * Math.PI) / 180;
 
     ctx.save();
     ctx.globalAlpha = id?.opacity ?? 1;
-    if (id?.flipH || id?.flipV) {
-      ctx.translate(id.flipH ? ox * 2 : 0, id.flipV ? oy * 2 : 0);
-      ctx.scale(id.flipH ? -1 : 1, id.flipV ? -1 : 1);
-    }
-    ctx.drawImage(bmp, ox - dw / 2, oy - dh / 2, dw, dh);
+    ctx.translate(ox, oy);
+    if (rot !== 0) ctx.rotate(rot);
+    if (id?.flipH || id?.flipV) ctx.scale(id.flipH ? -1 : 1, id.flipV ? -1 : 1);
+    ctx.drawImage(bmp, -dw / 2, -dh / 2, dw, dh);
     ctx.restore();
     ctx.globalAlpha = 1;
   }
@@ -228,37 +228,30 @@ export function renderTimelineFrame({
   for (const vidItem of videoOverlays) {
     const videoEl = assets.videoFrames.get(vidItem.id);
     if (!videoEl) continue;
-    
-    const vd = vidItem.videoDetails;
-    const srcW = videoEl.videoWidth || width;
+
+    const vd   = vidItem.videoDetails;
+    const srcW = videoEl.videoWidth  || width;
     const srcH = videoEl.videoHeight || height;
 
-    const ox = ((vd?.posX   ?? 50) / 100) * width;
-    const oy = ((vd?.posY   ?? 50) / 100) * height;
-    const dw = ((vd?.width  ?? 50) / 100) * width;
-    const dh = dw * (srcH / srcW);
+    const ox  = ((vd?.posX  ?? 50) / 100) * width;
+    const oy  = ((vd?.posY  ?? 50) / 100) * height;
+    const dw  = ((vd?.width ?? 50) / 100) * width;
+    const dh  = dw * (srcH / srcW);
+    const rot = ((vd?.rotation ?? 0) * Math.PI) / 180;
 
-    ctx.save();
-    ctx.globalAlpha = vd?.opacity ?? 1;
-    
     const filters: string[] = [];
     if (vd?.brightness != null && vd.brightness !== 1) filters.push(`brightness(${vd.brightness})`);
     if (vd?.contrast   != null && vd.contrast   !== 1) filters.push(`contrast(${vd.contrast})`);
     if (vd?.saturation != null && vd.saturation !== 1) filters.push(`saturate(${vd.saturation})`);
-    if (filters.length) {
-      (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters.join(' ');
-    }
 
-    if (vd?.flipH || vd?.flipV) {
-      ctx.translate(vd.flipH ? ox * 2 : 0, vd.flipV ? oy * 2 : 0);
-      ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
-    }
-    
-    ctx.drawImage(videoEl, ox - dw / 2, oy - dh / 2, dw, dh);
-    
-    if (filters.length) {
-      (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
-    }
+    ctx.save();
+    ctx.globalAlpha = vd?.opacity ?? 1;
+    if (filters.length) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters.join(' ');
+    ctx.translate(ox, oy);
+    if (rot !== 0) ctx.rotate(rot);
+    if (vd?.flipH || vd?.flipV) ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+    ctx.drawImage(videoEl, -dw / 2, -dh / 2, dw, dh);
+    if (filters.length) (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';
     ctx.restore();
     ctx.globalAlpha = 1;
   }
