@@ -183,12 +183,23 @@ export function renderTimelineFrame({
         (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters.join(' ');
       }
 
-      if (vd?.flipH || vd?.flipV) {
-        ctx.translate(vd?.flipH ? width : 0, vd?.flipV ? height : 0);
-        ctx.scale(vd?.flipH ? -1 : 1, vd?.flipV ? -1 : 1);
+      if (vd?.useTransform) {
+        const ox  = (vd.posX ?? 50) / 100 * width;
+        const oy  = (vd.posY ?? 50) / 100 * height;
+        const dw  = (vd.width ?? 100) / 100 * width;
+        const dh  = dw * (srcH / srcW);
+        const rot = ((vd.rotation ?? 0) * Math.PI) / 180;
+        ctx.translate(ox, oy);
+        if (rot !== 0) ctx.rotate(rot);
+        if (vd.flipH || vd.flipV) ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+        ctx.drawImage(videoEl, -dw / 2, -dh / 2, dw, dh);
+      } else {
+        if (vd?.flipH || vd?.flipV) {
+          ctx.translate(vd?.flipH ? width : 0, vd?.flipV ? height : 0);
+          ctx.scale(vd?.flipH ? -1 : 1, vd?.flipV ? -1 : 1);
+        }
+        drawContain(ctx, videoEl, srcW, srcH, width, height);
       }
-
-      drawContain(ctx, videoEl, srcW, srcH, width, height);
 
       if (filters.length) {
         (ctx as CanvasRenderingContext2D & { filter: string }).filter = 'none';

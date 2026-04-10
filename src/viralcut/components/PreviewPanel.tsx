@@ -5,7 +5,7 @@
 // ============================================================
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCw } from 'lucide-react';
-import { Track, TrackItem, MediaFile, TextDetails, ImageDetails } from '../types';
+import { Track, TrackItem, MediaFile, TextDetails, ImageDetails, DEFAULT_VIDEO_DETAILS } from '../types';
 import { cn } from '@/lib/utils';
 
 interface PreviewPanelProps {
@@ -205,7 +205,7 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
       const dy   = ((cur.y - start.y) / rect.height) * 100;
 
       const dw   = isLeft ? -dx : dx;
-      const newW = Math.max(5, Math.min(100, origW + dw));
+      const newW = Math.max(5, Math.min(200, origW + dw));
       const newX = Math.max(0, Math.min(100, origPosX + dx / 2));
 
       if (td) {
@@ -527,17 +527,32 @@ export function PreviewPanel({
       ctx.save();
       ctx.globalAlpha = vd?.opacity ?? 1;
       ctx.filter = buildFilter(vd?.brightness, vd?.contrast, vd?.saturation);
-      // Contain-fit: center video without stretching
-      const scale = Math.min(canvas.width / vW, canvas.height / vH);
-      const dw = vW * scale;
-      const dh = vH * scale;
-      const dx = (canvas.width - dw) / 2;
-      const dy = (canvas.height - dh) / 2;
-      if (vd?.flipH || vd?.flipV) {
-        ctx.translate(vd.flipH ? canvas.width : 0, vd.flipV ? canvas.height : 0);
-        ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+
+      if (vd?.useTransform) {
+        // Custom position / size / rotation (CapCut-style transform applied)
+        const ox  = (vd.posX ?? 50) / 100 * canvas.width;
+        const oy  = (vd.posY ?? 50) / 100 * canvas.height;
+        const dw  = (vd.width ?? 100) / 100 * canvas.width;
+        const dh  = vW > 0 ? dw * (vH / vW) : dw;
+        const rot = ((vd.rotation ?? 0) * Math.PI) / 180;
+        ctx.translate(ox, oy);
+        if (rot !== 0) ctx.rotate(rot);
+        if (vd.flipH || vd.flipV) ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
+        ctx.drawImage(v, -dw / 2, -dh / 2, dw, dh);
+      } else {
+        // Contain-fit: center video without stretching
+        const scale = Math.min(canvas.width / vW, canvas.height / vH);
+        const dw = vW * scale;
+        const dh = vH * scale;
+        const dx = (canvas.width - dw) / 2;
+        const dy = (canvas.height - dh) / 2;
+        if (vd?.flipH || vd?.flipV) {
+          ctx.translate(vd!.flipH ? canvas.width : 0, vd!.flipV ? canvas.height : 0);
+          ctx.scale(vd!.flipH ? -1 : 1, vd!.flipV ? -1 : 1);
+        }
+        ctx.drawImage(v, dx, dy, dw, dh);
       }
-      ctx.drawImage(v, dx, dy, dw, dh);
+
       ctx.restore();
       lastValidFrameRef.current = true;
     } else if (!activeVideoItem) {
@@ -868,7 +883,7 @@ export function PreviewPanel({
             aspectRatio: `${projectWidth} / ${projectHeight}`,
             maxWidth: '100%',
             maxHeight: '100%',
-            overflow: 'hidden',
+            overflow: 'visible',
             margin: 'auto',
             display: 'flex',
             alignItems: 'center',
@@ -886,6 +901,38 @@ export function PreviewPanel({
               display: 'block',
             }}
           />
+
+        {/* Base video transform handle — rendered first so overlays appear on top */}
+        {activeVideoItem && baseVideoTrack && (
+          <OverlayHandle
+            key={activeVideoItem.item.id + '-base'}
+            item={{
+              ...activeVideoItem.item,
+              videoDetails: {
+                ...(activeVideoItem.item.videoDetails ?? DEFAULT_VIDEO_DETAILS),
+                posX: activeVideoItem.item.videoDetails?.posX ?? 50,
+                posY: activeVideoItem.item.videoDetails?.posY ?? 50,
+                width: activeVideoItem.item.videoDetails?.useTransform
+                  ? (activeVideoItem.item.videoDetails.width ?? 100)
+                  : 100,
+              },
+            }}
+            trackId={baseVideoTrack.id}
+            containerRef={overlayContainerRef}
+            isSelected={selectedItemId === activeVideoItem.item.id}
+            onSelect={() => onSelectItem?.(activeVideoItem.item.id)}
+            onOpenProperties={() => onOpenProperties?.(activeVideoItem.item.id)}
+            onUpdate={(updates) => {
+              const withTransform = updates.videoDetails
+                ? { ...updates, videoDetails: { ...updates.videoDetails, useTransform: true } }
+                : updates;
+              onUpdateItem?.(baseVideoTrack.id, activeVideoItem.item.id, withTransform);
+            }}
+          >
+            {/* Transparent placeholder to give the handle the canvas aspect ratio */}
+            <div style={{ width: '100%', aspectRatio: `${projectWidth} / ${projectHeight}` }} />
+          </OverlayHandle>
+        )}
 
         {/* Text overlays */}
         {activeTextItems.map((item) => {

@@ -68,6 +68,8 @@ export interface VideoDetails {
   width?: number;
   height?: number;
   rotation?: number;      // degrees
+  // When true, render using posX/posY/width/height/rotation instead of contain-fit
+  useTransform?: boolean;
 }
 
 export interface AudioDetails {
