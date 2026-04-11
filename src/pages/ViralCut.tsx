@@ -675,6 +675,31 @@ const ViralCut = () => {
     });
   }, []);
 
+  // Mobile-only: reorder clip at insertIndex and compact the track (no gaps)
+  const handleItemReorder = useCallback((trackId: string, itemId: string, insertIndex: number) => {
+    updateProject((p) => {
+      const tracks = p.tracks.map((track) => {
+        if (track.id !== trackId) return track;
+        const item = track.items.find((i) => i.id === itemId);
+        if (!item) return track;
+        const others = track.items
+          .filter((i) => i.id !== itemId)
+          .sort((a, b) => a.startTime - b.startTime);
+        const clamped = Math.max(0, Math.min(insertIndex, others.length));
+        others.splice(clamped, 0, item);
+        let cursor = 0;
+        const items = others.map((i) => {
+          const dur = i.endTime - i.startTime;
+          const updated = { ...i, startTime: cursor, endTime: cursor + dur };
+          cursor += dur;
+          return updated;
+        });
+        return { ...track, items };
+      });
+      return { ...p, tracks };
+    }, { pushHistory: true });
+  }, [updateProject]);
+
   const handleItemTrim = useCallback((trackId: string, itemId: string, newStart: number, newEnd: number, newMediaStart: number, newMediaEnd: number) => {
     setProjectRaw((p) => {
       const tracks = p.tracks.map((t) => {
@@ -707,14 +732,32 @@ const ViralCut = () => {
   }, [updateProject]);
 
   const handleItemDelete = useCallback((trackId: string, itemId: string) => {
-    updateProject((p) => ({
-      ...p,
-      tracks: p.tracks.map((t) =>
+    updateProject((p) => {
+      const tracks = p.tracks.map((t) =>
         t.id === trackId ? { ...t, items: t.items.filter((i) => i.id !== itemId) } : t
-      ),
-    }), { pushHistory: true });
+      );
+      if (isMobile) {
+        // Mobile: compact ONLY the main (first) video track after delete — no gaps allowed
+        // Overlay tracks, audio, text, image remain free
+        const mainVideoTrackId = p.tracks.find((t) => t.type === 'video')?.id;
+        const compacted = tracks.map((t) => {
+          if (t.id !== mainVideoTrackId) return t;
+          const sorted = [...t.items].sort((a, b) => a.startTime - b.startTime);
+          let cursor = 0;
+          const items = sorted.map((item) => {
+            const dur = item.endTime - item.startTime;
+            const updated = { ...item, startTime: cursor, endTime: cursor + dur };
+            cursor += dur;
+            return updated;
+          });
+          return { ...t, items };
+        });
+        return { ...p, tracks: compacted };
+      }
+      return { ...p, tracks };
+    }, { pushHistory: true });
     setSelectedItemId(null);
-  }, [updateProject]);
+  }, [updateProject, isMobile]);
   handleItemDeleteRef.current = handleItemDelete;
 
   const handleUpdateItem = useCallback((trackId: string, itemId: string, updates: Partial<TrackItem>) => {
@@ -1293,6 +1336,8 @@ const ViralCut = () => {
                 }
               }}
               onZoomChange={(z) => setZoom(z)}
+              isMobile={isMobile}
+              onItemReorder={handleItemReorder}
             />
           </div>
         </div>
@@ -1548,6 +1593,8 @@ const ViralCut = () => {
               }
             }}
             onZoomChange={(z) => setZoom(z)}
+            isMobile={isMobile}
+            onItemReorder={handleItemReorder}
           />
         </div>
       </div>

@@ -37,6 +37,8 @@ interface TimelineProps {
   onSplitAllAtPlayhead?: () => void;
   onDeleteSelected?: () => void;
   onZoomChange?: (newZoom: number) => void;
+  onItemReorder?: (trackId: string, itemId: string, insertIndex: number) => void;
+  isMobile?: boolean;
 }
 
 function fmtRuler(s: number) {
@@ -103,12 +105,20 @@ export function Timeline({
   onSplitAllAtPlayhead,
   onDeleteSelected,
   onZoomChange,
+  onItemReorder,
+  isMobile = false,
 }: TimelineProps) {
   const rulerScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+  // Mobile-only magnetic drag state
+  const [mobileDragState, setMobileDragState] = useState<{
+    itemId: string;
+    trackId: string;
+    insertIndex: number;
+  } | null>(null);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────
   const pinchRef        = useRef<{ dist: number; anchorX: number } | null>(null);
@@ -331,6 +341,16 @@ export function Timeline({
     const startX = e.touches[0].clientX;
     const origStart = item.startTime;
     let isDragging = false;
+    // Local variable to track insert index without stale closure issues
+    let currentInsertIndex = 0;
+
+    // Magnetic behavior only applies to the main (first) video track
+    const mainVideoTrackId = tracks.find((t) => t.type === 'video')?.id;
+    const isMagneticTrack = isMobile && track.id === mainVideoTrackId;
+
+    if (isMagneticTrack) {
+      setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: 0 });
+    }
 
     const onMove = (ev: TouchEvent) => {
       const dx = ev.touches[0].clientX - startX;
@@ -340,10 +360,30 @@ export function Timeline({
       ev.preventDefault();
       const newStart = Math.max(0, origStart + dx / zoom);
       onItemMove(track.id, item.id, newStart);
+
+      // Mobile main track: compute insert index based on finger position vs other clips
+      if (isMagneticTrack) {
+        const touchTimeSec = clientXToTime(ev.touches[0].clientX);
+        // Use stale track.items — OK because OTHER items don't move during drag
+        const otherItems = track.items
+          .filter((i) => i.id !== item.id)
+          .sort((a, b) => a.startTime - b.startTime);
+        let idx = otherItems.findIndex((i) => (i.startTime + i.endTime) / 2 > touchTimeSec);
+        if (idx === -1) idx = otherItems.length;
+        currentInsertIndex = idx;
+        setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: idx });
+      }
     };
     const onUp = () => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
+
+      // Mobile main track: commit reorder on drag end
+      if (isMagneticTrack && isDragging) {
+        onItemReorder?.(track.id, item.id, currentInsertIndex);
+      }
+      setMobileDragState(null);
+
       // Don't fire double-click if we actually dragged
       if (!isDragging) {
         const now = Date.now();
@@ -622,6 +662,38 @@ export function Timeline({
                 style={{ left: playheadX, width: 1 }}
               />
 
+              {/* Mobile insertion indicator */}
+              {isMobile && mobileDragState && mobileDragState.trackId === track.id && (() => {
+                const otherItems = track.items
+                  .filter((i) => i.id !== mobileDragState.itemId)
+                  .sort((a, b) => a.startTime - b.startTime);
+                let insertX: number;
+                if (mobileDragState.insertIndex <= 0 || otherItems.length === 0) {
+                  insertX = otherItems.length > 0 ? otherItems[0].startTime * zoom : 0;
+                } else if (mobileDragState.insertIndex >= otherItems.length) {
+                  const last = otherItems[otherItems.length - 1];
+                  insertX = last.endTime * zoom;
+                } else {
+                  insertX = otherItems[mobileDragState.insertIndex].startTime * zoom;
+                }
+                return (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: insertX - 1,
+                      top: 2,
+                      bottom: 2,
+                      width: 3,
+                      background: '#3b82f6',
+                      borderRadius: 2,
+                      zIndex: 25,
+                      pointerEvents: 'none',
+                      boxShadow: '0 0 6px 1px rgba(59,130,246,0.7)',
+                    }}
+                  />
+                );
+              })()}
+
               {/* Items */}
               {track.items.map((item) => {
                 const w = Math.max((item.endTime - item.startTime) * zoom, 8);
@@ -638,7 +710,7 @@ export function Timeline({
                       track.locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing',
                       itemColors(track.type, isSelected)
                     )}
-                    style={{ left, width: w }}
+                    style={{ left, width: w, opacity: mobileDragState?.itemId === item.id ? 0.45 : undefined }}
                     onMouseDown={(e) => handleItemMouseDown(e, track, item)}
                     onTouchStart={(e) => handleItemTouchStart(e, track, item)}
                     title={item.name}
