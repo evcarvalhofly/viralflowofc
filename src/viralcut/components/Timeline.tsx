@@ -38,6 +38,7 @@ interface TimelineProps {
   onDeleteSelected?: () => void;
   onZoomChange?: (newZoom: number) => void;
   onItemReorder?: (trackId: string, itemId: string, insertIndex: number) => void;
+  onItemMoveToTrack?: (fromTrackId: string, itemId: string, direction: 'toOverlay' | 'toMain', newStartTime: number) => void;
   isMobile?: boolean;
 }
 
@@ -106,6 +107,7 @@ export function Timeline({
   onDeleteSelected,
   onZoomChange,
   onItemReorder,
+  onItemMoveToTrack,
   isMobile = false,
 }: TimelineProps) {
   const rulerScrollRef = useRef<HTMLDivElement>(null);
@@ -118,6 +120,11 @@ export function Timeline({
     itemId: string;
     trackId: string;
     insertIndex: number;
+  } | null>(null);
+  // Cross-track drag hint (mouse + touch): shown when dragging video clip up/down between tracks
+  const [crossTrackHint, setCrossTrackHint] = useState<{
+    itemId: string;
+    direction: 'toOverlay' | 'toMain';
   } | null>(null);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────
@@ -302,19 +309,46 @@ export function Timeline({
     onItemSelect(item.id);
 
     const startX = e.clientX;
+    const startY = e.clientY;
     const origStart = item.startTime;
     let dragging = false;
+    let currentNewStart = origStart;
+    let crossTrackDir: 'toOverlay' | 'toMain' | null = null;
+
+    // Cross-track only for video items
+    const mainVideoTrackId = tracks.find((t) => t.type === 'video')?.id;
+    const isMainTrack = item.type === 'video' && track.id === mainVideoTrackId;
+    const isOverlayTrack = item.type === 'video' && track.type === 'video' && !isMainTrack;
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
-      if (!dragging && Math.abs(dx) < 4) return;
+      const dy = ev.clientY - startY;
+      if (!dragging && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
       dragging = true;
-      const newStart = Math.max(0, origStart + dx / zoom);
-      onItemMove(track.id, item.id, newStart);
+      currentNewStart = Math.max(0, origStart + dx / zoom);
+      onItemMove(track.id, item.id, currentNewStart);
+
+      // Cross-track: drag up from main → overlay; drag down from overlay → main
+      if (isMainTrack && dy < -28) {
+        crossTrackDir = 'toOverlay';
+        setCrossTrackHint({ itemId: item.id, direction: 'toOverlay' });
+      } else if (isOverlayTrack && dy > 28) {
+        crossTrackDir = 'toMain';
+        setCrossTrackHint({ itemId: item.id, direction: 'toMain' });
+      } else {
+        crossTrackDir = null;
+        setCrossTrackHint(null);
+      }
     };
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+
+      if (dragging && crossTrackDir) {
+        onItemMoveToTrack?.(track.id, item.id, crossTrackDir, currentNewStart);
+      }
+      setCrossTrackHint(null);
+
       // Don't fire double-click if we actually dragged
       if (!dragging) {
         const now = Date.now();
@@ -339,50 +373,82 @@ export function Timeline({
     onItemSelect(item.id);
 
     const startX = e.touches[0].clientX;
+    const startY = e.touches[0].clientY;
     const origStart = item.startTime;
     let isDragging = false;
-    // Local variable to track insert index without stale closure issues
     let currentInsertIndex = 0;
+    let currentNewStart = origStart;
+    // 'undecided' until first significant movement; then locked to 'horizontal' or 'crossTrack'
+    let dragMode: 'undecided' | 'horizontal' | 'crossTrack' = 'undecided';
+    let crossTrackDir: 'toOverlay' | 'toMain' | null = null;
 
     // Magnetic behavior only applies to the main (first) video track
     const mainVideoTrackId = tracks.find((t) => t.type === 'video')?.id;
     const isMagneticTrack = isMobile && track.id === mainVideoTrackId;
-
-    if (isMagneticTrack) {
-      setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: 0 });
-    }
+    const isMainTrack = item.type === 'video' && track.id === mainVideoTrackId;
+    const isOverlayTrack = item.type === 'video' && track.type === 'video' && !isMainTrack;
 
     const onMove = (ev: TouchEvent) => {
       const dx = ev.touches[0].clientX - startX;
-      if (!isDragging && Math.abs(dx) < 8) return;
-      isDragging = true;
-      // Prevent timeline scroll while dragging a clip
-      ev.preventDefault();
-      const newStart = Math.max(0, origStart + dx / zoom);
-      onItemMove(track.id, item.id, newStart);
+      const dy = ev.touches[0].clientY - startY;
 
-      // Mobile main track: compute insert index based on finger position vs other clips
-      if (isMagneticTrack) {
-        const touchTimeSec = clientXToTime(ev.touches[0].clientX);
-        // Use stale track.items — OK because OTHER items don't move during drag
-        const otherItems = track.items
-          .filter((i) => i.id !== item.id)
-          .sort((a, b) => a.startTime - b.startTime);
-        let idx = otherItems.findIndex((i) => (i.startTime + i.endTime) / 2 > touchTimeSec);
-        if (idx === -1) idx = otherItems.length;
-        currentInsertIndex = idx;
-        setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: idx });
+      if (dragMode === 'undecided') {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        isDragging = true;
+        ev.preventDefault();
+        // Vertical movement dominates → cross-track mode (only for video items)
+        if (item.type === 'video' && Math.abs(dy) > Math.abs(dx) && Math.abs(dy) >= 12) {
+          dragMode = 'crossTrack';
+        } else {
+          dragMode = 'horizontal';
+          if (isMagneticTrack) {
+            setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: 0 });
+          }
+        }
+      } else {
+        isDragging = true;
+        ev.preventDefault();
+      }
+
+      if (dragMode === 'horizontal') {
+        currentNewStart = Math.max(0, origStart + dx / zoom);
+        onItemMove(track.id, item.id, currentNewStart);
+        if (isMagneticTrack) {
+          const touchTimeSec = clientXToTime(ev.touches[0].clientX);
+          const otherItems = track.items
+            .filter((i) => i.id !== item.id)
+            .sort((a, b) => a.startTime - b.startTime);
+          let idx = otherItems.findIndex((i) => (i.startTime + i.endTime) / 2 > touchTimeSec);
+          if (idx === -1) idx = otherItems.length;
+          currentInsertIndex = idx;
+          setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: idx });
+        }
+      } else if (dragMode === 'crossTrack') {
+        // Track X position for placement, but don't move item (avoid confusing visual)
+        currentNewStart = Math.max(0, origStart + dx / zoom);
+        if (isMainTrack && dy < -20) {
+          crossTrackDir = 'toOverlay';
+          setCrossTrackHint({ itemId: item.id, direction: 'toOverlay' });
+        } else if (isOverlayTrack && dy > 20) {
+          crossTrackDir = 'toMain';
+          setCrossTrackHint({ itemId: item.id, direction: 'toMain' });
+        } else {
+          crossTrackDir = null;
+          setCrossTrackHint(null);
+        }
       }
     };
     const onUp = () => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
 
-      // Mobile main track: commit reorder on drag end
-      if (isMagneticTrack && isDragging) {
+      if (dragMode === 'crossTrack' && crossTrackDir) {
+        onItemMoveToTrack?.(track.id, item.id, crossTrackDir, currentNewStart);
+      } else if (isMagneticTrack && isDragging && dragMode === 'horizontal') {
         onItemReorder?.(track.id, item.id, currentInsertIndex);
       }
       setMobileDragState(null);
+      setCrossTrackHint(null);
 
       // Don't fire double-click if we actually dragged
       if (!isDragging) {
@@ -710,7 +776,7 @@ export function Timeline({
                       track.locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing',
                       itemColors(track.type, isSelected)
                     )}
-                    style={{ left, width: w, opacity: mobileDragState?.itemId === item.id ? 0.45 : undefined }}
+                    style={{ left, width: w, opacity: crossTrackHint?.itemId === item.id ? 0.55 : mobileDragState?.itemId === item.id ? 0.45 : undefined }}
                     onMouseDown={(e) => handleItemMouseDown(e, track, item)}
                     onTouchStart={(e) => handleItemTouchStart(e, track, item)}
                     title={item.name}
@@ -820,6 +886,18 @@ export function Timeline({
                           )} />
                         </div>
                       </>
+                    )}
+
+                    {/* Cross-track drag hint label */}
+                    {crossTrackHint?.itemId === item.id && (
+                      <div
+                        className="absolute inset-0 flex items-center justify-center pointer-events-none z-40 rounded-lg"
+                        style={{ background: 'rgba(59,130,246,0.18)' }}
+                      >
+                        <span className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                          {crossTrackHint.direction === 'toOverlay' ? '↑ Camada' : '↓ Principal'}
+                        </span>
+                      </div>
                     )}
                   </div>
                 );

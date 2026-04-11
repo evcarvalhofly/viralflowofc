@@ -700,6 +700,58 @@ const ViralCut = () => {
     }, { pushHistory: true });
   }, [updateProject]);
 
+  // Move a video clip between the main track and an overlay track
+  const handleItemMoveToTrack = useCallback((fromTrackId: string, itemId: string, direction: 'toOverlay' | 'toMain', newStartTime: number) => {
+    updateProject((p) => {
+      const sourceTrack = p.tracks.find((t) => t.id === fromTrackId);
+      const item = sourceTrack?.items.find((i) => i.id === itemId);
+      if (!item) return p;
+
+      const mainVideoTrackId = p.tracks.find((t) => t.type === 'video')?.id;
+      const dur = item.endTime - item.startTime;
+      let tracks = p.tracks;
+
+      if (direction === 'toOverlay') {
+        // Move from main track → create a new overlay track (one clip per overlay layer, like CapCut)
+        const newTrack: Track = { id: createId(), type: 'video', items: [], locked: false, muted: false };
+        const newItem: TrackItem = {
+          ...item,
+          trackId: newTrack.id,
+          startTime: newStartTime,
+          endTime: newStartTime + dur,
+          videoDetails: { ...item.videoDetails, useTransform: true, posX: 50, posY: 50, width: 33, height: 33 },
+        };
+        newTrack.items = [newItem];
+        // Remove from source track
+        tracks = tracks.map((t) =>
+          t.id === fromTrackId ? { ...t, items: t.items.filter((i) => i.id !== itemId) } : t
+        );
+        // Insert new overlay track right after main video track
+        const mainIdx = tracks.findIndex((t) => t.id === mainVideoTrackId);
+        tracks = [...tracks.slice(0, mainIdx + 1), newTrack, ...tracks.slice(mainIdx + 1)];
+      } else {
+        // Move from overlay track → main track
+        if (!mainVideoTrackId) return p;
+        const movedItem: TrackItem = {
+          ...item,
+          trackId: mainVideoTrackId,
+          startTime: newStartTime,
+          endTime: newStartTime + dur,
+          videoDetails: { ...item.videoDetails, useTransform: false },
+        };
+        tracks = tracks.map((t) => {
+          if (t.id === fromTrackId) return { ...t, items: t.items.filter((i) => i.id !== itemId) };
+          if (t.id === mainVideoTrackId) return { ...t, items: [...t.items, movedItem] };
+          return t;
+        });
+        // Remove the overlay track if now empty
+        tracks = tracks.filter((t) => !(t.type === 'video' && t.id !== mainVideoTrackId && t.items.length === 0));
+      }
+
+      return { ...p, tracks };
+    }, { pushHistory: true });
+  }, [updateProject]);
+
   const handleItemTrim = useCallback((trackId: string, itemId: string, newStart: number, newEnd: number, newMediaStart: number, newMediaEnd: number) => {
     setProjectRaw((p) => {
       const tracks = p.tracks.map((t) => {
@@ -1338,6 +1390,7 @@ const ViralCut = () => {
               onZoomChange={(z) => setZoom(z)}
               isMobile={isMobile}
               onItemReorder={handleItemReorder}
+              onItemMoveToTrack={handleItemMoveToTrack}
             />
           </div>
         </div>
@@ -1595,6 +1648,7 @@ const ViralCut = () => {
             onZoomChange={(z) => setZoom(z)}
             isMobile={isMobile}
             onItemReorder={handleItemReorder}
+            onItemMoveToTrack={handleItemMoveToTrack}
           />
         </div>
       </div>
