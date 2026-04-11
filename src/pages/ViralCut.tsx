@@ -1502,6 +1502,27 @@ const ViralCut = () => {
             />
           </div>
         )}
+
+        {cropItemId && (() => {
+          const cropItem  = project.tracks.flatMap((t) => t.items).find((i) => i.id === cropItemId);
+          const cropMedia = cropItem ? media.find((m) => m.id === cropItem.mediaId) : null;
+          if (!cropItem || !cropMedia) return null;
+          const trackId = project.tracks.find((t) => t.items.some((i) => i.id === cropItemId))?.id ?? '';
+          return (
+            <CropModal
+              item={cropItem}
+              mediaFile={cropMedia}
+              onApply={(x, y, w, h) => {
+                const updates: Partial<import('@/viralcut/types').TrackItem> = {};
+                if (cropItem.videoDetails) updates.videoDetails = { ...cropItem.videoDetails, cropX: x, cropY: y, cropW: w, cropH: h };
+                if (cropItem.imageDetails) updates.imageDetails = { ...cropItem.imageDetails, cropX: x, cropY: y, cropW: w, cropH: h };
+                handleUpdateItem(trackId, cropItemId, updates);
+                setCropItemId(null);
+              }}
+              onClose={() => setCropItemId(null)}
+            />
+          );
+        })()}
       </div>
     );
   }
