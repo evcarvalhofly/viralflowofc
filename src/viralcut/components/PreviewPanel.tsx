@@ -538,6 +538,13 @@ export function PreviewPanel({
         const dw  = (vd.width ?? 100) / 100 * canvas.width;
         const dh  = vW > 0 ? dw * (vH / vW) : dw;
         const rot = ((vd.rotation ?? 0) * Math.PI) / 180;
+        // Apply crop clip before transform
+        const hasCropUT = (vd.cropX ?? 0) !== 0 || (vd.cropY ?? 0) !== 0 || (vd.cropW ?? 1) !== 1 || (vd.cropH ?? 1) !== 1;
+        if (hasCropUT) {
+          ctx.beginPath();
+          ctx.rect(ox - dw / 2 + (vd.cropX ?? 0) * dw, oy - dh / 2 + (vd.cropY ?? 0) * dh, (vd.cropW ?? 1) * dw, (vd.cropH ?? 1) * dh);
+          ctx.clip();
+        }
         ctx.translate(ox, oy);
         if (rot !== 0) ctx.rotate(rot);
         if (vd.flipH || vd.flipV) ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
@@ -549,6 +556,13 @@ export function PreviewPanel({
         const dh = vH * scale;
         const dx = (canvas.width - dw) / 2;
         const dy = (canvas.height - dh) / 2;
+        // Apply crop clip before drawing
+        const hasCrop = (vd?.cropX ?? 0) !== 0 || (vd?.cropY ?? 0) !== 0 || (vd?.cropW ?? 1) !== 1 || (vd?.cropH ?? 1) !== 1;
+        if (hasCrop) {
+          ctx.beginPath();
+          ctx.rect(dx + (vd!.cropX ?? 0) * dw, dy + (vd!.cropY ?? 0) * dh, (vd!.cropW ?? 1) * dw, (vd!.cropH ?? 1) * dh);
+          ctx.clip();
+        }
         if (vd?.flipH || vd?.flipV) {
           ctx.translate(vd!.flipH ? canvas.width : 0, vd!.flipV ? canvas.height : 0);
           ctx.scale(vd!.flipH ? -1 : 1, vd!.flipV ? -1 : 1);

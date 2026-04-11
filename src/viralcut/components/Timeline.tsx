@@ -5,7 +5,7 @@
 // Quick-split button: cuts ALL items across tracks at playhead
 // ============================================================
 import { useRef, useState, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
-import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors, Plus } from 'lucide-react';
+import { Lock, Volume2, VolumeX, Eye, EyeOff, Trash2, Film, Music, Type, Image, Scissors, Plus, Crop } from 'lucide-react';
 import { Track, TrackItem, MediaFile } from '../types';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +39,7 @@ interface TimelineProps {
   onZoomChange?: (newZoom: number) => void;
   onItemReorder?: (trackId: string, itemId: string, insertIndex: number) => void;
   onItemMoveToTrack?: (fromTrackId: string, itemId: string, direction: 'toOverlay' | 'toMain', newStartTime: number) => void;
+  onCropSelected?: () => void;
   isMobile?: boolean;
 }
 
@@ -108,6 +109,7 @@ export function Timeline({
   onZoomChange,
   onItemReorder,
   onItemMoveToTrack,
+  onCropSelected,
   isMobile = false,
 }: TimelineProps) {
   const rulerScrollRef = useRef<HTMLDivElement>(null);
@@ -635,6 +637,16 @@ export function Timeline({
     ).length;
   }, 0);
 
+  // ── Is the selected item a video or image (croppable)? ──────
+  const selectedItemIsCroppable = useMemo(() => {
+    if (!selectedItemId) return false;
+    for (const t of tracks) {
+      const it = t.items.find((i) => i.id === selectedItemId);
+      if (it) return it.type === 'video' || it.type === 'image';
+    }
+    return false;
+  }, [selectedItemId, tracks]);
+
   return (
     <div className="flex flex-col h-full bg-card select-none overflow-hidden">
 
@@ -682,6 +694,21 @@ export function Timeline({
             )}
           >
             <Trash2 className="h-3.5 w-3.5" />
+          </button>
+          {/* Recortar (crop) button */}
+          <button
+            title="Recortar clipe selecionado"
+            disabled={!selectedItemIsCroppable}
+            onClick={(e) => { e.stopPropagation(); onCropSelected?.(); }}
+            className={cn(
+              'flex items-center justify-center gap-1 h-6 px-2 rounded-md text-[11px] font-bold transition-all border shadow-sm',
+              selectedItemIsCroppable
+                ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/30 cursor-pointer'
+                : 'bg-muted/40 border-border/30 text-muted-foreground/40 cursor-not-allowed'
+            )}
+          >
+            <Crop className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Recortar</span>
           </button>
         </div>
 

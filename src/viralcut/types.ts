@@ -70,6 +70,11 @@ export interface VideoDetails {
   rotation?: number;      // degrees
   // When true, render using posX/posY/width/height/rotation instead of contain-fit
   useTransform?: boolean;
+  // Crop mask (clipping region as fraction 0–1 of rendered video area)
+  cropX?: number;
+  cropY?: number;
+  cropW?: number;
+  cropH?: number;
 }
 
 export interface AudioDetails {
@@ -95,6 +100,11 @@ export interface ImageDetails {
   width: number;
   height: number;
   rotation?: number;      // degrees
+  // Crop mask (clipping region as fraction 0–1 of rendered image area)
+  cropX?: number;
+  cropY?: number;
+  cropW?: number;
+  cropH?: number;
 }
 
 export type AnimationPreset = 'none' | 'fadeIn' | 'fadeOut' | 'slideLeft' | 'slideRight' | 'slideUp' | 'slideDown' | 'zoomIn' | 'zoomOut';

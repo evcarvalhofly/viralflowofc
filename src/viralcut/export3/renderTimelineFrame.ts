@@ -126,6 +126,25 @@ function getOverlayItems(project: Project, timeSec: number) {
 }
 
 /**
+ * Applies a clipping mask so only the crop region of the drawn element is visible.
+ * vidDx/Dy/Dw/Dh are the canvas coordinates where the element was (or will be) drawn.
+ * cropX/Y/W/H are 0–1 fractions of that drawn area.
+ */
+function applyCropClip(
+  ctx:   CanvasRenderingContext2D,
+  cropX: number, cropY: number, cropW: number, cropH: number,
+  vidDx: number, vidDy: number, vidDw: number, vidDh: number
+) {
+  const clipX = vidDx + cropX * vidDw;
+  const clipY = vidDy + cropY * vidDh;
+  const clipW = cropW  * vidDw;
+  const clipH = cropH  * vidDh;
+  ctx.beginPath();
+  ctx.rect(clipX, clipY, clipW, clipH);
+  ctx.clip();
+}
+
+/**
  * Contain-fit draw — scales source to fit dest proportionally, centered.
  * No stretching ever.
  */
@@ -189,11 +208,22 @@ export function renderTimelineFrame({
         const dw  = (vd.width ?? 100) / 100 * width;
         const dh  = dw * (srcH / srcW);
         const rot = ((vd.rotation ?? 0) * Math.PI) / 180;
+        // Apply crop mask before transform
+        const hasCropUT = (vd.cropX ?? 0) !== 0 || (vd.cropY ?? 0) !== 0 || (vd.cropW ?? 1) !== 1 || (vd.cropH ?? 1) !== 1;
+        if (hasCropUT) applyCropClip(ctx, vd.cropX ?? 0, vd.cropY ?? 0, vd.cropW ?? 1, vd.cropH ?? 1, ox - dw / 2, oy - dh / 2, dw, dh);
         ctx.translate(ox, oy);
         if (rot !== 0) ctx.rotate(rot);
         if (vd.flipH || vd.flipV) ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
         ctx.drawImage(videoEl, -dw / 2, -dh / 2, dw, dh);
       } else {
+        // Contain-fit: compute where the video lands on canvas, then apply crop mask
+        const scale = Math.min(width / srcW, height / srcH);
+        const dw = srcW * scale;
+        const dh = srcH * scale;
+        const dx = (width  - dw) / 2;
+        const dy = (height - dh) / 2;
+        const hasCrop = (vd?.cropX ?? 0) !== 0 || (vd?.cropY ?? 0) !== 0 || (vd?.cropW ?? 1) !== 1 || (vd?.cropH ?? 1) !== 1;
+        if (hasCrop) applyCropClip(ctx, vd!.cropX ?? 0, vd!.cropY ?? 0, vd!.cropW ?? 1, vd!.cropH ?? 1, dx, dy, dw, dh);
         if (vd?.flipH || vd?.flipV) {
           ctx.translate(vd?.flipH ? width : 0, vd?.flipV ? height : 0);
           ctx.scale(vd?.flipH ? -1 : 1, vd?.flipV ? -1 : 1);
@@ -227,6 +257,8 @@ export function renderTimelineFrame({
 
     ctx.save();
     ctx.globalAlpha = id?.opacity ?? 1;
+    const hasCropImg = (id?.cropX ?? 0) !== 0 || (id?.cropY ?? 0) !== 0 || (id?.cropW ?? 1) !== 1 || (id?.cropH ?? 1) !== 1;
+    if (hasCropImg) applyCropClip(ctx, id!.cropX ?? 0, id!.cropY ?? 0, id!.cropW ?? 1, id!.cropH ?? 1, ox - dw / 2, oy - dh / 2, dw, dh);
     ctx.translate(ox, oy);
     if (rot !== 0) ctx.rotate(rot);
     if (id?.flipH || id?.flipV) ctx.scale(id.flipH ? -1 : 1, id.flipV ? -1 : 1);
@@ -258,6 +290,8 @@ export function renderTimelineFrame({
     ctx.save();
     ctx.globalAlpha = vd?.opacity ?? 1;
     if (filters.length) (ctx as CanvasRenderingContext2D & { filter: string }).filter = filters.join(' ');
+    const hasCropVid = (vd?.cropX ?? 0) !== 0 || (vd?.cropY ?? 0) !== 0 || (vd?.cropW ?? 1) !== 1 || (vd?.cropH ?? 1) !== 1;
+    if (hasCropVid) applyCropClip(ctx, vd!.cropX ?? 0, vd!.cropY ?? 0, vd!.cropW ?? 1, vd!.cropH ?? 1, ox - dw / 2, oy - dh / 2, dw, dh);
     ctx.translate(ox, oy);
     if (rot !== 0) ctx.rotate(rot);
     if (vd?.flipH || vd?.flipV) ctx.scale(vd.flipH ? -1 : 1, vd.flipV ? -1 : 1);
