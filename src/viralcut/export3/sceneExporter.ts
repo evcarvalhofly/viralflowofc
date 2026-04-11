@@ -60,41 +60,28 @@ function getPrimaryVideoMedia(
 }
 
 /**
- * Returns export canvas dimensions based on the locked orientation
- * from MediaFile, which was set at import time.
+ * Returns export canvas dimensions based on the project's aspect ratio.
+ * The project stores the exact target dimensions (set when the user picks
+ * an aspect ratio). We scale those dimensions to fit within the chosen
+ * resolution tier while preserving the exact ratio.
  *
  * This is the ONLY place where canvas size is decided.
- * It is NEVER changed after this point.
  */
 function getExportSize(
-  resolution:  '720p' | '1080p',
-  orientation: 'portrait' | 'landscape' | 'square'
+  resolution: '720p' | '1080p',
+  project:    Project
 ): { width: number; height: number } {
-  if (resolution === '1080p') {
-    if (orientation === 'portrait') return { width: 1080, height: 1920 };
-    if (orientation === 'square')   return { width: 1080, height: 1080 };
-    return { width: 1920, height: 1080 };
-  }
-  if (orientation === 'portrait') return { width: 720, height: 1280 };
-  if (orientation === 'square')   return { width: 720,  height: 720  };
-  return { width: 1280, height: 720 };
-}
-
-/**
- * Resolve orientation from primary video or fall back to project aspect ratio.
- */
-function resolveExportOrientation(
-  primaryVideo: MediaFile | null,
-  project:      Project
-): 'portrait' | 'landscape' | 'square' {
-  if (primaryVideo?.orientation) return primaryVideo.orientation;
-
-  // Fallback to project aspect ratio
-  const { aspectRatio } = project;
-  if (aspectRatio === '9:16')  return 'portrait';
-  if (aspectRatio === '1:1')   return 'square';
-  if (aspectRatio === '4:5')   return 'portrait';
-  return 'landscape';
+  const pw = project.width  || 1920;
+  const ph = project.height || 1080;
+  // Target longest side for each resolution tier
+  const target = resolution === '1080p' ? 1080 : 720;
+  // Scale so the longest side equals `target`, keep exact ratio
+  const longest = Math.max(pw, ph);
+  const scale   = target / longest;
+  // Round to even numbers (required by most video codecs)
+  const w = Math.round(pw * scale / 2) * 2;
+  const h = Math.round(ph * scale / 2) * 2;
+  return { width: w, height: h };
 }
 
 /**
@@ -130,10 +117,9 @@ export async function exportScene(
   const mediaMap = new Map(media.map((m) => [m.id, m]));
   const FPS      = opts.fps;
 
-  // ── 2. Determine canvas size from MediaFile (locked at import) ──
+  // ── 2. Determine canvas size from project aspect ratio ──────────
   const primaryVideo  = getPrimaryVideoMedia(project, mediaMap);
-  const orientation   = resolveExportOrientation(primaryVideo, project);
-  const { width: finalWidth, height: finalHeight } = getExportSize(opts.resolution, orientation);
+  const { width: finalWidth, height: finalHeight } = getExportSize(opts.resolution, project);
 
   log('Primary media:', {
     id:          primaryVideo?.id,
@@ -142,7 +128,7 @@ export async function exportScene(
     height:      primaryVideo?.height,
     orientation: primaryVideo?.orientation,
   });
-  log('Export size:', { width: finalWidth, height: finalHeight, resolution: opts.resolution, orientation });
+  log('Export size:', { width: finalWidth, height: finalHeight, resolution: opts.resolution, projectRatio: `${project.width}x${project.height}` });
 
   // ── 3. Initialize renderer with final canvas size ────────────
   onProgress(6, 'Inicializando renderer…');

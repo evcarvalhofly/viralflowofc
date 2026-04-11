@@ -4,8 +4,9 @@
 // is ZERO seek delay visible to the user (no black flash).
 // ============================================================
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCw } from 'lucide-react';
-import { Track, TrackItem, MediaFile, TextDetails, ImageDetails, DEFAULT_VIDEO_DETAILS } from '../types';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCw, ChevronDown, Check } from 'lucide-react';
+import { Track, TrackItem, MediaFile, TextDetails, ImageDetails, DEFAULT_VIDEO_DETAILS, Project } from '../types';
+import { ASPECT_RATIOS } from '../store';
 import { cn } from '@/lib/utils';
 
 interface PreviewPanelProps {
@@ -23,6 +24,8 @@ interface PreviewPanelProps {
   onSelectItem?: (id: string | null) => void;
   onUpdateItem?: (trackId: string, itemId: string, updates: Partial<TrackItem>) => void;
   onOpenProperties?: (id: string) => void;
+  currentAspectRatio?: Project['aspectRatio'];
+  onChangeAspectRatio?: (ratio: Project['aspectRatio'], w: number, h: number) => void;
 }
 
 function fmt(s: number) {
@@ -385,7 +388,10 @@ export function PreviewPanel({
   onSelectItem,
   onUpdateItem,
   onOpenProperties,
+  currentAspectRatio,
+  onChangeAspectRatio,
 }: PreviewPanelProps) {
+  const [showRatioMenu, setShowRatioMenu] = useState(false);
   // ── Double-buffer: two video elements swap on each clip transition ─
   const videoRefA = useRef<HTMLVideoElement>(null);
   const videoRefB = useRef<HTMLVideoElement>(null);
@@ -455,10 +461,7 @@ export function PreviewPanel({
     return { item: next, mediaFile: media.find((m) => m.id === next.mediaId) };
   }, [activeVideoItem, baseVideoTrack, media]);
 
-  const { w: canvasW, h: canvasH } = previewSize(
-    activeVideoItem?.mediaFile?.width,
-    activeVideoItem?.mediaFile?.height
-  );
+  const { w: canvasW, h: canvasH } = previewSize(projectWidth, projectHeight);
 
   const activeTextItems = useMemo(
     () =>
@@ -855,9 +858,56 @@ export function PreviewPanel({
     <div className="flex flex-col h-full bg-card select-none">
       {/* ── Canvas preview ── */}
       <div
-        className="flex-1 flex items-center justify-center bg-black overflow-hidden relative"
-        onClick={() => onSelectItem?.(null)}
+        className="flex items-center justify-center relative"
+        style={{ background: '#111', flex: '1 1 0', minHeight: 0, maxHeight: 'min(100%, 55vh)', padding: 10 }}
+        onClick={() => { onSelectItem?.(null); setShowRatioMenu(false); }}
       >
+        {/* Aspect ratio selector — top left */}
+        {onChangeAspectRatio && (
+          <div className="absolute top-2 left-2 z-50">
+            <button
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-black/60 border border-white/20 text-white hover:bg-black/80 transition-colors backdrop-blur-sm"
+              onClick={(e) => { e.stopPropagation(); setShowRatioMenu((v) => !v); }}
+            >
+              {currentAspectRatio ?? '16:9'}
+              <ChevronDown className="h-3 w-3 opacity-70" />
+            </button>
+            {showRatioMenu && (
+              <div
+                className="absolute top-full left-0 mt-1 w-52 rounded-lg border border-border bg-card shadow-xl overflow-y-auto"
+                style={{ maxHeight: 'min(320px, 60vh)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {(Object.entries(ASPECT_RATIOS) as [Project['aspectRatio'], typeof ASPECT_RATIOS[keyof typeof ASPECT_RATIOS]][]).map(([key, val]) => (
+                  <button
+                    key={key}
+                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-muted/50 transition-colors text-left"
+                    onClick={() => {
+                      onChangeAspectRatio(key, val.w, val.h);
+                      setShowRatioMenu(false);
+                    }}
+                  >
+                    {/* Aspect ratio icon */}
+                    <div
+                      className="shrink-0 border border-muted-foreground/50 bg-muted/20"
+                      style={{
+                        width: val.w > val.h ? 24 : val.w === val.h ? 18 : 14,
+                        height: val.w > val.h ? 14 : val.w === val.h ? 18 : 24,
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-foreground">{val.label}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{val.desc}</div>
+                    </div>
+                    {currentAspectRatio === key && (
+                      <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {/* Hidden video slots (double-buffer) */}
         <video
           ref={videoRefA}
@@ -883,11 +933,13 @@ export function PreviewPanel({
             aspectRatio: `${projectWidth} / ${projectHeight}`,
             maxWidth: '100%',
             maxHeight: '100%',
-            overflow: 'visible',
+            overflow: 'hidden',
             margin: 'auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            outline: '1px solid rgba(255,255,255,0.18)',
+            outlineOffset: 0,
           }}
         >
           <canvas
@@ -903,36 +955,50 @@ export function PreviewPanel({
           />
 
         {/* Base video transform handle — rendered first so overlays appear on top */}
-        {activeVideoItem && baseVideoTrack && (
-          <OverlayHandle
-            key={activeVideoItem.item.id + '-base'}
-            item={{
-              ...activeVideoItem.item,
-              videoDetails: {
-                ...(activeVideoItem.item.videoDetails ?? DEFAULT_VIDEO_DETAILS),
-                posX: activeVideoItem.item.videoDetails?.posX ?? 50,
-                posY: activeVideoItem.item.videoDetails?.posY ?? 50,
-                width: activeVideoItem.item.videoDetails?.useTransform
-                  ? (activeVideoItem.item.videoDetails.width ?? 100)
-                  : 100,
-              },
-            }}
-            trackId={baseVideoTrack.id}
-            containerRef={overlayContainerRef}
-            isSelected={selectedItemId === activeVideoItem.item.id}
-            onSelect={() => onSelectItem?.(activeVideoItem.item.id)}
-            onOpenProperties={() => onOpenProperties?.(activeVideoItem.item.id)}
-            onUpdate={(updates) => {
-              const withTransform = updates.videoDetails
-                ? { ...updates, videoDetails: { ...updates.videoDetails, useTransform: true } }
-                : updates;
-              onUpdateItem?.(baseVideoTrack.id, activeVideoItem.item.id, withTransform);
-            }}
-          >
-            {/* Transparent placeholder to give the handle the canvas aspect ratio */}
-            <div style={{ width: '100%', aspectRatio: `${projectWidth} / ${projectHeight}` }} />
-          </OverlayHandle>
-        )}
+        {activeVideoItem && baseVideoTrack && (() => {
+          const vd = activeVideoItem.item.videoDetails;
+          const useTransform = vd?.useTransform ?? false;
+          // When not using transform, compute the letterboxed bounds of the video
+          // within the canvas so handles track the actual video content, not the full canvas.
+          const mediaW = activeVideoItem.mediaFile?.width ?? projectWidth;
+          const mediaH = activeVideoItem.mediaFile?.height ?? projectHeight;
+          const scale = Math.min(projectWidth / mediaW, projectHeight / mediaH);
+          const letterboxedWidthPct = (mediaW * scale / projectWidth) * 100;
+          // OverlayHandle uses item.videoDetails.width (% of canvas width) for its CSS width.
+          // Child aspect ratio determines the handle height automatically.
+          const handleWidth = useTransform ? (vd?.width ?? 100) : letterboxedWidthPct;
+          // For the child placeholder, use video's own aspect ratio so handles hug the content.
+          const childAspectW = useTransform ? projectWidth : mediaW;
+          const childAspectH = useTransform ? projectHeight : mediaH;
+          return (
+            <OverlayHandle
+              key={activeVideoItem.item.id + '-base'}
+              item={{
+                ...activeVideoItem.item,
+                videoDetails: {
+                  ...(vd ?? DEFAULT_VIDEO_DETAILS),
+                  posX: vd?.posX ?? 50,
+                  posY: vd?.posY ?? 50,
+                  width: handleWidth,
+                },
+              }}
+              trackId={baseVideoTrack.id}
+              containerRef={overlayContainerRef}
+              isSelected={selectedItemId === activeVideoItem.item.id}
+              onSelect={() => onSelectItem?.(activeVideoItem.item.id)}
+              onOpenProperties={() => onOpenProperties?.(activeVideoItem.item.id)}
+              onUpdate={(updates) => {
+                const withTransform = updates.videoDetails
+                  ? { ...updates, videoDetails: { ...updates.videoDetails, useTransform: true } }
+                  : updates;
+                onUpdateItem?.(baseVideoTrack.id, activeVideoItem.item.id, withTransform);
+              }}
+            >
+              {/* Transparent placeholder — aspect ratio matches video content (not canvas) */}
+              <div style={{ width: '100%', aspectRatio: `${childAspectW} / ${childAspectH}` }} />
+            </OverlayHandle>
+          );
+        })()}
 
         {/* Text overlays */}
         {activeTextItems.map((item) => {

@@ -190,12 +190,29 @@ export function Timeline({
 
   const totalWidth = Math.max(duration * zoom + 300, 800);
 
-  const ticks = useMemo(() => {
-    const tickInterval = zoom < 60 ? 5 : zoom < 100 ? 2 : 1;
+  const { majorTicks, minorTicks } = useMemo(() => {
     const totalSeconds = Math.ceil(totalWidth / zoom);
-    const result: number[] = [];
-    for (let i = 0; i <= totalSeconds; i += tickInterval) result.push(i);
-    return result;
+    const majorInterval = zoom < 60 ? 5 : zoom < 100 ? 2 : 1;
+
+    // Sub-second minor tick interval based on zoom level
+    let minorInterval: number | null = null;
+    if      (zoom >= 400) minorInterval = 0.1;
+    else if (zoom >= 150) minorInterval = 0.25;
+    else if (zoom >= 80)  minorInterval = 0.5;
+
+    const major: number[] = [];
+    const minor: number[] = [];
+
+    for (let i = 0; i <= totalSeconds; i += majorInterval) major.push(i);
+
+    if (minorInterval) {
+      const step = minorInterval;
+      for (let t = step; t <= totalSeconds; t = Math.round((t + step) * 1000) / 1000) {
+        if (!major.some((mt) => Math.abs(mt - t) < 0.001)) minor.push(t);
+      }
+    }
+
+    return { majorTicks: major, minorTicks: minor };
   }, [zoom, totalWidth]);
 
   // ── Shared: convert clientX inside the scroll area to timeline time ──
@@ -484,7 +501,19 @@ export function Timeline({
         {/* Ruler ticks — scrolls in sync with tracks via rulerScrollRef */}
         <div className="relative overflow-hidden flex-1" ref={rulerScrollRef}>
           <div style={{ width: totalWidth, position: 'relative', height: 28 }}>
-            {ticks.map((t) => (
+            {/* Sub-second minor ticks */}
+            {minorTicks.map((t) => (
+              <div
+                key={`minor-${t}`}
+                className="absolute top-0"
+                style={{ left: t * zoom }}
+              >
+                <div className="w-px h-1.5 bg-border/50" />
+              </div>
+            ))}
+
+            {/* Major ticks with labels */}
+            {majorTicks.map((t) => (
               <div
                 key={t}
                 className="absolute top-0 flex flex-col items-center"
@@ -589,8 +618,8 @@ export function Timeline({
             >
               {/* Playhead line across lane */}
               <div
-                className="absolute top-0 bottom-0 w-0.5 bg-primary/70 z-20 pointer-events-none"
-                style={{ left: playheadX }}
+                className="absolute top-0 bottom-0 bg-primary z-20 pointer-events-none"
+                style={{ left: playheadX, width: 1 }}
               />
 
               {/* Items */}
@@ -614,13 +643,20 @@ export function Timeline({
                     onTouchStart={(e) => handleItemTouchStart(e, track, item)}
                     title={item.name}
                   >
-                    {/* Thumbnail for video */}
-                    {m?.thumbnail && (
-                      <img
-                        src={m.thumbnail}
-                        className="h-full w-8 object-cover shrink-0 opacity-60 rounded-l-lg"
-                        alt=""
-                        draggable={false}
+                    {/* Tiled thumbnail strip for video/image clips */}
+                    {m?.thumbnail && (track.type === 'video' || track.type === 'image') && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          backgroundImage: `url(${m.thumbnail})`,
+                          backgroundSize: 'auto 100%',
+                          backgroundRepeat: 'repeat-x',
+                          backgroundPosition: 'left center',
+                          opacity: 0.45,
+                          pointerEvents: 'none',
+                          borderRadius: 'inherit',
+                        }}
                       />
                     )}
 
@@ -664,24 +700,52 @@ export function Timeline({
                       <Trash2 className="h-2.5 w-2.5" />
                     </button>
 
-                    {/* ── Trim handles ── */}
+                    {/* ── Trim handles (CapCut-style bracket) ── */}
                     {!track.locked && (
                       <>
-                        {/* Left trim — wider touch target on mobile */}
+                        {/* Left trim bracket */}
                         <div
-                          className="absolute left-0 top-0 bottom-0 w-5 cursor-col-resize z-30 flex items-center justify-center group/trim touch-none"
+                          className="absolute left-0 top-0 bottom-0 w-4 cursor-col-resize z-30 touch-none group/trim"
                           onMouseDown={(e) => handleTrimLeft(e, track, item)}
                           onTouchStart={(e) => handleTrimLeft(e, track, item)}
                         >
-                          <div className="w-1.5 h-6 rounded-full bg-white/70 group-hover/trim:bg-white transition-colors" />
+                          {/* Vertical bar */}
+                          <div className={cn(
+                            'absolute left-0 inset-y-0 w-[5px] rounded-l transition-colors',
+                            isSelected ? 'bg-white' : 'bg-white/50 group-hover/trim:bg-white/90'
+                          )} />
+                          {/* Top horizontal tick */}
+                          <div className={cn(
+                            'absolute top-0 left-0 h-[3px] w-3 transition-colors',
+                            isSelected ? 'bg-white' : 'bg-white/50 group-hover/trim:bg-white/90'
+                          )} />
+                          {/* Bottom horizontal tick */}
+                          <div className={cn(
+                            'absolute bottom-0 left-0 h-[3px] w-3 transition-colors',
+                            isSelected ? 'bg-white' : 'bg-white/50 group-hover/trim:bg-white/90'
+                          )} />
                         </div>
-                        {/* Right trim — wider touch target on mobile */}
+                        {/* Right trim bracket */}
                         <div
-                          className="absolute right-0 top-0 bottom-0 w-5 cursor-col-resize z-30 flex items-center justify-center group/trim touch-none"
+                          className="absolute right-0 top-0 bottom-0 w-4 cursor-col-resize z-30 touch-none group/trim"
                           onMouseDown={(e) => handleTrimRight(e, track, item)}
                           onTouchStart={(e) => handleTrimRight(e, track, item)}
                         >
-                          <div className="w-1.5 h-6 rounded-full bg-white/70 group-hover/trim:bg-white transition-colors" />
+                          {/* Vertical bar */}
+                          <div className={cn(
+                            'absolute right-0 inset-y-0 w-[5px] rounded-r transition-colors',
+                            isSelected ? 'bg-white' : 'bg-white/50 group-hover/trim:bg-white/90'
+                          )} />
+                          {/* Top horizontal tick */}
+                          <div className={cn(
+                            'absolute top-0 right-0 h-[3px] w-3 transition-colors',
+                            isSelected ? 'bg-white' : 'bg-white/50 group-hover/trim:bg-white/90'
+                          )} />
+                          {/* Bottom horizontal tick */}
+                          <div className={cn(
+                            'absolute bottom-0 right-0 h-[3px] w-3 transition-colors',
+                            isSelected ? 'bg-white' : 'bg-white/50 group-hover/trim:bg-white/90'
+                          )} />
                         </div>
                       </>
                     )}

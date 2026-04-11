@@ -140,7 +140,7 @@ export interface Project {
   fps: number;
   width: number;
   height: number;
-  aspectRatio: '16:9' | '9:16' | '1:1' | '4:5';
+  aspectRatio: '16:9' | '9:16' | '1:1' | '4:5' | '4:3' | '3:4' | '2:1' | '21:9';
   createdAt: number;
   updatedAt: number;
 }

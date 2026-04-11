@@ -1237,6 +1237,8 @@ const ViralCut = () => {
             onSelectItem={handleItemSelect}
             onUpdateItem={handleUpdateItem}
             onOpenProperties={handleItemDoubleClick}
+            currentAspectRatio={project.aspectRatio}
+            onChangeAspectRatio={(ratio, w, h) => updateProject((p) => ({ ...p, aspectRatio: ratio, width: w, height: h }))}
           />
         </div>
 
@@ -1450,6 +1452,8 @@ const ViralCut = () => {
             onSelectItem={handleItemSelect}
             onUpdateItem={handleUpdateItem}
             onOpenProperties={handleItemDoubleClick}
+            currentAspectRatio={project.aspectRatio}
+            onChangeAspectRatio={(ratio, w, h) => updateProject((p) => ({ ...p, aspectRatio: ratio, width: w, height: h }))}
           />
           {isSelectedSubtitle && showSubtitleStylePanel && (
             <SubtitleStylePanel
