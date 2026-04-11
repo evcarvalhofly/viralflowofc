@@ -121,11 +121,22 @@ export function Timeline({
     trackId: string;
     insertIndex: number;
   } | null>(null);
-  // Cross-track drag hint (mouse + touch): shown when dragging video clip up/down between tracks
+  // Cross-track drag hint (desktop mouse only)
   const [crossTrackHint, setCrossTrackHint] = useState<{
     itemId: string;
     direction: 'toOverlay' | 'toMain';
   } | null>(null);
+  // Long-press floating drag state (touch only — CapCut-style cross-track)
+  const [floatingDrag, setFloatingDrag] = useState<{
+    itemId: string;
+    trackId: string;
+    label: string;
+    itemWPx: number;
+    screenX: number;
+    screenY: number;
+    targetTrackId: string | null;
+  } | null>(null);
+  const floatingElRef = useRef<HTMLDivElement>(null);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────
   const pinchRef        = useRef<{ dist: number; anchorX: number } | null>(null);
@@ -378,32 +389,73 @@ export function Timeline({
     let isDragging = false;
     let currentInsertIndex = 0;
     let currentNewStart = origStart;
-    // 'undecided' until first significant movement; then locked to 'horizontal' or 'crossTrack'
-    let dragMode: 'undecided' | 'horizontal' | 'crossTrack' = 'undecided';
-    let crossTrackDir: 'toOverlay' | 'toMain' | null = null;
+    // 'undecided' → 'horizontal' (normal drag) or 'floating' (long-press detach)
+    let dragMode: 'undecided' | 'horizontal' | 'floating' = 'undecided';
 
-    // Magnetic behavior only applies to the main (first) video track
     const mainVideoTrackId = tracks.find((t) => t.type === 'video')?.id;
     const isMagneticTrack = isMobile && track.id === mainVideoTrackId;
-    const isMainTrack = item.type === 'video' && track.id === mainVideoTrackId;
-    const isOverlayTrack = item.type === 'video' && track.type === 'video' && !isMainTrack;
+
+    // ── Long-press timer: detach clip after 420ms (video items on mobile only) ──
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastTargetTrackId: string | null = track.id;
+
+    if (item.type === 'video' && isMobile) {
+      const itemWPx = (item.endTime - item.startTime) * zoom;
+      longPressTimer = setTimeout(() => {
+        dragMode = 'floating';
+        navigator.vibrate?.(28);
+        setFloatingDrag({
+          itemId: item.id,
+          trackId: track.id,
+          label: item.name,
+          itemWPx,
+          screenX: startX,
+          screenY: startY,
+          targetTrackId: track.id,
+        });
+      }, 420);
+    }
 
     const onMove = (ev: TouchEvent) => {
-      const dx = ev.touches[0].clientX - startX;
-      const dy = ev.touches[0].clientY - startY;
+      const cx = ev.touches[0].clientX;
+      const cy = ev.touches[0].clientY;
+      const dx = cx - startX;
+      const dy = cy - startY;
+
+      // ── Floating mode: ghost follows finger, hit-test target track ──
+      if (dragMode === 'floating') {
+        ev.preventDefault();
+        currentNewStart = Math.max(0, origStart + dx / zoom);
+        // Imperatively move the ghost element (avoids React re-render on every frame)
+        if (floatingElRef.current) {
+          const elW = Math.min((item.endTime - item.startTime) * zoom, 180);
+          floatingElRef.current.style.left = `${cx - elW / 2}px`;
+          floatingElRef.current.style.top  = `${cy - 56}px`;
+        }
+        // Hit-test which track lane is under the finger
+        const hitEl = document.elementFromPoint(cx, cy);
+        const hitTrackEl = hitEl?.closest('[data-track-id]') as HTMLElement | null;
+        const hitTrackId = hitTrackEl?.dataset.trackId ?? null;
+        if (hitTrackId !== lastTargetTrackId) {
+          lastTargetTrackId = hitTrackId;
+          setFloatingDrag((prev) => prev ? { ...prev, targetTrackId: hitTrackId } : null);
+        }
+        return;
+      }
+
+      // Cancel long press if finger moves significantly before timer fires
+      if (longPressTimer && (Math.abs(dx) > 14 || Math.abs(dy) > 14)) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
 
       if (dragMode === 'undecided') {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
         isDragging = true;
         ev.preventDefault();
-        // Vertical movement dominates → cross-track mode (only for video items)
-        if (item.type === 'video' && Math.abs(dy) > Math.abs(dx) && Math.abs(dy) >= 12) {
-          dragMode = 'crossTrack';
-        } else {
-          dragMode = 'horizontal';
-          if (isMagneticTrack) {
-            setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: 0 });
-          }
+        dragMode = 'horizontal';
+        if (isMagneticTrack) {
+          setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: 0 });
         }
       } else {
         isDragging = true;
@@ -414,7 +466,7 @@ export function Timeline({
         currentNewStart = Math.max(0, origStart + dx / zoom);
         onItemMove(track.id, item.id, currentNewStart);
         if (isMagneticTrack) {
-          const touchTimeSec = clientXToTime(ev.touches[0].clientX);
+          const touchTimeSec = clientXToTime(cx);
           const otherItems = track.items
             .filter((i) => i.id !== item.id)
             .sort((a, b) => a.startTime - b.startTime);
@@ -423,39 +475,38 @@ export function Timeline({
           currentInsertIndex = idx;
           setMobileDragState({ itemId: item.id, trackId: track.id, insertIndex: idx });
         }
-      } else if (dragMode === 'crossTrack') {
-        // Track X position for placement, but don't move item (avoid confusing visual)
-        currentNewStart = Math.max(0, origStart + dx / zoom);
-        if (isMainTrack && dy > 20) {
-          crossTrackDir = 'toOverlay';
-          setCrossTrackHint({ itemId: item.id, direction: 'toOverlay' });
-        } else if (isOverlayTrack && dy < -20) {
-          crossTrackDir = 'toMain';
-          setCrossTrackHint({ itemId: item.id, direction: 'toMain' });
-        } else {
-          crossTrackDir = null;
-          setCrossTrackHint(null);
-        }
       }
     };
+
     const onUp = () => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
+      if (longPressTimer) clearTimeout(longPressTimer);
 
-      if (dragMode === 'crossTrack' && crossTrackDir) {
-        onItemMoveToTrack?.(track.id, item.id, crossTrackDir, currentNewStart);
-      } else if (isMagneticTrack && isDragging && dragMode === 'horizontal') {
+      // ── Floating drag ended: execute cross-track move if on a different video track ──
+      if (dragMode === 'floating') {
+        if (lastTargetTrackId && lastTargetTrackId !== track.id) {
+          const targetType = tracks.find((t) => t.id === lastTargetTrackId)?.type;
+          if (targetType === 'video') {
+            const isFromMain = track.id === mainVideoTrackId;
+            const direction: 'toOverlay' | 'toMain' = isFromMain ? 'toOverlay' : 'toMain';
+            onItemMoveToTrack?.(track.id, item.id, direction, currentNewStart);
+          }
+        }
+        setFloatingDrag(null);
+        return;
+      }
+
+      if (isMagneticTrack && isDragging && dragMode === 'horizontal') {
         onItemReorder?.(track.id, item.id, currentInsertIndex);
       }
       setMobileDragState(null);
-      setCrossTrackHint(null);
 
-      // Don't fire double-click if we actually dragged
+      // Don't fire double-tap if we actually dragged
       if (!isDragging) {
         const now = Date.now();
         const last = lastClickRef.current;
         if (last && last.id === item.id && now - last.time < 400) {
-          // Double tap detected → open properties
           lastClickRef.current = null;
           onItemDoubleClick?.(item.id);
         } else {
@@ -463,7 +514,7 @@ export function Timeline({
         }
       }
     };
-    // passive: false so we can call preventDefault() to block scroll
+
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
   };
@@ -714,7 +765,13 @@ export function Timeline({
 
             {/* Track lane — click empty area to seek */}
             <div
-              className="relative flex-1"
+              className={cn(
+                'relative flex-1',
+                floatingDrag && floatingDrag.targetTrackId === track.id && floatingDrag.trackId !== track.id
+                  ? 'bg-primary/15 ring-1 ring-inset ring-primary/50'
+                  : undefined
+              )}
+              data-track-id={track.id}
               style={{ width: totalWidth, cursor: 'crosshair' }}
               onDragOver={(e) => { e.preventDefault(); setDragOver(track.id); }}
               onDragLeave={() => setDragOver(null)}
@@ -776,7 +833,7 @@ export function Timeline({
                       track.locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing',
                       itemColors(track.type, isSelected)
                     )}
-                    style={{ left, width: w, opacity: crossTrackHint?.itemId === item.id ? 0.55 : mobileDragState?.itemId === item.id ? 0.45 : undefined }}
+                    style={{ left, width: w, opacity: floatingDrag?.itemId === item.id ? 0.3 : crossTrackHint?.itemId === item.id ? 0.55 : mobileDragState?.itemId === item.id ? 0.45 : undefined }}
                     onMouseDown={(e) => handleItemMouseDown(e, track, item)}
                     onTouchStart={(e) => handleItemTouchStart(e, track, item)}
                     title={item.name}
@@ -914,6 +971,44 @@ export function Timeline({
         )}
         </div>{/* end inner width wrapper */}
       </div>{/* end scroll container */}
+
+      {/* ── Floating ghost (long-press cross-track drag) ── */}
+      {floatingDrag && (
+        <div
+          ref={floatingElRef}
+          className="fixed pointer-events-none z-[200]"
+          style={{
+            left: floatingDrag.screenX - Math.min(floatingDrag.itemWPx, 180) / 2,
+            top:  floatingDrag.screenY - 56,
+            width:  Math.min(floatingDrag.itemWPx, 180),
+            height: 48,
+            transform: 'scale(1.07)',
+            transformOrigin: 'bottom center',
+            transition: 'none',
+          }}
+        >
+          <div className="w-full h-full rounded-xl border-2 border-primary bg-primary/40 backdrop-blur-sm flex items-center px-2.5 gap-1.5 shadow-2xl shadow-primary/50">
+            <Film className="h-3.5 w-3.5 text-primary-foreground shrink-0" />
+            <span className="text-[11px] font-bold text-primary-foreground truncate flex-1">
+              {floatingDrag.label}
+            </span>
+          </div>
+          {/* Drop target label below ghost */}
+          {floatingDrag.targetTrackId && floatingDrag.targetTrackId !== floatingDrag.trackId && (() => {
+            const mainVidId = tracks.find((t) => t.type === 'video')?.id;
+            const targetType = tracks.find((t) => t.id === floatingDrag.targetTrackId)?.type;
+            if (targetType !== 'video') return null;
+            const label = floatingDrag.trackId === mainVidId ? '↓ Mover para Camada' : '↑ Mover para Principal';
+            return (
+              <div className="absolute -bottom-5 left-0 right-0 flex justify-center">
+                <span className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg whitespace-nowrap">
+                  {label}
+                </span>
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }
