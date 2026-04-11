@@ -910,28 +910,6 @@ export function Timeline({
                       </span>
                     )}
 
-                    {/* Split button (on selected item at playhead) */}
-                    {isSelected && w > 40 && !isTextOrImage && (
-                      <button
-                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 p-1 rounded-full bg-background/80 border border-border text-foreground/70 hover:text-primary hover:border-primary transition-colors opacity-0 group-hover:opacity-100"
-                        title="Dividir no playhead"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onItemSplit(track.id, item.id, currentTime);
-                        }}
-                      >
-                        <Scissors className="h-2.5 w-2.5" />
-                      </button>
-                    )}
-
-                    {/* Delete button */}
-                    <button
-                      className="absolute right-1 top-1/2 -translate-y-1/2 z-30 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded bg-destructive/80 hover:bg-destructive text-white"
-                      onClick={(e) => { e.stopPropagation(); onItemDelete(track.id, item.id); }}
-                      title="Deletar"
-                    >
-                      <Trash2 className="h-2.5 w-2.5" />
-                    </button>
 
                     {/* ── Trim handles (CapCut-style bracket) ── */}
                     {!track.locked && (
