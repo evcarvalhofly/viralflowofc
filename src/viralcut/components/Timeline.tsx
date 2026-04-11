@@ -328,11 +328,11 @@ export function Timeline({
       currentNewStart = Math.max(0, origStart + dx / zoom);
       onItemMove(track.id, item.id, currentNewStart);
 
-      // Cross-track: drag up from main → overlay; drag down from overlay → main
-      if (isMainTrack && dy < -28) {
+      // Cross-track: main is at top, overlays below → drag down from main = toOverlay; drag up from overlay = toMain
+      if (isMainTrack && dy > 28) {
         crossTrackDir = 'toOverlay';
         setCrossTrackHint({ itemId: item.id, direction: 'toOverlay' });
-      } else if (isOverlayTrack && dy > 28) {
+      } else if (isOverlayTrack && dy < -28) {
         crossTrackDir = 'toMain';
         setCrossTrackHint({ itemId: item.id, direction: 'toMain' });
       } else {
@@ -426,10 +426,10 @@ export function Timeline({
       } else if (dragMode === 'crossTrack') {
         // Track X position for placement, but don't move item (avoid confusing visual)
         currentNewStart = Math.max(0, origStart + dx / zoom);
-        if (isMainTrack && dy < -20) {
+        if (isMainTrack && dy > 20) {
           crossTrackDir = 'toOverlay';
           setCrossTrackHint({ itemId: item.id, direction: 'toOverlay' });
-        } else if (isOverlayTrack && dy > 20) {
+        } else if (isOverlayTrack && dy < -20) {
           crossTrackDir = 'toMain';
           setCrossTrackHint({ itemId: item.id, direction: 'toMain' });
         } else {
