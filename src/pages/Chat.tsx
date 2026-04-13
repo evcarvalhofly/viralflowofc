@@ -322,10 +322,10 @@ const Chat = () => {
 
       const data = await resp.json();
 
-      if (resp.status === 409 && data.error === "active_plan_exists") {
+      if (resp.status === 429 && data.error === "monthly_limit_reached") {
         const blockMsg: Msg = {
           role: "assistant",
-          content: `⚠️ ${data.message}\n\nAcesse a aba **Planejamento** para ver seu plano atual e marcar os itens como concluídos!`,
+          content: `⚠️ ${data.message}`,
         };
         setMessages(prev => [...prev, blockMsg]);
         await supabase.from("chat_messages").insert({

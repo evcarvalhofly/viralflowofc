@@ -32,25 +32,30 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // ── Rule: only 1 active plan at a time ──
-    const { data: incompletePlans, error: checkError } = await supabase
-      .from('plan_items')
-      .select('id, plan_id')
-      .eq('user_id', user_id)
-      .eq('completed', false)
-      .limit(1);
+    // ── Rule: max 10 plan generations per month ──
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    if (checkError) {
-      console.error('Check active plan error:', checkError);
+    const { count: monthlyCount, error: countError } = await supabase
+      .from('daily_plans')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user_id)
+      .gte('created_at', monthStart);
+
+    if (countError) {
+      console.error('Monthly count error:', countError);
     }
 
-    if (incompletePlans && incompletePlans.length > 0) {
+    const MONTHLY_LIMIT = 10;
+    if ((monthlyCount ?? 0) >= MONTHLY_LIMIT) {
       return new Response(
         JSON.stringify({
-          error: 'active_plan_exists',
-          message: 'Você ainda tem um plano em andamento! Conclua todos os itens do checklist antes de criar um novo planejamento. 💪',
+          error: 'monthly_limit_reached',
+          message: `Você atingiu o limite de ${MONTHLY_LIMIT} planejamentos este mês. O limite renova no dia 1º do próximo mês. 🗓️`,
+          used: monthlyCount,
+          limit: MONTHLY_LIMIT,
         }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
