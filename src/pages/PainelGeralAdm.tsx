@@ -53,32 +53,11 @@ let toastId = 0;
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const callAdmin = async (body: object) => {
-  // Força refresh para garantir token válido (getSession retorna cache que pode estar expirado)
-  const { data: refreshData } = await supabase.auth.refreshSession();
-  let token = refreshData?.session?.access_token;
+  const { data, error } = await supabase.functions.invoke('admin-panel', {
+    body,
+  });
 
-  // Fallback: se refresh falhar, tenta o cache
-  if (!token) {
-    const { data: { session } } = await supabase.auth.getSession();
-    token = session?.access_token;
-  }
-
-  if (!token) throw new Error('Sessão não encontrada. Faça login novamente.');
-
-  const res = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-panel`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify(body),
-    }
-  );
-
-  const data = await res.json();
+  if (error) throw new Error(error.message ?? 'Erro ao chamar admin-panel');
   if (data?.error) throw new Error(data.error);
   return data;
 };
