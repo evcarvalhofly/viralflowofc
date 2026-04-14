@@ -364,7 +364,7 @@ function PricingCard({
           </>
         ) : (
           <>
-            <span className="text-5xl font-extrabold text-white">37</span>
+            <span className="text-5xl font-extrabold text-white">47</span>
             <span className="text-white text-2xl font-bold mb-1">,90</span>
             <span className="text-muted-foreground text-sm mb-1">/mês</span>
           </>
@@ -891,7 +891,7 @@ export default function Convite() {
         </div>
         <p className="text-xs font-bold uppercase tracking-widest text-violet-400 mb-3">Escolha seu plano</p>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-3">
-          Tudo isso por menos de R$1,30 por dia
+          Tudo isso por menos de R$1,60 por dia
         </h2>
         <p className="text-sm text-zinc-500 mb-10">Sem contrato longo. Cancele quando quiser.</p>
 
