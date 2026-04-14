@@ -23,8 +23,8 @@ serve(async (req) => {
       });
     }
 
-    // Google Drive direct download URL (follows redirects)
-    const driveUrl = `https://drive.google.com/uc?export=download&id=${driveId}&confirm=t`;
+    // Google Drive direct download URL (new usercontent endpoint, no redirect needed)
+    const driveUrl = `https://drive.usercontent.google.com/download?id=${driveId}&export=download&confirm=t`;
 
     const response = await fetch(driveUrl, {
       headers: {
