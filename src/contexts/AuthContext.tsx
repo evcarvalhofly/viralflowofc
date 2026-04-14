@@ -87,16 +87,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       if (session) {
         const existingSid = localStorage.getItem(SESSION_KEY);
-        if (!existingSid) {
-          // No local SID: could be a new tab or page refresh — sync from DB
-          // so we don't mistakenly treat it as a fresh login
+        if (existingSid) {
+          // Already have a local SID — immediately verify it still matches DB.
+          // This catches cases where another device logged in while this one was offline.
+          await checkSession(session.user.id);
+        } else {
           const { data } = await supabase
             .from('profiles')
             .select('current_session_id')
             .eq('user_id', session.user.id)
             .single();
           if (data?.current_session_id) {
+            // DB has a SID — inherit it (page refresh / new tab on same device)
             localStorage.setItem(SESSION_KEY, data.current_session_id);
+          } else {
+            // Neither local nor DB has SID (legacy session predating this feature).
+            // Claim ownership of this session now.
+            const sid = crypto.randomUUID();
+            localStorage.setItem(SESSION_KEY, sid);
+            supabase.from('profiles')
+              .update({ current_session_id: sid })
+              .eq('user_id', session.user.id)
+              .then(() => {});
           }
         }
         stopGuard = startSessionGuard(session.user.id);
