@@ -871,7 +871,7 @@ export default function Convite() {
             <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
               {[
                 { v: '50%', l: 'de comissão' },
-                { v: 'R$18,95', l: 'por venda mensal' },
+                { v: 'R$23,95', l: 'por venda mensal' },
                 { v: 'R$148,50', l: 'por venda anual' },
               ].map(({ v, l }) => (
                 <div key={l} className="bg-white/5 rounded-xl py-3 px-1 sm:px-2">
