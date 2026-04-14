@@ -24,6 +24,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const sessionCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const forceSignOut = async () => {
+    localStorage.removeItem(SESSION_KEY);
+    await supabase.auth.signOut();
+  };
 
   const checkSession = async (userId: string) => {
     const localSid = localStorage.getItem(SESSION_KEY);
@@ -34,22 +40,60 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .eq('user_id', userId)
       .single();
     if (data && data.current_session_id && data.current_session_id !== localSid) {
-      localStorage.removeItem(SESSION_KEY);
-      await supabase.auth.signOut();
+      await forceSignOut();
     }
+  };
+
+  // Real-time listener: fires the instant another device updates current_session_id
+  const startRealtimeGuard = (userId: string) => {
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+    }
+
+    const channel = supabase
+      .channel(`session_guard:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const newSid = (payload.new as { current_session_id?: string }).current_session_id;
+          const localSid = localStorage.getItem(SESSION_KEY);
+          if (localSid && newSid && newSid !== localSid) {
+            forceSignOut();
+          }
+        }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      realtimeChannelRef.current = null;
+    };
   };
 
   const startSessionGuard = (userId: string) => {
     if (sessionCheckRef.current) clearInterval(sessionCheckRef.current);
+    // Fallback polling every 5 min (handles cases where realtime is disconnected)
     sessionCheckRef.current = setInterval(() => checkSession(userId), 5 * 60 * 1000);
 
     const onVisibilityChange = () => {
       if (!document.hidden) checkSession(userId);
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
+
+    const stopRealtime = startRealtimeGuard(userId);
+
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       if (sessionCheckRef.current) clearInterval(sessionCheckRef.current);
+      stopRealtime();
     };
   };
 
@@ -62,9 +106,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
 
         if (event === 'SIGNED_IN' && session) {
-          // Always generate a new UUID on every real login.
-          // SIGNED_IN in Supabase JS v2 fires only on actual sign-ins,
-          // not on page reload (INITIAL_SESSION) or token refresh (TOKEN_REFRESHED).
           const sid = crypto.randomUUID();
           localStorage.setItem(SESSION_KEY, sid);
           supabase.from('profiles')
@@ -88,8 +129,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (session) {
         const existingSid = localStorage.getItem(SESSION_KEY);
         if (existingSid) {
-          // Already have a local SID — immediately verify it still matches DB.
-          // This catches cases where another device logged in while this one was offline.
           await checkSession(session.user.id);
         } else {
           const { data } = await supabase
@@ -98,11 +137,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             .eq('user_id', session.user.id)
             .single();
           if (data?.current_session_id) {
-            // DB has a SID — inherit it (page refresh / new tab on same device)
             localStorage.setItem(SESSION_KEY, data.current_session_id);
           } else {
-            // Neither local nor DB has SID (legacy session predating this feature).
-            // Claim ownership of this session now.
             const sid = crypto.randomUUID();
             localStorage.setItem(SESSION_KEY, sid);
             supabase.from('profiles')
