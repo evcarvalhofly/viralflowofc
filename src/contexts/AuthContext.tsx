@@ -62,19 +62,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
 
         if (event === 'SIGNED_IN' && session) {
-          // SIGNED_IN in Supabase JS v2 fires only on real logins, not on
-          // page reload or token refresh (those fire INITIAL_SESSION / TOKEN_REFRESHED).
-          // So: no local SID = fresh login on this device → always create new UUID,
-          // which will kick out any other active session in the DB.
-          const existingSid = localStorage.getItem(SESSION_KEY);
-          if (!existingSid) {
-            const sid = crypto.randomUUID();
-            localStorage.setItem(SESSION_KEY, sid);
-            supabase.from('profiles')
-              .update({ current_session_id: sid })
-              .eq('user_id', session.user.id)
-              .then(() => {});
-          }
+          // Always generate a new UUID on every real login.
+          // SIGNED_IN in Supabase JS v2 fires only on actual sign-ins,
+          // not on page reload (INITIAL_SESSION) or token refresh (TOKEN_REFRESHED).
+          const sid = crypto.randomUUID();
+          localStorage.setItem(SESSION_KEY, sid);
+          supabase.from('profiles')
+            .update({ current_session_id: sid })
+            .eq('user_id', session.user.id)
+            .then(() => {});
           if (stopGuard) stopGuard();
           stopGuard = startSessionGuard(session.user.id);
         }
