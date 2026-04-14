@@ -1469,6 +1469,17 @@ type SfxGroup = {
 
 const sfxGroups: SfxGroup[] = [
   {
+    id: "sfx-virais",
+    label: "Sons Virais (em Alta)",
+    emoji: "🔥",
+    assets: [
+      { id: "sfx-viral-001", label: "Gato Rindo",        driveId: "1KavMCppLS3E6Aj_qt7j7Ww2NnyIe78E_" },
+      { id: "sfx-viral-002", label: "Dexter Sound",      driveId: "1CItTRnm5fGBF78s_yJ9-0d-AOw387Eag" },
+      { id: "sfx-viral-003", label: "Galinha Gritando",  driveId: "1nQO4pX3K_IYf1k3BWHB3jqH8NvPxy-7v" },
+      { id: "sfx-viral-004", label: "FAHHHHH",           driveId: "15zLclK6gCK8VCUO0NsUGThfTLrubPAdI" },
+    ],
+  },
+  {
     id: "sfx-cinematico",
     label: "Cinemático",
     emoji: "🎬",
@@ -2785,17 +2796,6 @@ const sfxGroups: SfxGroup[] = [
       { id: "sfx-almsnd",   label: "Alarm Sound",        driveId: "1sYOOX4V_M5QBeBma4tD_DV7ZaOdNTCZy" },
       { id: "sfx-beepwav",  label: "Beep wav",           driveId: "1ycFMVQT9HaStJhGLO20rUlzASeQgX2s0" },
       { id: "sfx-beepwav2", label: "Beep 2 wav",         driveId: "1g4Y6iaGH7sufjp0zLf46oAHdK9BbQQZf" },
-    ],
-  },
-  {
-    id: "sfx-virais",
-    label: "Sons Virais (em Alta)",
-    emoji: "🔥",
-    assets: [
-      { id: "sfx-viral-001", label: "Gato Rindo",        driveId: "1KavMCppLS3E6Aj_qt7j7Ww2NnyIe78E_" },
-      { id: "sfx-viral-002", label: "Dexter Sound",      driveId: "1CItTRnm5fGBF78s_yJ9-0d-AOw387Eag" },
-      { id: "sfx-viral-003", label: "Galinha Gritando",  driveId: "1nQO4pX3K_IYf1k3BWHB3jqH8NvPxy-7v" },
-      { id: "sfx-viral-004", label: "FAHHHHH",           driveId: "15zLclK6gCK8VCUO0NsUGThfTLrubPAdI" },
     ],
   },
 ];
