@@ -23,7 +23,6 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const sessionCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const forceSignOut = async () => {
@@ -31,23 +30,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
   };
 
-  const checkSession = async (userId: string) => {
-    const localSid = localStorage.getItem(SESSION_KEY);
-    if (!localSid) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('current_session_id')
-      .eq('user_id', userId)
-      .single();
-    if (data && data.current_session_id && data.current_session_id !== localSid) {
-      await forceSignOut();
-    }
-  };
-
-  // Real-time listener: fires the instant another device updates current_session_id
   const startRealtimeGuard = (userId: string) => {
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
     }
 
     const channel = supabase
@@ -78,27 +64,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   };
 
-  const startSessionGuard = (userId: string) => {
-    if (sessionCheckRef.current) clearInterval(sessionCheckRef.current);
-    // Fallback polling every 5 min (handles cases where realtime is disconnected)
-    sessionCheckRef.current = setInterval(() => checkSession(userId), 5 * 60 * 1000);
-
-    const onVisibilityChange = () => {
-      if (!document.hidden) checkSession(userId);
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    const stopRealtime = startRealtimeGuard(userId);
-
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      if (sessionCheckRef.current) clearInterval(sessionCheckRef.current);
-      stopRealtime();
-    };
-  };
-
   useEffect(() => {
-    let stopGuard: (() => void) | null = null;
+    let stopRealtime: (() => void) | null = null;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -112,13 +79,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             .update({ current_session_id: sid })
             .eq('user_id', session.user.id)
             .then(() => {});
-          if (stopGuard) stopGuard();
-          stopGuard = startSessionGuard(session.user.id);
+          if (stopRealtime) stopRealtime();
+          stopRealtime = startRealtimeGuard(session.user.id);
         }
 
         if (event === 'SIGNED_OUT') {
           localStorage.removeItem(SESSION_KEY);
-          if (stopGuard) { stopGuard(); stopGuard = null; }
+          if (stopRealtime) { stopRealtime(); stopRealtime = null; }
         }
       }
     );
@@ -128,9 +95,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       if (session) {
         const existingSid = localStorage.getItem(SESSION_KEY);
-        if (existingSid) {
-          await checkSession(session.user.id);
-        } else {
+        if (!existingSid) {
+          // New tab or first load: inherit session from DB so realtime works correctly
           const { data } = await supabase
             .from('profiles')
             .select('current_session_id')
@@ -139,6 +105,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (data?.current_session_id) {
             localStorage.setItem(SESSION_KEY, data.current_session_id);
           } else {
+            // Legacy: no session tracked yet — claim ownership
             const sid = crypto.randomUUID();
             localStorage.setItem(SESSION_KEY, sid);
             supabase.from('profiles')
@@ -147,13 +114,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               .then(() => {});
           }
         }
-        stopGuard = startSessionGuard(session.user.id);
+        if (!stopRealtime) {
+          stopRealtime = startRealtimeGuard(session.user.id);
+        }
       }
     });
 
     return () => {
       subscription.unsubscribe();
-      if (stopGuard) stopGuard();
+      if (stopRealtime) stopRealtime();
     };
   }, []);
 
