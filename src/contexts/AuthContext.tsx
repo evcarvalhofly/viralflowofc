@@ -62,15 +62,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
 
         if (event === 'SIGNED_IN' && session) {
+          // Only update the session ID when there is no local SID AND no DB SID
+          // (true fresh login). New tab / token refresh will have one or both already set.
           const existingSid = localStorage.getItem(SESSION_KEY);
           if (!existingSid) {
-            // Fresh login only — token refreshes also fire SIGNED_IN but must not overwrite the session ID
-            const sid = crypto.randomUUID();
-            localStorage.setItem(SESSION_KEY, sid);
-            supabase.from('profiles')
-              .update({ current_session_id: sid })
+            supabase
+              .from('profiles')
+              .select('current_session_id')
               .eq('user_id', session.user.id)
-              .then(() => {});
+              .single()
+              .then(({ data }) => {
+                if (data?.current_session_id) {
+                  // DB already has a SID — inherit it (new tab scenario)
+                  localStorage.setItem(SESSION_KEY, data.current_session_id);
+                } else {
+                  // No SID anywhere — this is a genuine first login
+                  const sid = crypto.randomUUID();
+                  localStorage.setItem(SESSION_KEY, sid);
+                  supabase.from('profiles')
+                    .update({ current_session_id: sid })
+                    .eq('user_id', session.user.id)
+                    .then(() => {});
+                }
+              });
           }
           if (stopGuard) stopGuard();
           stopGuard = startSessionGuard(session.user.id);
@@ -83,10 +97,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setLoading(false);
       if (session) {
+        const existingSid = localStorage.getItem(SESSION_KEY);
+        if (!existingSid) {
+          // No local SID: could be a new tab or page refresh — sync from DB
+          // so we don't mistakenly treat it as a fresh login
+          const { data } = await supabase
+            .from('profiles')
+            .select('current_session_id')
+            .eq('user_id', session.user.id)
+            .single();
+          if (data?.current_session_id) {
+            localStorage.setItem(SESSION_KEY, data.current_session_id);
+          }
+        }
         stopGuard = startSessionGuard(session.user.id);
       }
     });
