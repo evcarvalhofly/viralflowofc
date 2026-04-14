@@ -62,12 +62,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
 
         if (event === 'SIGNED_IN' && session) {
-          const sid = crypto.randomUUID();
-          localStorage.setItem(SESSION_KEY, sid);
-          supabase.from('profiles')
-            .update({ current_session_id: sid })
-            .eq('user_id', session.user.id)
-            .then(() => {});
+          const existingSid = localStorage.getItem(SESSION_KEY);
+          if (!existingSid) {
+            // Fresh login only — token refreshes also fire SIGNED_IN but must not overwrite the session ID
+            const sid = crypto.randomUUID();
+            localStorage.setItem(SESSION_KEY, sid);
+            supabase.from('profiles')
+              .update({ current_session_id: sid })
+              .eq('user_id', session.user.id)
+              .then(() => {});
+          }
           if (stopGuard) stopGuard();
           stopGuard = startSessionGuard(session.user.id);
         }
