@@ -3,6 +3,7 @@ import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 const SESSION_KEY = 'vf_sid';
+const ADMIN_EMAIL = 'evcarvalhodev@gmail.com';
 
 type AuthContextType = {
   session: Session | null;
@@ -73,6 +74,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
 
         if (event === 'SIGNED_IN' && session) {
+          // Admin pode acessar de múltiplos dispositivos — não aplicar guard
+          if (session.user.email === ADMIN_EMAIL) return;
+
           const sid = crypto.randomUUID();
           localStorage.setItem(SESSION_KEY, sid);
           supabase.from('profiles')
@@ -94,6 +98,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(session);
       setLoading(false);
       if (session) {
+        // Admin pode acessar de múltiplos dispositivos — pular guard
+        if (session.user.email === ADMIN_EMAIL) return;
+
         const existingSid = localStorage.getItem(SESSION_KEY);
         if (!existingSid) {
           // New tab or first load: inherit session from DB so realtime works correctly

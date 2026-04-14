@@ -339,6 +339,7 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          current_session_id: string | null
           display_name: string | null
           habilidades: Json | null
           id: string
@@ -350,6 +351,7 @@ export type Database = {
           pos_x: number | null
           pos_y: number | null
           servicos: Json | null
+          subscription_expires_at: string | null
           subscription_status: string
           updated_at: string
           user_id: string
@@ -358,6 +360,7 @@ export type Database = {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          current_session_id?: string | null
           display_name?: string | null
           habilidades?: Json | null
           id?: string
@@ -369,6 +372,7 @@ export type Database = {
           pos_x?: number | null
           pos_y?: number | null
           servicos?: Json | null
+          subscription_expires_at?: string | null
           subscription_status?: string
           updated_at?: string
           user_id: string
@@ -377,6 +381,7 @@ export type Database = {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          current_session_id?: string | null
           display_name?: string | null
           habilidades?: Json | null
           id?: string
@@ -388,6 +393,7 @@ export type Database = {
           pos_x?: number | null
           pos_y?: number | null
           servicos?: Json | null
+          subscription_expires_at?: string | null
           subscription_status?: string
           updated_at?: string
           user_id?: string
