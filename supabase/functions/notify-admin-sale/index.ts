@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
 
     const { plan, is_affiliate, affiliate_name } = await req.json();
     const resolvedPlan = plan === 'annual' ? 'annual' : 'monthly';
-    const amount = resolvedPlan === 'annual' ? 297.00 : 37.90;
+    const amount = resolvedPlan === 'annual' ? 297.00 : 47.90;
     const planLabel = resolvedPlan === 'annual' ? 'Anual' : 'Mensal';
 
     const { data: adminUserId, error } = await admin.rpc('get_user_id_by_email', { p_email: ADMIN_EMAIL });

@@ -47,7 +47,7 @@ BEGIN
       IF v_referral_id IS NOT NULL AND v_commission_rate IS NOT NULL THEN
         INSERT INTO commissions (affiliate_id, subscription_id, referral_id, type, amount, status, available_after, level, period_start)
         VALUES (v_affiliate_id, v_mp_preapproval_id, v_referral_id, 'initial',
-                ROUND((v_commission_rate / 100.0) * 37.90, 2), 'pending',
+                ROUND((v_commission_rate / 100.0) * 47.90, 2), 'pending',
                 now() + interval '7 days', 1, now());
       END IF;
     END IF;

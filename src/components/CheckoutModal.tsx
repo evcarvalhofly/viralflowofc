@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY ?? '';
-const PRICES = { monthly: 37.90, annual: 297.00 } as const;
+const PRICES = { monthly: 47.90, annual: 297.00 } as const;
 type Plan = 'monthly' | 'annual';
 
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
@@ -231,7 +231,7 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
           <div>
             <h2 className="text-white font-bold text-lg">ViralFlow PRO</h2>
             <p className="text-muted-foreground text-xs">
-              {plan === 'annual' ? 'R$297,00/ano · Equivale a R$24,75/mês' : 'R$37,90/mês · Cancele quando quiser'}
+              {plan === 'annual' ? 'R$297,00/ano · Equivale a R$24,75/mês' : 'R$47,90/mês · Cancele quando quiser'}
             </p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-white transition-colors p-1">
@@ -300,7 +300,7 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
                     plan === 'monthly' ? 'bg-violet-600 text-white' : 'text-muted-foreground hover:text-white'
                   }`}
                 >
-                  Mensal — R$37,90
+                  Mensal — R$47,90
                 </button>
                 <button
                   onClick={() => { setPlan('annual'); setError(null); }}

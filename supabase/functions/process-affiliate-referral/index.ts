@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     // 5. If already active: create commission immediately
     // Note: subscription_id is omitted (null) because MercadoPago payment IDs are not UUIDs
     if (alreadyActive) {
-      const PRICE          = 37.90;
+      const PRICE          = 47.90;
       const commAmount     = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
       const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 

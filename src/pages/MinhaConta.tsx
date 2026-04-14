@@ -149,7 +149,7 @@ export default function MinhaConta() {
             <p className="text-xs text-muted-foreground">
               {profile?.subscription_plan === 'annual'
                 ? 'ViralFlow PRO — R$297,00/ano'
-                : 'ViralFlow PRO — R$37,90/mês'}
+                : 'ViralFlow PRO — R$47,90/mês'}
             </p>
           </div>
         </div>

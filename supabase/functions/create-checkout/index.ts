@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     const phone: string | null = body.phone ?? null;
     const refCode: string | null = body.ref_code ?? null;
     const plan: 'monthly' | 'annual' = body.plan === 'annual' ? 'annual' : 'monthly';
-    const AMOUNT = plan === 'annual' ? 297.00 : 37.90;
+    const AMOUNT = plan === 'annual' ? 297.00 : 47.90;
     const DAYS   = plan === 'annual' ? 365 : 30;
 
     // ── Create or find external_reference ─────────────────────────────────────
@@ -210,7 +210,7 @@ async function activateExistingUser(admin: any, email: string, paymentId: string
 }
 
 // ── Affiliate commission helper ────────────────────────────────────────────────
-async function processCommission(admin: any, userId: string, paymentId: string, price = 37.90) {
+async function processCommission(admin: any, userId: string, paymentId: string, price = 47.90) {
   try {
     const { data: referral } = await admin
       .from('referrals')

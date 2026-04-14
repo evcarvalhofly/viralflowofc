@@ -72,7 +72,7 @@ export default function PlanoPro() {
                 <p className="text-xs text-muted-foreground">Cancele quando quiser</p>
               </div>
               <div className="text-right">
-                <p className="text-lg font-extrabold text-foreground">R$37,90<span className="text-xs font-normal text-muted-foreground">/mês</span></p>
+                <p className="text-lg font-extrabold text-foreground">R$47,90<span className="text-xs font-normal text-muted-foreground">/mês</span></p>
               </div>
             </button>
             <button
@@ -117,7 +117,7 @@ export default function PlanoPro() {
             >
               {selectedPlan === 'annual'
                 ? <>Assinar anual por R$297/ano <ArrowRight className="h-4 w-4" /></>
-                : <>Assinar agora por R$37,90/mês <ArrowRight className="h-4 w-4" /></>
+                : <>Assinar agora por R$47,90/mês <ArrowRight className="h-4 w-4" /></>
               }
             </button>
             <p className="text-center text-[11px] text-muted-foreground mt-3">

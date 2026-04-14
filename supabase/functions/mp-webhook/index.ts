@@ -99,7 +99,7 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
       const isAnnual = plan === 'annual' || amt >= 150 || amt === 0.10;
       const days = isAnnual ? 365 : 30;
       const linkedId = await activateExistingUser(admin, guestSession.payer_email, paymentId, days);
-      if (linkedId) await notifySale(admin, linkedId, transactionAmount ?? 37.90, isAnnual ? 'annual' : 'monthly');
+      if (linkedId) await notifySale(admin, linkedId, transactionAmount ?? 47.90, isAnnual ? 'annual' : 'monthly');
     }
     return;
   }
@@ -126,7 +126,7 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
   console.log('Subscription renewed | user:', userId, '| plan:', isAnnual ? 'annual' : 'monthly', '| expires:', expiresAt);
 
   // Sale notification
-  await notifySale(admin, userId, transactionAmount ?? 37.90, isAnnual ? 'annual' : 'monthly');
+  await notifySale(admin, userId, transactionAmount ?? 47.90, isAnnual ? 'annual' : 'monthly');
 
   // Affiliate commission
   const { data: referral } = await admin
@@ -147,7 +147,7 @@ async function handleApprovedPayment(admin: any, externalRef: string, paymentId:
 
   if (!affiliate) return;
 
-  const PRICE          = transactionAmount ?? 37.90;
+  const PRICE          = transactionAmount ?? 47.90;
   const isInitial      = referral.status === 'pending';
   const commAmount     = parseFloat(((affiliate.commission_rate / 100) * PRICE).toFixed(2));
   const availableAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

@@ -1,112 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Zap, Check, ArrowRight, Shield, Flame, Star, X,
   Brain, Calendar, Trophy, Film, Layers, Scissors,
   Users, ShoppingBag, Handshake, ChevronDown, Play,
 } from 'lucide-react';
+import { CheckoutModal } from '@/components/CheckoutModal';
 
 type Plan = 'monthly' | 'annual';
-
-/* ─── Notificações de compra ─────────────────────────────────── */
-const BUYERS = [
-  { name: 'Lucas M.', city: 'São Paulo' },
-  { name: 'Gabriel S.', city: 'Belo Horizonte' },
-  { name: 'Rafael T.', city: 'Brasília' },
-  { name: 'Thiago N.', city: 'Fortaleza' },
-  { name: 'Felipe A.', city: 'Recife' },
-  { name: 'Diego P.', city: 'Goiânia' },
-  { name: 'Rodrigo H.', city: 'Campinas' },
-  { name: 'André B.', city: 'Maceió' },
-  { name: 'Vinícius K.', city: 'Belém' },
-  { name: 'Gustavo W.', city: 'São Luís' },
-  { name: 'Mateus C.', city: 'Curitiba' },
-  { name: 'Bruno L.', city: 'Porto Alegre' },
-  { name: 'Henrique O.', city: 'Salvador' },
-  { name: 'Caio F.', city: 'Natal' },
-  { name: 'Eduardo V.', city: 'Florianópolis' },
-  { name: 'Leandro R.', city: 'Manaus' },
-  { name: 'Jonathan P.', city: 'Rio de Janeiro' },
-  { name: 'Fernanda R.', city: 'São Paulo' },
-  { name: 'Juliana C.', city: 'Campo Grande' },
-  { name: 'Camila O.', city: 'Teresina' },
-];
-
-// Mensal mais frequente (mais realista), anual aparece ocasionalmente
-const PLANS_LABEL = ['Plano Mensal', 'Plano Mensal', 'Plano Mensal', 'Plano Anual'];
-
-interface BuyNotif {
-  id: number;
-  name: string;
-  city: string;
-  plan: string;
-  visible: boolean;
-}
-
-function BuyNotifications() {
-  const [notif, setNotif] = useState<BuyNotif | null>(null);
-  const counterRef = useRef(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showNext = () => {
-    const buyer = BUYERS[Math.floor(Math.random() * BUYERS.length)];
-    const plan = PLANS_LABEL[Math.floor(Math.random() * PLANS_LABEL.length)];
-    const id = ++counterRef.current;
-
-    setNotif({ id, name: buyer.name, city: buyer.city, plan, visible: true });
-
-    // Inicia fade-out após 5s de exibição
-    timerRef.current = setTimeout(() => {
-      setNotif(prev => prev?.id === id ? { ...prev, visible: false } : prev);
-
-      // Remove do DOM após o fade-out (400ms) e agenda próxima notificação (45–90s)
-      timerRef.current = setTimeout(() => {
-        setNotif(null);
-        const next = 45_000 + Math.random() * 45_000;
-        timerRef.current = setTimeout(showNext, next);
-      }, 450);
-    }, 5_000);
-  };
-
-  useEffect(() => {
-    // Primeira notificação aparece entre 10–20s
-    const delay = 10_000 + Math.random() * 10_000;
-    timerRef.current = setTimeout(showNext, delay);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, []);
-
-  if (!notif) return null;
-
-  return (
-    <>
-      <style>{`
-        @keyframes notif-in  { from { opacity:0; transform:translateY(-110%) } to { opacity:1; transform:translateY(0) } }
-        @keyframes notif-out { from { opacity:1; transform:translateY(0) }      to { opacity:0; transform:translateY(-110%) } }
-      `}</style>
-      <div
-        className="fixed top-4 left-0 right-0 mx-auto z-[9999] flex items-center gap-3 rounded-2xl border border-white/10 bg-[#111116]/95 backdrop-blur-md px-4 py-3 shadow-2xl"
-        style={{
-          width: 'min(300px, calc(100vw - 2rem))',
-          animation: notif.visible
-            ? 'notif-in 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards'
-            : 'notif-out 0.35s ease-in forwards',
-        }}
-      >
-      {/* Avatar */}
-      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-violet-600 to-purple-700 flex items-center justify-center shrink-0 text-sm font-bold text-white">
-        {notif.name.charAt(0)}
-      </div>
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-white leading-snug truncate">
-            {notif.name} <span className="font-normal text-zinc-400">de {notif.city}</span>
-          </p>
-          <p className="text-[11px] text-emerald-400 font-medium">
-            acaba de assinar o {notif.plan} ✓
-          </p>
-        </div>
-      </div>
-    </>
-  );
-}
 
 /* ─── Dados ─────────────────────────────────────────────────── */
 
@@ -392,21 +292,69 @@ function PricingCard({
   );
 }
 
-/* ─── Community Video ────────────────────────────────────────── */
-const CommunityVideo = React.memo(() => (
-  <video
-    src="https://goupwin.com/wp-content/uploads/2026/04/CORETO.mp4"
-    autoPlay loop muted playsInline
-    className="absolute inset-0 w-full h-full object-cover sm:object-contain"
-  />
-));
-
 /* ─── Page ───────────────────────────────────────────────────── */
 export default function Convite() {
+  const [showCheckout, setShowCheckout] = useState(
+    () => sessionStorage.getItem('vf_checkout_open') === '1',
+  );
+  const [checkoutPlan, setCheckoutPlan] = useState<Plan>('annual');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('annual');
   const [scrollProgress, setScrollProgress] = useState(0);
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
   const pricingRef = useRef<HTMLDivElement>(null);
+  const communityVidRef = useRef<HTMLVideoElement>(null);
+  const [vidReady, setVidReady] = useState(false);
+  const [dlProgress, setDlProgress] = useState(0); // 0-100, -1 = done/hidden
+
+  useEffect(() => {
+    const v = communityVidRef.current;
+    if (!v) return;
+
+    const SRC = 'https://goupwin.com/wp-content/uploads/2026/04/2.mp4';
+    let blobUrl = '';
+
+    // Start playing immediately so user sees something
+    v.play().catch(() => {});
+    v.addEventListener('canplay', () => setVidReady(true), { once: true });
+
+    // Fetch entire video as Blob → loop from memory (no seek lag, no network on loop)
+    fetch(SRC)
+      .then(res => {
+        if (!res.ok || !res.body) throw new Error('fetch failed');
+        const total = Number(res.headers.get('content-length') ?? 0);
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+
+        const pump = (): Promise<Blob> =>
+          reader.read().then(({ done, value }) => {
+            if (done) return new Blob(chunks, { type: 'video/mp4' });
+            chunks.push(value!);
+            received += value!.byteLength;
+            if (total > 0) setDlProgress(Math.round((received / total) * 100));
+            return pump();
+          });
+
+        return pump();
+      })
+      .then(blob => {
+        blobUrl = URL.createObjectURL(blob);
+        const t = v.currentTime;
+        v.src = blobUrl;
+        v.currentTime = t;
+        v.play().catch(() => {});
+        setDlProgress(-1); // hide progress
+      })
+      .catch(() => {
+        // CORS blocked or network error — native loop from CDN (best-effort)
+        setDlProgress(-1);
+      });
+
+    return () => {
+      v.pause();
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, []);
 
   useEffect(() => {
     const onScroll = () => {
@@ -451,7 +399,14 @@ export default function Convite() {
   }, []);
 
   const openCheckout = (plan: Plan) => {
-    window.dispatchEvent(new CustomEvent('open-checkout', { detail: { plan, successRedirect: '/' } }));
+    setCheckoutPlan(plan);
+    sessionStorage.setItem('vf_checkout_open', '1');
+    setShowCheckout(true);
+  };
+
+  const closeCheckout = () => {
+    sessionStorage.removeItem('vf_checkout_open');
+    setShowCheckout(false);
   };
 
   const scrollToPricing = () =>
@@ -463,7 +418,6 @@ export default function Convite() {
   };
 
   return (
-  <>
     <div className="bg-[#09090b] text-foreground overflow-x-hidden">
 
       {/* ── BARRA DE PROGRESSO ─────────────────────────────────── */}
@@ -613,7 +567,7 @@ export default function Convite() {
             {[
               {
                 question: 'Editar é cansativo?',
-                answer: 'Edição automática com IA — Cortes e Legendas automáticos ilimitados!',
+                answer: 'Edição automática com IA — você aprova, o ViralFlow faz.',
                 icon: '🎬',
               },
               {
@@ -837,12 +791,31 @@ export default function Convite() {
         <div className="sm:mx-auto sm:max-w-3xl">
           <div className="overflow-hidden sm:rounded-3xl sm:border border-violet-500/20 bg-[#0f0f13]">
             <div className="relative overflow-hidden bg-black h-72 sm:h-[420px]">
-              <CommunityVideo />
-            </div>
-            <div className="flex justify-center px-4 pt-4">
-              <span className="rounded-full border border-violet-400/30 bg-black/60 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-violet-300 whitespace-nowrap">
-                Cada prédio é um criador · Cada carro = 1 usuário online
-              </span>
+              {!vidReady && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black">
+                  <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+              <video
+                ref={communityVidRef}
+                src="https://goupwin.com/wp-content/uploads/2026/04/2.mp4"
+                loop muted playsInline preload="auto"
+                className="absolute inset-0 w-full h-full object-cover sm:object-contain"
+                style={{ opacity: vidReady ? 1 : 0 }}
+              />
+              {dlProgress >= 0 && dlProgress < 100 && vidReady && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-black/40">
+                  <div
+                    className="h-full bg-violet-400 transition-all duration-300"
+                    style={{ width: `${dlProgress}%` }}
+                  />
+                </div>
+              )}
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+                <span className="rounded-full border border-violet-400/30 bg-black/60 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-violet-300 whitespace-nowrap">
+                  Cada prédio é um criador · Cada carro = 1 usuário online
+                </span>
+              </div>
             </div>
             <div className="p-6 sm:p-8 text-center">
               <h2 className="text-xl sm:text-2xl font-extrabold text-white leading-snug">
@@ -862,21 +835,21 @@ export default function Convite() {
       {/* ── AFILIADOS DESTAQUE ───────────────────────────────────── */}
       <section className="px-4 py-12">
         <div className="mx-auto max-w-2xl">
-          <div className="rounded-3xl bg-gradient-to-br from-emerald-950/60 via-teal-950/40 to-slate-900/80 border border-emerald-500/20 p-6 sm:p-8 text-center">
+          <div className="rounded-3xl bg-gradient-to-br from-emerald-950/60 via-teal-950/40 to-slate-900/80 border border-emerald-500/20 p-8 text-center">
             <span className="text-4xl mb-4 block">💰</span>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-white mb-3">Indique e ganhe 50% por venda</h2>
+            <h2 className="text-2xl font-extrabold text-white mb-3">Indique e ganhe 50% por venda</h2>
             <p className="text-sm text-zinc-400 max-w-md mx-auto leading-relaxed mb-6">
               O programa de afiliados do ViralFlow paga <strong className="text-emerald-400">50% de comissão</strong> por cada assinante que você indicar. Você acompanha tudo em tempo real no painel de afiliados.
             </p>
-            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
+            <div className="grid grid-cols-3 gap-4 text-center">
               {[
                 { v: '50%', l: 'de comissão' },
                 { v: 'R$18,95', l: 'por venda mensal' },
                 { v: 'R$148,50', l: 'por venda anual' },
               ].map(({ v, l }) => (
-                <div key={l} className="bg-white/5 rounded-xl py-3 px-1 sm:px-2">
-                  <p className="text-base sm:text-lg font-extrabold text-emerald-400 break-words">{v}</p>
-                  <p className="text-[11px] sm:text-xs text-zinc-500 mt-0.5 leading-tight">{l}</p>
+                <div key={l} className="bg-white/5 rounded-xl py-3 px-2">
+                  <p className="text-lg font-extrabold text-emerald-400">{v}</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">{l}</p>
                 </div>
               ))}
             </div>
@@ -948,22 +921,6 @@ export default function Convite() {
         </div>
       </section>
 
-      {/* ── WHATSAPP PÓS-FAQ ─────────────────────────────────────── */}
-      <div className="px-4 pb-10 text-center">
-        <a
-          href="https://wa.me/5512992275476?text=Ol%C3%A1!%20tenho%20interesse%20no%20ViralFlow"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-6 py-3 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-        >
-          <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current shrink-0" xmlns="http://www.w3.org/2000/svg">
-            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-            <path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.554 4.124 1.523 5.86L.057 23.571a.75.75 0 0 0 .921.921l5.703-1.464A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.718 9.718 0 0 1-4.964-1.362l-.356-.213-3.685.946.969-3.558-.233-.368A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
-          </svg>
-          Não encontrou sua resposta? Fale no WhatsApp →
-        </a>
-      </div>
-
       {/* ── CTA FINAL ────────────────────────────────────────────── */}
       <section className="relative px-4 pb-24 pt-12 text-center overflow-hidden">
         <div className="pointer-events-none absolute inset-0 -z-10">
@@ -984,7 +941,7 @@ export default function Convite() {
             onClick={handleCtaClick}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-10 py-5 text-base font-bold text-white shadow-2xl shadow-violet-500/40 hover:from-violet-500 hover:to-purple-500 active:scale-95 transition-all"
           >
-            <Flame className="h-5 w-5" /> Quero começar agora
+            <Flame className="h-5 w-5" /> Começar agora com garantia de 7 dias
           </button>
           <p className="mt-4 text-xs text-zinc-600">
             Mais de 1.200 criadores já estão usando · Cancele quando quiser
@@ -1001,24 +958,16 @@ export default function Convite() {
         </p>
       </div>
 
+      {showCheckout && (
+        <CheckoutModal
+          onClose={closeCheckout}
+          onSuccess={() => {
+            sessionStorage.removeItem('vf_checkout_open');
+            window.location.href = '/auth';
+          }}
+          initialPlan={checkoutPlan}
+        />
+      )}
     </div>
-
-    {/* ── NOTIFICAÇÕES DE COMPRA ───────────────────────────────── */}
-    <BuyNotifications />
-
-    {/* ── BOTÃO FLUTUANTE WHATSAPP ──────────────────────────────── */}
-    <a
-      href="https://wa.me/5512992275476?text=Ol%C3%A1!%20tenho%20interesse%20no%20ViralFlow"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="fixed bottom-5 right-5 z-50 flex items-center justify-center h-14 w-14 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 active:scale-95 transition-all"
-      aria-label="Suporte via WhatsApp"
-    >
-      <svg viewBox="0 0 24 24" className="h-7 w-7 fill-white" xmlns="http://www.w3.org/2000/svg">
-        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.554 4.124 1.523 5.86L.057 23.571a.75.75 0 0 0 .921.921l5.703-1.464A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.718 9.718 0 0 1-4.964-1.362l-.356-.213-3.685.946.969-3.558-.233-.368A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
-      </svg>
-    </a>
-  </>
   );
 }
