@@ -142,6 +142,8 @@ const ViralCut = () => {
 
   // ── Projects screen ───────────────────────────────────────
   const [showProjects, setShowProjects] = useState(true);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
 
   // ── Core project state ────────────────────────────────────
   const [project, setProjectRaw] = useState<Project>(() => sanitizeProject(createDefaultProject()));
@@ -285,17 +287,30 @@ const ViralCut = () => {
     }
   }, []);
 
-  // ── Create a new blank project ────────────────────────────
+  // ── Create a new blank project (abre modal de nome) ───────
   const handleNewProject = useCallback(() => {
+    setNewProjectName('');
+    setShowNameModal(true);
+  }, []);
+
+  const handleConfirmNewProject = useCallback((name: string) => {
     mediaRef.current.forEach((m) => URL.revokeObjectURL(m.url));
     const fresh = sanitizeProject(createDefaultProject());
+    fresh.name = name.trim() || 'Projeto sem título';
     setProjectRaw(fresh);
     setMedia([]);
     setSelectedItemId(null);
     setCurrentTime(0);
     setIsPlaying(false);
     isEditorActiveRef.current = true;
+    setShowNameModal(false);
     setShowProjects(false);
+  }, []);
+
+  // ── Rename project ────────────────────────────────────────
+  const handleRenameProject = useCallback((projectId: string, newName: string) => {
+    // If the currently open project is being renamed, update it in state too
+    setProjectRaw((p) => p.id === projectId ? { ...p, name: newName } : p);
   }, []);
 
   // ── Go back to projects screen (save first) ───────────────
@@ -1191,10 +1206,54 @@ const ViralCut = () => {
   // ── Projects screen ───────────────────────────────────────
   if (showProjects) {
     return (
-      <ViralCutProjects
-        onOpenProject={handleOpenProject}
-        onNewProject={handleNewProject}
-      />
+      <>
+        <ViralCutProjects
+          onOpenProject={handleOpenProject}
+          onNewProject={handleNewProject}
+          onRenameProject={handleRenameProject}
+        />
+
+        {/* Modal: dar nome ao novo projeto */}
+        {showNameModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div className="w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
+              <div className="px-5 pt-5 pb-3">
+                <h2 className="text-base font-bold text-foreground">Novo Projeto</h2>
+                <p className="text-xs text-muted-foreground mt-1">Escolha um nome para o seu projeto</p>
+              </div>
+              <div className="px-5 pb-4">
+                <input
+                  type="text"
+                  autoFocus
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newProjectName.trim()) handleConfirmNewProject(newProjectName);
+                    if (e.key === 'Escape') setShowNameModal(false);
+                  }}
+                  placeholder="Ex: Vídeo para Instagram"
+                  className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary/60 transition-colors"
+                />
+              </div>
+              <div className="flex gap-2 px-5 pb-5">
+                <button
+                  onClick={() => setShowNameModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-muted text-muted-foreground text-sm font-semibold hover:bg-muted/80 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleConfirmNewProject(newProjectName)}
+                  disabled={!newProjectName.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-40"
+                >
+                  Criar Projeto
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
