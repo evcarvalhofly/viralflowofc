@@ -1,5 +1,8 @@
 project_id = "dzgotqyikomtapcgdgff"
 
+[functions.admin-panel]
+verify_jwt = true
+
 [functions.search-viral]
 verify_jwt = true
 

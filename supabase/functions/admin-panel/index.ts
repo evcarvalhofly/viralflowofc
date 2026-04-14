@@ -46,17 +46,9 @@ Deno.serve(async (req) => {
 
     // LIST
     if (action === 'list') {
-      const usersRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=1000&page=1`, {
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'apikey': SUPABASE_SERVICE_KEY,
-        },
-      });
-      if (!usersRes.ok) return json({ error: `listUsers REST: ${usersRes.status}` });
-      const usersData = await usersRes.json();
-      const authUsers: any[] = Array.isArray(usersData)
-        ? usersData
-        : (usersData.users ?? []);
+      const { data: usersData, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000, page: 1 });
+      if (listError) return json({ error: `listUsers: ${listError.message}` });
+      const authUsers: any[] = usersData?.users ?? [];
 
       const { data: profiles, error: profErr } = await admin
         .from('profiles')
@@ -95,14 +87,9 @@ Deno.serve(async (req) => {
       const { user_id } = body;
       if (!user_id) return json({ error: 'user_id e obrigatorio' });
 
-      const userRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user_id}`, {
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'apikey': SUPABASE_SERVICE_KEY,
-        },
-      });
-      if (!userRes.ok) return json({ error: `getUser REST: ${userRes.status}` });
-      const authUser = await userRes.json();
+      const { data: authUserData, error: getUserError } = await admin.auth.admin.getUserById(user_id);
+      if (getUserError) return json({ error: `getUser: ${getUserError.message}` });
+      const authUser = authUserData?.user;
 
       const { data: profile } = await admin
         .from('profiles')
@@ -134,18 +121,13 @@ Deno.serve(async (req) => {
       const { email, password } = body;
       if (!email || !password) return json({ error: 'email e password sao obrigatorios' });
 
-      const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'apikey': SUPABASE_SERVICE_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: email.trim(), password, email_confirm: true }),
+      const { data: created, error: createError } = await admin.auth.admin.createUser({
+        email: email.trim(),
+        password,
+        email_confirm: true,
       });
-      const created = await createRes.json();
-      if (!createRes.ok) return json({ error: created.message ?? created.msg ?? 'Erro ao criar usuario' });
-      return json({ user_id: created.id, email: created.email });
+      if (createError) return json({ error: createError.message });
+      return json({ user_id: created.user.id, email: created.user.email });
     }
 
     // DELETE
@@ -153,17 +135,8 @@ Deno.serve(async (req) => {
       const { user_id } = body;
       if (!user_id) return json({ error: 'user_id e obrigatorio' });
 
-      const delRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user_id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'apikey': SUPABASE_SERVICE_KEY,
-        },
-      });
-      if (!delRes.ok) {
-        const e = await delRes.json().catch(() => ({}));
-        return json({ error: e.message ?? 'Erro ao excluir usuario' });
-      }
+      const { error: deleteError } = await admin.auth.admin.deleteUser(user_id);
+      if (deleteError) return json({ error: deleteError.message });
       return json({ ok: true });
     }
 
