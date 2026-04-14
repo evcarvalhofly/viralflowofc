@@ -62,29 +62,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
 
         if (event === 'SIGNED_IN' && session) {
-          // Only update the session ID when there is no local SID AND no DB SID
-          // (true fresh login). New tab / token refresh will have one or both already set.
+          // SIGNED_IN in Supabase JS v2 fires only on real logins, not on
+          // page reload or token refresh (those fire INITIAL_SESSION / TOKEN_REFRESHED).
+          // So: no local SID = fresh login on this device → always create new UUID,
+          // which will kick out any other active session in the DB.
           const existingSid = localStorage.getItem(SESSION_KEY);
           if (!existingSid) {
-            supabase
-              .from('profiles')
-              .select('current_session_id')
+            const sid = crypto.randomUUID();
+            localStorage.setItem(SESSION_KEY, sid);
+            supabase.from('profiles')
+              .update({ current_session_id: sid })
               .eq('user_id', session.user.id)
-              .single()
-              .then(({ data }) => {
-                if (data?.current_session_id) {
-                  // DB already has a SID — inherit it (new tab scenario)
-                  localStorage.setItem(SESSION_KEY, data.current_session_id);
-                } else {
-                  // No SID anywhere — this is a genuine first login
-                  const sid = crypto.randomUUID();
-                  localStorage.setItem(SESSION_KEY, sid);
-                  supabase.from('profiles')
-                    .update({ current_session_id: sid })
-                    .eq('user_id', session.user.id)
-                    .then(() => {});
-                }
-              });
+              .then(() => {});
           }
           if (stopGuard) stopGuard();
           stopGuard = startSessionGuard(session.user.id);
