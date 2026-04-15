@@ -373,6 +373,15 @@ function OverlayHandle({ item, containerRef, isSelected, onSelect, onOpenPropert
   );
 }
 
+// ── Video NR node type & filter params (module-level, not re-created per render) ──
+type VideoNrNodes = { hp: BiquadFilterNode; lp: BiquadFilterNode; gain: GainNode };
+const NR_FILTER_PARAMS: Record<NoiseReductionLevel, { hpFreq: number; lpFreq: number }> = {
+  off:    { hpFreq: 10,  lpFreq: 22000 },
+  low:    { hpFreq: 100, lpFreq: 12000 },
+  medium: { hpFreq: 200, lpFreq:  8000 },
+  high:   { hpFreq: 400, lpFreq:  6000 },
+};
+
 export function PreviewPanel({
   tracks,
   media,
@@ -404,10 +413,13 @@ export function PreviewPanel({
   const lastValidFrameRef = useRef<boolean>(false);
 
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
-  // Web Audio graph for noise reduction in preview
+  // Web Audio graph for noise reduction in preview (audio clips)
   const audioCtxRef = useRef<AudioContext | null>(null);
   const audioGainRefs = useRef<Map<string, GainNode>>(new Map());
   const audioNrActiveRefs = useRef<Map<string, boolean>>(new Map());
+  // Web Audio graph for video element NR (A/B slots wired permanently at mount)
+  const videoAudioCtxRef = useRef<AudioContext | null>(null);
+  const videoNrNodesRef = useRef<{ A: VideoNrNodes | null; B: VideoNrNodes | null }>({ A: null, B: null });
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
 
@@ -509,8 +521,16 @@ export function PreviewPanel({
     const itemVol = activeVideoItem?.item.videoDetails?.volume ?? 1;
     if (v.playbackRate !== rate) v.playbackRate = rate;
     const targetVol = Math.min(1, itemVol) * (muted ? 0 : volume);
-    if (Math.abs(v.volume - targetVol) > 0.01) v.volume = targetVol;
-    if (v.muted !== muted) v.muted = muted;
+    // Use Web Audio GainNode for volume if video is wired through AudioContext
+    const gainNode = videoNrNodesRef.current[activeSlotRef.current]?.gain;
+    if (gainNode) {
+      gainNode.gain.value = targetVol;
+      if (v.volume !== 1) v.volume = 1;
+      if (v.muted) v.muted = false;
+    } else {
+      if (Math.abs(v.volume - targetVol) > 0.01) v.volume = targetVol;
+      if (v.muted !== muted) v.muted = muted;
+    }
   }, [activeVideoItem, muted, volume, getActiveVideo]);
 
   // ── Draw a frame from the ACTIVE video slot ────────────────
@@ -833,28 +853,25 @@ export function PreviewPanel({
         audioRefs.current.set(item.id, audio);
 
         if (nrEnabled) {
-          const nrParams: Record<string, { hpFreq: number; threshold: number; knee: number; ratio: number; attack: number; release: number }> = {
-            low:    { hpFreq: 60,  threshold: -60, knee: 40, ratio:  6, attack: 0.003, release: 0.25 },
-            medium: { hpFreq: 80,  threshold: -50, knee: 40, ratio: 12, attack: 0.003, release: 0.25 },
-            high:   { hpFreq: 100, threshold: -40, knee: 30, ratio: 20, attack: 0.003, release: 0.20 },
+          const nrParams: Record<string, { hpFreq: number; lpFreq: number }> = {
+            low:    { hpFreq: 100, lpFreq: 12000 },
+            medium: { hpFreq: 200, lpFreq:  8000 },
+            high:   { hpFreq: 400, lpFreq:  6000 },
           };
           const p = nrParams[nrLevel] ?? nrParams.medium;
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const source = ctx.createMediaElementSource(audio);
-          const highpass = ctx.createBiquadFilter();
-          highpass.type = 'highpass';
-          highpass.frequency.value = p.hpFreq;
-          const compressor = ctx.createDynamicsCompressor();
-          compressor.threshold.value = p.threshold;
-          compressor.knee.value = p.knee;
-          compressor.ratio.value = p.ratio;
-          compressor.attack.value = p.attack;
-          compressor.release.value = p.release;
+          const hp = ctx.createBiquadFilter();
+          hp.type = 'highpass';
+          hp.frequency.value = p.hpFreq;
+          const lp = ctx.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.value = p.lpFreq;
           const gainNode = ctx.createGain();
-          source.connect(highpass);
-          highpass.connect(compressor);
-          compressor.connect(gainNode);
+          source.connect(hp);
+          hp.connect(lp);
+          lp.connect(gainNode);
           gainNode.connect(ctx.destination);
           audioGainRefs.current.set(item.id, gainNode);
         }
@@ -891,6 +908,54 @@ export function PreviewPanel({
       audioCtxRef.current?.close();
     };
   }, []);
+
+  // ── Wire video elements A/B through AudioContext for NR support ──────────
+  // createMediaElementSource permanently routes the element through Web Audio.
+  // Filters default to passthrough (off); updated per active clip below.
+  useEffect(() => {
+    const va = videoRefA.current;
+    const vb = videoRefB.current;
+    if (!va || !vb) return;
+    try {
+      const ctx = new AudioContext();
+      videoAudioCtxRef.current = ctx;
+      const wire = (el: HTMLVideoElement): VideoNrNodes => {
+        const src = ctx.createMediaElementSource(el);
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 10; // passthrough
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 22000; // passthrough
+        const gain = ctx.createGain();
+        gain.gain.value = 1;
+        src.connect(hp); hp.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+        return { hp, lp, gain };
+      };
+      videoNrNodesRef.current = { A: wire(va), B: wire(vb) };
+    } catch { /* AudioContext may be unavailable */ }
+    return () => {
+      videoAudioCtxRef.current?.close();
+      videoAudioCtxRef.current = null;
+      videoNrNodesRef.current = { A: null, B: null };
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Update video NR filters when active clip's NR level changes ──────────
+  useEffect(() => {
+    const nodes = videoNrNodesRef.current;
+    if (!nodes.A || !nodes.B || !videoAudioCtxRef.current) return;
+    const level: NoiseReductionLevel = activeVideoItem?.item.videoDetails?.noiseReduction ?? 'off';
+    const p = NR_FILTER_PARAMS[level];
+    const t = videoAudioCtxRef.current.currentTime + 0.02;
+    for (const slot of [nodes.A, nodes.B]) {
+      slot.hp.frequency.setTargetAtTime(p.hpFreq, t, 0.01);
+      slot.lp.frequency.setTargetAtTime(p.lpFreq, t, 0.01);
+    }
+    if (videoAudioCtxRef.current.state === 'suspended') videoAudioCtxRef.current.resume();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeVideoItem?.item.videoDetails?.noiseReduction, activeVideoItem?.item.id]);
 
   // ── Scrubber ──────────────────────────────────────────────
   const scrubberRef = useRef<HTMLDivElement>(null);

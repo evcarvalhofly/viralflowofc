@@ -28,34 +28,101 @@ async function decodeMedia(url: string): Promise<AudioBuffer | null> {
   }
 }
 
-const NR_PARAMS: Record<Exclude<NoiseReductionLevel, 'off'>, { hpFreq: number; threshold: number; knee: number; ratio: number; attack: number; release: number }> = {
-  low:    { hpFreq: 60,  threshold: -60, knee: 40, ratio:  6, attack: 0.003, release: 0.25 },
-  medium: { hpFreq: 80,  threshold: -50, knee: 40, ratio: 12, attack: 0.003, release: 0.25 },
-  high:   { hpFreq: 100, threshold: -40, knee: 30, ratio: 20, attack: 0.003, release: 0.20 },
+// NR parameters per level:
+//   hpFreq  – high-pass cutoff (removes hum / rumble below this Hz)
+//   lpFreq  – low-pass cutoff  (removes hiss / sibilance above this Hz)
+//   gate    – RMS amplitude threshold for noise gate (linear, 0–1)
+const NR_PARAMS: Record<Exclude<NoiseReductionLevel, 'off'>, { hpFreq: number; lpFreq: number; gate: number }> = {
+  low:    { hpFreq: 100, lpFreq: 12000, gate: 0.008 },
+  medium: { hpFreq: 200, lpFreq:  8000, gate: 0.018 },
+  high:   { hpFreq: 400, lpFreq:  6000, gate: 0.035 },
 };
 
-async function applyNoiseReduction(buffer: AudioBuffer, level: Exclude<NoiseReductionLevel, 'off'>): Promise<AudioBuffer> {
+/**
+ * Noise gate applied directly on a decoded AudioBuffer.
+ * Silences blocks whose RMS energy falls below `threshold`,
+ * with a short lookahead and release-hold to avoid clipping speech.
+ */
+function noiseGate(buffer: AudioBuffer, threshold: number): void {
+  const blockSize = 512;
+  // 100 ms release hold keeps gate open briefly after speech ends
+  const releaseBlocks = Math.round(0.1 * buffer.sampleRate / blockSize);
+
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    const nBlocks = Math.ceil(data.length / blockSize);
+
+    // Pass 1 – per-block gate decision
+    const open = new Uint8Array(nBlocks);
+    for (let b = 0; b < nBlocks; b++) {
+      let rms = 0;
+      const s = b * blockSize;
+      const e = Math.min(s + blockSize, data.length);
+      for (let j = s; j < e; j++) rms += data[j] * data[j];
+      open[b] = Math.sqrt(rms / (e - s)) > threshold ? 1 : 0;
+    }
+
+    // Pass 2 – 1-block lookahead so speech onset is never cut
+    for (let b = nBlocks - 2; b >= 0; b--) {
+      if (open[b + 1]) open[b] = 1;
+    }
+
+    // Pass 3 – release hold
+    let hold = 0;
+    for (let b = 0; b < nBlocks; b++) {
+      if (open[b]) { hold = releaseBlocks; }
+      else if (hold > 0) { open[b] = 1; hold--; }
+    }
+
+    // Pass 4 – apply gain with linear ramp at each block boundary to avoid clicks
+    let prevGain = open[0] ? 1.0 : 0.0;
+    for (let b = 0; b < nBlocks; b++) {
+      const targetGain = open[b] ? 1.0 : 0.0;
+      const s = b * blockSize;
+      const e = Math.min(s + blockSize, data.length);
+      for (let j = s; j < e; j++) {
+        const t = (j - s) / (e - s);
+        data[j] *= prevGain + (targetGain - prevGain) * t;
+      }
+      prevGain = targetGain;
+    }
+  }
+}
+
+/**
+ * Applies noise reduction to an AudioBuffer:
+ *   1. High-pass filter  – removes low-frequency hum / rumble
+ *   2. Low-pass filter   – removes high-frequency hiss / sibilance
+ *   3. Noise gate        – silences passages below the RMS threshold
+ */
+async function applyNoiseReduction(
+  buffer: AudioBuffer,
+  level: Exclude<NoiseReductionLevel, 'off'>
+): Promise<AudioBuffer> {
   const p = NR_PARAMS[level];
+
   const ctx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
   const source = ctx.createBufferSource();
   source.buffer = buffer;
 
-  const highpass = ctx.createBiquadFilter();
-  highpass.type = 'highpass';
-  highpass.frequency.value = p.hpFreq;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = p.hpFreq;
+  hp.Q.value = 0.7;
 
-  const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = p.threshold;
-  compressor.knee.value = p.knee;
-  compressor.ratio.value = p.ratio;
-  compressor.attack.value = p.attack;
-  compressor.release.value = p.release;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = p.lpFreq;
+  lp.Q.value = 0.7;
 
-  source.connect(highpass);
-  highpass.connect(compressor);
-  compressor.connect(ctx.destination);
+  source.connect(hp);
+  hp.connect(lp);
+  lp.connect(ctx.destination);
   source.start(0);
-  return ctx.startRendering();
+
+  const filtered = await ctx.startRendering();
+  noiseGate(filtered, p.gate);
+  return filtered;
 }
 
 function getAudioItems(project: Project): Array<{ item: TrackItem; muted: boolean }> {
