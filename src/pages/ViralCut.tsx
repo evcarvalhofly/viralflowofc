@@ -20,6 +20,7 @@ import { Toolbar } from '@/viralcut/components/Toolbar';
 import { PropertiesPanel } from '@/viralcut/components/PropertiesPanel';
 import { ExportModal, ExportOptions } from '@/viralcut/components/ExportModal';
 import { AutoCut, SilenceRegion, applySilenceCuts } from '@/viralcut/components/AutoCut';
+import { VoiceRecorder } from '@/viralcut/components/VoiceRecorder';
 import { SubtitleModal } from '@/viralcut/components/SubtitleModal';
 import { SubtitleStylePanel } from '@/viralcut/components/SubtitleStylePanel';
 import { CropModal } from '@/viralcut/components/CropModal';
@@ -32,7 +33,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 import {
   PanelLeft, PanelRight, Scissors, Music, Type, Layers,
-  Upload, Plus, Wand2, X, ZoomIn, ZoomOut, Captions
+  Upload, Plus, Wand2, X, ZoomIn, ZoomOut, Captions, Mic
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -166,6 +167,7 @@ const ViralCut = () => {
   const [mobileTab, setMobileTab] = useState<MobileTab>('editar');
   const [showMobilePanel, setShowMobilePanel] = useState(false);
   const [showAutoCut, setShowAutoCut] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [showSubtitleModal, setShowSubtitleModal] = useState(false);
   const [showSubtitleStylePanel, setShowSubtitleStylePanel] = useState(false);
 
@@ -905,6 +907,37 @@ const ViralCut = () => {
     if (isMobile) setShowMobilePanel(false);
   }, [updateProject, isMobile]);
 
+  // ── Voice recording ──────────────────────────────────────
+  const handleAddRecordedAudio = useCallback(async (file: File, startTime: number, duration: number) => {
+    const url = URL.createObjectURL(file);
+    const mf: MediaFile = {
+      id: createId(), name: file.name, type: 'audio', file, url, duration,
+    };
+    saveMediaFile(mf.id, file).catch(() => {});
+    setMedia((prev) => [...prev, mf]);
+
+    updateProject((p) => {
+      let audioTrack = p.tracks.find((t) => t.type === 'audio');
+      const tracks: typeof p.tracks = audioTrack
+        ? p.tracks
+        : [...p.tracks, { id: createId(), type: 'audio' as const, items: [], locked: false, muted: false }];
+      audioTrack = tracks.find((t) => t.type === 'audio')!;
+      const item: TrackItem = {
+        id: createId(), mediaId: mf.id, trackId: audioTrack.id,
+        startTime, endTime: startTime + duration,
+        mediaStart: 0, mediaEnd: duration,
+        name: file.name.replace(/\.[^.]+$/, ''),
+        type: 'audio',
+        audioDetails: { ...DEFAULT_AUDIO_DETAILS },
+      };
+      const newTracks = tracks.map((t) => t.id === audioTrack!.id ? { ...t, items: [...t.items, item] } : t);
+      return { ...p, tracks: newTracks };
+    }, { pushHistory: true });
+
+    setShowVoiceRecorder(false);
+    if (isMobile) setShowMobilePanel(false);
+  }, [updateProject, isMobile]);
+
   // ── Subtitle text styles per preset ──────────────────────
   const SUBTITLE_TEXT_DETAILS: Record<SubtitleStyle, Partial<typeof DEFAULT_TEXT_DETAILS>> = {
     classic:   { fontSize: 3,   fontFamily: 'Inter, sans-serif',                          color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.75)',      posX: 50, posY: 88, width: 90, textAlign: 'center', boxShadow: { color: '#000000', x: 0, y: 0, blur: 0  } },
@@ -1477,6 +1510,13 @@ const ViralCut = () => {
                 {showAutoCut ? (
                   <AutoCut tracks={project.tracks} media={media} onApplyCuts={handleApplyAutoCuts}
                     onClose={() => { setShowAutoCut(false); setShowMobilePanel(false); }} />
+                ) : mobileTab === 'audio' ? (
+                  <VoiceRecorder
+                    currentTime={currentTime}
+                    onSetPlaying={setIsPlaying}
+                    onClose={() => setShowMobilePanel(false)}
+                    onAddRecording={handleAddRecordedAudio}
+                  />
                 ) : mobileTab === 'texto' ? (
                   <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImport}
                     onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
@@ -1494,9 +1534,7 @@ const ViralCut = () => {
                     onDelete={handleItemDelete} onSplit={handleItemSplit} onUpdateItem={handleUpdateItem} currentTime={currentTime} />
                 ) : (
                   <div className="p-4 text-center text-sm text-muted-foreground">
-                    {mobileTab === 'editar' ? 'Selecione um clipe na timeline para editar' :
-                     mobileTab === 'audio' ? 'Selecione um clipe de áudio na timeline' :
-                     'Selecione uma opção'}
+                    {mobileTab === 'editar' ? 'Selecione um clipe na timeline para editar' : 'Selecione uma opção'}
                   </div>
                 )}
               </div>
@@ -1609,6 +1647,13 @@ const ViralCut = () => {
             {showAutoCut ? (
               <AutoCut tracks={project.tracks} media={media} onApplyCuts={handleApplyAutoCuts}
                 onClose={() => setShowAutoCut(false)} />
+            ) : showVoiceRecorder ? (
+              <VoiceRecorder
+                currentTime={currentTime}
+                onSetPlaying={setIsPlaying}
+                onClose={() => setShowVoiceRecorder(false)}
+                onAddRecording={handleAddRecordedAudio}
+              />
             ) : (
               <MediaPanel media={media} selectedMediaId={selectedMediaId} onImport={handleImportLibrary}
                 onSelect={setSelectedMediaId} onDelete={handleDeleteMedia} onAddToTimeline={handleAddToTimeline}
@@ -1674,10 +1719,19 @@ const ViralCut = () => {
           <div className="flex items-center gap-1.5">
             <button
               className={cn('flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0',
+                showVoiceRecorder
+                  ? 'bg-red-500 text-white shadow-sm shadow-red-500/40'
+                  : 'bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 hover:text-red-300')}
+              onClick={() => { setShowVoiceRecorder((v) => !v); setShowAutoCut(false); setShowMedia(true); }}>
+              <Mic className="h-3.5 w-3.5" />
+              Gravar
+            </button>
+            <button
+              className={cn('flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0',
                 showAutoCut
                   ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/40'
                   : 'bg-amber-500/15 text-amber-400 border border-amber-500/40 hover:bg-amber-500/25 hover:text-amber-300')}
-              onClick={() => setShowAutoCut((v) => !v)}>
+              onClick={() => { setShowAutoCut((v) => !v); setShowVoiceRecorder(false); }}>
               <Wand2 className="h-3.5 w-3.5" />
               Auto Corte
             </button>
