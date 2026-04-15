@@ -8,7 +8,7 @@
 // This is completely independent of real-time playback.
 // ============================================================
 
-import { Project, MediaFile, TrackItem } from '../types';
+import { Project, MediaFile, TrackItem, NoiseReductionLevel } from '../types';
 
 const SAMPLE_RATE = 44100;
 
@@ -28,23 +28,28 @@ async function decodeMedia(url: string): Promise<AudioBuffer | null> {
   }
 }
 
-async function applyNoiseReduction(buffer: AudioBuffer): Promise<AudioBuffer> {
+const NR_PARAMS: Record<Exclude<NoiseReductionLevel, 'off'>, { hpFreq: number; threshold: number; knee: number; ratio: number; attack: number; release: number }> = {
+  low:    { hpFreq: 60,  threshold: -60, knee: 40, ratio:  6, attack: 0.003, release: 0.25 },
+  medium: { hpFreq: 80,  threshold: -50, knee: 40, ratio: 12, attack: 0.003, release: 0.25 },
+  high:   { hpFreq: 100, threshold: -40, knee: 30, ratio: 20, attack: 0.003, release: 0.20 },
+};
+
+async function applyNoiseReduction(buffer: AudioBuffer, level: Exclude<NoiseReductionLevel, 'off'>): Promise<AudioBuffer> {
+  const p = NR_PARAMS[level];
   const ctx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
   const source = ctx.createBufferSource();
   source.buffer = buffer;
 
-  // High-pass filter: removes low-frequency hum, wind, handling noise (~80Hz)
   const highpass = ctx.createBiquadFilter();
   highpass.type = 'highpass';
-  highpass.frequency.value = 80;
+  highpass.frequency.value = p.hpFreq;
 
-  // Dynamics compressor as noise gate: heavily attenuates quiet sections (background noise)
   const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = -50;
-  compressor.knee.value = 40;
-  compressor.ratio.value = 12;
-  compressor.attack.value = 0.003;
-  compressor.release.value = 0.25;
+  compressor.threshold.value = p.threshold;
+  compressor.knee.value = p.knee;
+  compressor.ratio.value = p.ratio;
+  compressor.attack.value = p.attack;
+  compressor.release.value = p.release;
 
   source.connect(highpass);
   highpass.connect(compressor);
@@ -97,9 +102,9 @@ export async function createTimelineAudioBuffer(
     let decoded = decodedMap.get(item.mediaId);
     if (!decoded) continue;
 
-    const noiseReduction = item.videoDetails?.noiseReduction ?? item.audioDetails?.noiseReduction ?? false;
-    if (noiseReduction) {
-      decoded = await applyNoiseReduction(decoded);
+    const noiseReduction = item.videoDetails?.noiseReduction ?? item.audioDetails?.noiseReduction ?? 'off';
+    if (noiseReduction && noiseReduction !== 'off') {
+      decoded = await applyNoiseReduction(decoded, noiseReduction);
     }
 
     const volume = item.videoDetails?.volume ?? item.audioDetails?.volume ?? 1;

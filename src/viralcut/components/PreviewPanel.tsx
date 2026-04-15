@@ -5,7 +5,7 @@
 // ============================================================
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCw, ChevronDown, Check } from 'lucide-react';
-import { Track, TrackItem, MediaFile, TextDetails, ImageDetails, DEFAULT_VIDEO_DETAILS, Project } from '../types';
+import { Track, TrackItem, MediaFile, TextDetails, ImageDetails, DEFAULT_VIDEO_DETAILS, Project, NoiseReductionLevel } from '../types';
 import { ASPECT_RATIOS } from '../store';
 import { cn } from '@/lib/utils';
 
@@ -813,7 +813,8 @@ export function PreviewPanel({
       if (!mf) continue;
       const ad = item.audioDetails;
       const mediaTime = item.mediaStart + (currentTime - item.startTime);
-      const nrEnabled = ad?.noiseReduction ?? false;
+      const nrLevel: NoiseReductionLevel = ad?.noiseReduction ?? 'off';
+      const nrEnabled = nrLevel !== 'off';
       const prevNr = audioNrActiveRefs.current.get(item.id);
 
       // If noise reduction state changed, destroy existing element to recreate with correct routing
@@ -832,18 +833,24 @@ export function PreviewPanel({
         audioRefs.current.set(item.id, audio);
 
         if (nrEnabled) {
+          const nrParams: Record<string, { hpFreq: number; threshold: number; knee: number; ratio: number; attack: number; release: number }> = {
+            low:    { hpFreq: 60,  threshold: -60, knee: 40, ratio:  6, attack: 0.003, release: 0.25 },
+            medium: { hpFreq: 80,  threshold: -50, knee: 40, ratio: 12, attack: 0.003, release: 0.25 },
+            high:   { hpFreq: 100, threshold: -40, knee: 30, ratio: 20, attack: 0.003, release: 0.20 },
+          };
+          const p = nrParams[nrLevel] ?? nrParams.medium;
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const source = ctx.createMediaElementSource(audio);
           const highpass = ctx.createBiquadFilter();
           highpass.type = 'highpass';
-          highpass.frequency.value = 80;
+          highpass.frequency.value = p.hpFreq;
           const compressor = ctx.createDynamicsCompressor();
-          compressor.threshold.value = -50;
-          compressor.knee.value = 40;
-          compressor.ratio.value = 12;
-          compressor.attack.value = 0.003;
-          compressor.release.value = 0.25;
+          compressor.threshold.value = p.threshold;
+          compressor.knee.value = p.knee;
+          compressor.ratio.value = p.ratio;
+          compressor.attack.value = p.attack;
+          compressor.release.value = p.release;
           const gainNode = ctx.createGain();
           source.connect(highpass);
           highpass.connect(compressor);

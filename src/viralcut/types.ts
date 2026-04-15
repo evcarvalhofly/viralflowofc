@@ -75,15 +75,17 @@ export interface VideoDetails {
   cropY?: number;
   cropW?: number;
   cropH?: number;
-  noiseReduction?: boolean;
+  noiseReduction?: NoiseReductionLevel;
 }
+
+export type NoiseReductionLevel = 'off' | 'low' | 'medium' | 'high';
 
 export interface AudioDetails {
   volume: number;
   playbackRate: number;
   fadeIn: number;
   fadeOut: number;
-  noiseReduction?: boolean;
+  noiseReduction?: NoiseReductionLevel;
 }
 
 export interface ImageDetails {

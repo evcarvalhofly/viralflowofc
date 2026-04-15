@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import {
-  TrackItem, MediaFile,
+  TrackItem, MediaFile, NoiseReductionLevel,
   DEFAULT_VIDEO_DETAILS, DEFAULT_AUDIO_DETAILS, DEFAULT_TEXT_DETAILS, DEFAULT_IMAGE_DETAILS
 } from '../types';
 import { cn } from '@/lib/utils';
@@ -188,16 +188,25 @@ export function PropertiesPanel({
             <>
               <Section title="Áudio">
                 <SliderRow label="Volume" value={vd.volume} min={0} max={2} onChange={(v) => updateVideo({ volume: v })} format={(v) => `${Math.round(v * 100)}%`} />
-                <div className="flex items-center justify-between py-1">
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="py-1">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
                     <MicOff className="h-3.5 w-3.5" /> Redução de Ruído
                   </span>
-                  <button
-                    onClick={() => updateVideo({ noiseReduction: !vd.noiseReduction })}
-                    className={cn('relative inline-flex h-5 w-9 items-center rounded-full transition-colors', vd.noiseReduction ? 'bg-primary' : 'bg-muted')}
-                  >
-                    <span className={cn('inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform', vd.noiseReduction ? 'translate-x-[18px]' : 'translate-x-[3px]')} />
-                  </button>
+                  <div className="flex gap-1">
+                    {(['off', 'low', 'medium', 'high'] as NoiseReductionLevel[]).map((lvl) => {
+                      const labels: Record<NoiseReductionLevel, string> = { off: 'Off', low: 'Leve', medium: 'Médio', high: 'Alto' };
+                      const active = (vd.noiseReduction ?? 'off') === lvl;
+                      return (
+                        <button
+                          key={lvl}
+                          onClick={() => updateVideo({ noiseReduction: lvl })}
+                          className={cn('flex-1 rounded py-1 text-[10px] font-medium transition-colors', active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+                        >
+                          {labels[lvl]}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </Section>
               <Section title="Velocidade">
@@ -236,16 +245,25 @@ export function PropertiesPanel({
               <Section title="Áudio">
                 <SliderRow label="Volume" value={ad.volume} min={0} max={2} onChange={(v) => updateAudio({ volume: v })} format={(v) => `${Math.round(v * 100)}%`} />
                 <SliderRow label="Velocidade" value={ad.playbackRate} min={0.25} max={4} step={0.05} onChange={(v) => updateAudio({ playbackRate: v })} format={(v) => `${v.toFixed(2)}x`} />
-                <div className="flex items-center justify-between py-1">
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="py-1">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
                     <MicOff className="h-3.5 w-3.5" /> Redução de Ruído
                   </span>
-                  <button
-                    onClick={() => updateAudio({ noiseReduction: !ad.noiseReduction })}
-                    className={cn('relative inline-flex h-5 w-9 items-center rounded-full transition-colors', ad.noiseReduction ? 'bg-primary' : 'bg-muted')}
-                  >
-                    <span className={cn('inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform', ad.noiseReduction ? 'translate-x-[18px]' : 'translate-x-[3px]')} />
-                  </button>
+                  <div className="flex gap-1">
+                    {(['off', 'low', 'medium', 'high'] as NoiseReductionLevel[]).map((lvl) => {
+                      const labels: Record<NoiseReductionLevel, string> = { off: 'Off', low: 'Leve', medium: 'Médio', high: 'Alto' };
+                      const active = (ad.noiseReduction ?? 'off') === lvl;
+                      return (
+                        <button
+                          key={lvl}
+                          onClick={() => updateAudio({ noiseReduction: lvl })}
+                          className={cn('flex-1 rounded py-1 text-[10px] font-medium transition-colors', active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+                        >
+                          {labels[lvl]}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </Section>
               <Section title="Fades" defaultOpen={false}>
