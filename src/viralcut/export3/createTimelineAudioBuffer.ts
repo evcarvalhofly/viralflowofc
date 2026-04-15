@@ -28,6 +28,31 @@ async function decodeMedia(url: string): Promise<AudioBuffer | null> {
   }
 }
 
+async function applyNoiseReduction(buffer: AudioBuffer): Promise<AudioBuffer> {
+  const ctx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+
+  // High-pass filter: removes low-frequency hum, wind, handling noise (~80Hz)
+  const highpass = ctx.createBiquadFilter();
+  highpass.type = 'highpass';
+  highpass.frequency.value = 80;
+
+  // Dynamics compressor as noise gate: heavily attenuates quiet sections (background noise)
+  const compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -50;
+  compressor.knee.value = 40;
+  compressor.ratio.value = 12;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.25;
+
+  source.connect(highpass);
+  highpass.connect(compressor);
+  compressor.connect(ctx.destination);
+  source.start(0);
+  return ctx.startRendering();
+}
+
 function getAudioItems(project: Project): Array<{ item: TrackItem; muted: boolean }> {
   const result: Array<{ item: TrackItem; muted: boolean }> = [];
   for (const track of project.tracks) {
@@ -69,8 +94,13 @@ export async function createTimelineAudioBuffer(
   for (const { item, muted } of audioItems) {
     if (muted) continue;
 
-    const decoded = decodedMap.get(item.mediaId);
+    let decoded = decodedMap.get(item.mediaId);
     if (!decoded) continue;
+
+    const noiseReduction = item.videoDetails?.noiseReduction ?? item.audioDetails?.noiseReduction ?? false;
+    if (noiseReduction) {
+      decoded = await applyNoiseReduction(decoded);
+    }
 
     const volume = item.videoDetails?.volume ?? item.audioDetails?.volume ?? 1;
     if (volume <= 0) continue;

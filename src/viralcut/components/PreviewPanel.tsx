@@ -404,6 +404,10 @@ export function PreviewPanel({
   const lastValidFrameRef = useRef<boolean>(false);
 
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+  // Web Audio graph for noise reduction in preview
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioGainRefs = useRef<Map<string, GainNode>>(new Map());
+  const audioNrActiveRefs = useRef<Map<string, boolean>>(new Map());
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
 
@@ -809,23 +813,64 @@ export function PreviewPanel({
       if (!mf) continue;
       const ad = item.audioDetails;
       const mediaTime = item.mediaStart + (currentTime - item.startTime);
+      const nrEnabled = ad?.noiseReduction ?? false;
+      const prevNr = audioNrActiveRefs.current.get(item.id);
+
+      // If noise reduction state changed, destroy existing element to recreate with correct routing
+      if (prevNr !== undefined && prevNr !== nrEnabled) {
+        const old = audioRefs.current.get(item.id);
+        if (old) { old.pause(); old.src = ''; }
+        audioRefs.current.delete(item.id);
+        audioGainRefs.current.delete(item.id);
+      }
+      audioNrActiveRefs.current.set(item.id, nrEnabled);
 
       let audio = audioRefs.current.get(item.id);
       if (!audio) {
         audio = new Audio(mf.url);
         audio.preload = 'auto';
         audioRefs.current.set(item.id, audio);
+
+        if (nrEnabled) {
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+          const ctx = audioCtxRef.current;
+          const source = ctx.createMediaElementSource(audio);
+          const highpass = ctx.createBiquadFilter();
+          highpass.type = 'highpass';
+          highpass.frequency.value = 80;
+          const compressor = ctx.createDynamicsCompressor();
+          compressor.threshold.value = -50;
+          compressor.knee.value = 40;
+          compressor.ratio.value = 12;
+          compressor.attack.value = 0.003;
+          compressor.release.value = 0.25;
+          const gainNode = ctx.createGain();
+          source.connect(highpass);
+          highpass.connect(compressor);
+          compressor.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          audioGainRefs.current.set(item.id, gainNode);
+        }
       }
 
-      const targetVol = Math.min(1, ad?.volume ?? 1) * (muted ? 0 : volume);
-      if (Math.abs(audio.volume - targetVol) > 0.01) audio.volume = targetVol;
+      if (nrEnabled) {
+        const gainNode = audioGainRefs.current.get(item.id);
+        if (gainNode) gainNode.gain.value = Math.min(1, ad?.volume ?? 1) * (muted ? 0 : volume);
+        audio.volume = 1;
+      } else {
+        const targetVol = Math.min(1, ad?.volume ?? 1) * (muted ? 0 : volume);
+        if (Math.abs(audio.volume - targetVol) > 0.01) audio.volume = targetVol;
+      }
+
       const rate = ad?.playbackRate ?? 1;
       if (audio.playbackRate !== rate) audio.playbackRate = rate;
 
       if (Math.abs(audio.currentTime - mediaTime) > 0.3) audio.currentTime = mediaTime;
 
-      if (isPlaying && audio.paused) audio.play().catch(() => {});
-      else if (!isPlaying && !audio.paused) audio.pause();
+      if (isPlaying && audio.paused) {
+        if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
+        audio.play().catch(() => {});
+      } else if (!isPlaying && !audio.paused) audio.pause();
     }
   }, [currentTime, isPlaying, tracks, media, muted, volume]);
 
@@ -834,6 +879,9 @@ export function PreviewPanel({
     return () => {
       for (const audio of audioRefs.current.values()) { audio.pause(); audio.src = ''; }
       audioRefs.current.clear();
+      audioGainRefs.current.clear();
+      audioNrActiveRefs.current.clear();
+      audioCtxRef.current?.close();
     };
   }, []);
 

@@ -75,6 +75,7 @@ export interface VideoDetails {
   cropY?: number;
   cropW?: number;
   cropH?: number;
+  noiseReduction?: boolean;
 }
 
 export interface AudioDetails {
@@ -82,6 +83,7 @@ export interface AudioDetails {
   playbackRate: number;
   fadeIn: number;
   fadeOut: number;
+  noiseReduction?: boolean;
 }
 
 export interface ImageDetails {

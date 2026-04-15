@@ -5,7 +5,7 @@ import { useState } from 'react';
 import {
   Sliders, Scissors, Trash2, Volume2, Eye, FlipHorizontal2, FlipVertical2,
   Gauge, Type, AlignLeft, AlignCenter, AlignRight, Strikethrough, Underline,
-  Sun, Contrast, Droplets, ChevronDown, ChevronUp, Bold
+  Sun, Contrast, Droplets, ChevronDown, ChevronUp, Bold, MicOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -188,6 +188,17 @@ export function PropertiesPanel({
             <>
               <Section title="Áudio">
                 <SliderRow label="Volume" value={vd.volume} min={0} max={2} onChange={(v) => updateVideo({ volume: v })} format={(v) => `${Math.round(v * 100)}%`} />
+                <div className="flex items-center justify-between py-1">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <MicOff className="h-3.5 w-3.5" /> Redução de Ruído
+                  </span>
+                  <button
+                    onClick={() => updateVideo({ noiseReduction: !vd.noiseReduction })}
+                    className={cn('relative inline-flex h-5 w-9 items-center rounded-full transition-colors', vd.noiseReduction ? 'bg-primary' : 'bg-muted')}
+                  >
+                    <span className={cn('inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform', vd.noiseReduction ? 'translate-x-[18px]' : 'translate-x-[3px]')} />
+                  </button>
+                </div>
               </Section>
               <Section title="Velocidade">
                 <SliderRow label="Velocidade" value={vd.playbackRate} min={0.25} max={4} step={0.05} onChange={(v) => updateVideo({ playbackRate: v })} format={(v) => `${v.toFixed(2)}x`} />
@@ -225,6 +236,17 @@ export function PropertiesPanel({
               <Section title="Áudio">
                 <SliderRow label="Volume" value={ad.volume} min={0} max={2} onChange={(v) => updateAudio({ volume: v })} format={(v) => `${Math.round(v * 100)}%`} />
                 <SliderRow label="Velocidade" value={ad.playbackRate} min={0.25} max={4} step={0.05} onChange={(v) => updateAudio({ playbackRate: v })} format={(v) => `${v.toFixed(2)}x`} />
+                <div className="flex items-center justify-between py-1">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <MicOff className="h-3.5 w-3.5" /> Redução de Ruído
+                  </span>
+                  <button
+                    onClick={() => updateAudio({ noiseReduction: !ad.noiseReduction })}
+                    className={cn('relative inline-flex h-5 w-9 items-center rounded-full transition-colors', ad.noiseReduction ? 'bg-primary' : 'bg-muted')}
+                  >
+                    <span className={cn('inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform', ad.noiseReduction ? 'translate-x-[18px]' : 'translate-x-[3px]')} />
+                  </button>
+                </div>
               </Section>
               <Section title="Fades" defaultOpen={false}>
                 <SliderRow label="Fade In (s)" value={ad.fadeIn} min={0} max={5} step={0.1} onChange={(v) => updateAudio({ fadeIn: v })} format={(v) => `${v.toFixed(1)}s`} />
