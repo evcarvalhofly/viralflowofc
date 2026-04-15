@@ -47,13 +47,14 @@ const INTENSITY_CONFIG: Record<Intensity, { threshold: number; minSilence: numbe
 };
 
 async function detectSilences(
-  file: File,
+  url: string,
   threshold: number,
   minSilenceDuration: number,
   margin: number
 ): Promise<SilenceRegion[]> {
   const audioCtx = new AudioContext();
-  const arrayBuffer = await file.arrayBuffer();
+  const response = await fetch(url);
+  const arrayBuffer = await response.arrayBuffer();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
   audioCtx.close();
 
@@ -127,7 +128,7 @@ export function AutoCut({ tracks, media, onApplyCuts, onClose }: AutoCutProps) {
     setRegions(null);
     try {
       const cfg = INTENSITY_CONFIG[intensity];
-      const found = await detectSilences(videoMedia.file, cfg.threshold, cfg.minSilence, cfg.margin);
+      const found = await detectSilences(videoMedia.url, cfg.threshold, cfg.minSilence, cfg.margin);
       setRegions(found);
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao analisar áudio');
