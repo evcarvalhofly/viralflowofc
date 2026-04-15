@@ -40,24 +40,11 @@ function encodeWAV(samples: Float32Array, sampleRate: number): Blob {
   return new Blob([buf], { type: 'audio/wav' });
 }
 
-const MAX_FILE_SIZE_BYTES = 400 * 1024 * 1024; // 400 MB
-
 /**
  * Extrai áudio do arquivo de vídeo, reamostrado para 16kHz mono WAV.
  * Reduz o tamanho para envio (ex: vídeo 100MB → ~10MB de áudio).
- *
- * Usa OfflineAudioContext para decode (sem alocar device de áudio)
- * e rejeita arquivos acima de 400 MB para evitar crash de RAM em mobile.
  */
 async function extractAudioWAV(file: File, maxDurationSec = 600): Promise<Blob> {
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error(
-      `Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(0)} MB). ` +
-      `Máximo suportado para extração de áudio: 400 MB. ` +
-      `Tente exportar um trecho menor do vídeo antes de gerar legendas.`
-    );
-  }
-
   const arrayBuffer = await file.arrayBuffer();
   // OfflineAudioContext decode: não aloca hardware de áudio, evita bloqueio na main thread
   const decodeCtx = new OfflineAudioContext(2, 44100, 44100);
