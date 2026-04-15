@@ -9,7 +9,7 @@ import {
   Search, Plus, Trash2, Loader2, UserCog, ShieldCheck,
   ChevronUp, ChevronDown, X, CheckCircle2, AlertTriangle,
   Eye, Calendar, Clock, Handshake, Phone, CreditCard,
-  LogIn, User,
+  LogIn, User, KeyRound,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -263,6 +263,12 @@ export default function PainelGeralAdm() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleting, setDeleting]           = useState<string | null>(null);
 
+  // redefinir senha
+  const [resetUserId, setResetUserId]     = useState<string | null>(null);
+  const [resetEmail, setResetEmail]       = useState('');
+  const [newPassword, setNewPassword]     = useState('');
+  const [resetting, setResetting]         = useState(false);
+
   // detalhe do usuário
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<UserDetail | null>(null);
@@ -381,6 +387,24 @@ export default function PainelGeralAdm() {
     }
   };
 
+  // ── redefinir senha ──────────────────────────────────────────────────────
+
+  const handleResetPassword = async () => {
+    if (!resetUserId || !newPassword.trim()) return;
+    setResetting(true);
+    try {
+      await callAdmin({ action: 'reset_password', user_id: resetUserId, new_password: newPassword });
+      addToast('success', `Senha redefinida com sucesso!`);
+      setResetUserId(null);
+      setResetEmail('');
+      setNewPassword('');
+    } catch (e: any) {
+      addToast('error', e.message);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   // ── guards ───────────────────────────────────────────────────────────────
 
   if (authLoading) {
@@ -464,6 +488,44 @@ export default function PainelGeralAdm() {
             >
               {creating && <Loader2 className="h-4 w-4 animate-spin" />}
               {creating ? 'Criando...' : 'Criar usuário'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal redefinir senha */}
+      {resetUserId && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-[#111] border border-white/10 rounded-2xl p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-5 w-5 text-amber-400" />
+                <h2 className="font-bold text-lg">Redefinir Senha</h2>
+              </div>
+              <button onClick={() => { setResetUserId(null); setNewPassword(''); }} className="text-muted-foreground hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground bg-white/[0.03] border border-white/8 rounded-xl px-4 py-2 truncate">
+              {resetEmail}
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-sm text-muted-foreground">Nova senha</label>
+              <input
+                type="text"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-muted-foreground text-sm focus:outline-none focus:border-amber-500/60"
+              />
+            </div>
+            <button
+              onClick={handleResetPassword}
+              disabled={resetting || newPassword.length < 6}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold text-sm disabled:opacity-50 hover:from-amber-500 hover:to-orange-500 transition-all flex items-center justify-center gap-2"
+            >
+              {resetting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {resetting ? 'Redefinindo...' : 'Redefinir senha'}
             </button>
           </div>
         </div>
@@ -619,6 +681,16 @@ export default function PainelGeralAdm() {
                         <span className="hidden sm:inline">Remover</span>
                       </button>
                     </div>
+
+                    {/* Redefinir senha */}
+                    <button
+                      onClick={() => { setResetUserId(u.user_id); setResetEmail(u.email); setNewPassword(''); }}
+                      title="Redefinir senha"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 text-xs font-bold transition-colors"
+                    >
+                      <KeyRound className="h-3.5 w-3.5" />
+                      <span>Senha</span>
+                    </button>
 
                     {/* Excluir */}
                     {confirmDelete === u.user_id ? (

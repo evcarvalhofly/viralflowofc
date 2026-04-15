@@ -130,6 +130,17 @@ Deno.serve(async (req) => {
       return json({ user_id: created.user.id, email: created.user.email });
     }
 
+    // RESET_PASSWORD
+    if (action === 'reset_password') {
+      const { user_id, new_password } = body;
+      if (!user_id || !new_password) return json({ error: 'user_id e new_password sao obrigatorios' });
+      if (new_password.length < 6) return json({ error: 'Senha deve ter no mínimo 6 caracteres' });
+
+      const { error: resetError } = await admin.auth.admin.updateUserById(user_id, { password: new_password });
+      if (resetError) return json({ error: resetError.message });
+      return json({ ok: true });
+    }
+
     // DELETE
     if (action === 'delete') {
       const { user_id } = body;
