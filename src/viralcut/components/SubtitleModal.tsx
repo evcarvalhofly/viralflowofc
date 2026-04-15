@@ -98,7 +98,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
                 </span>
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">Nenhum vídeo na timeline. Importe um vídeo primeiro.</p>
+              <p className="text-xs text-muted-foreground">Nenhum vídeo ou narração na timeline. Importe um vídeo ou grave uma narração primeiro.</p>
             )}
           </div>
 

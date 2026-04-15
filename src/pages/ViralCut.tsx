@@ -1022,9 +1022,10 @@ const ViralCut = () => {
         tracks = [...p.tracks, subtitleTrack];
       }
       const styleDetails = SUBTITLE_TEXT_DETAILS[style];
-      // Coleta todos os clips de vídeo do mesmo arquivo de mídia, em ordem de timeline
+      // Coleta todos os clips (vídeo ou áudio) do mesmo arquivo de mídia, em ordem de timeline
+      const sourceTrackType = videoItem.type === 'audio' ? 'audio' : 'video';
       const videoClips = p.tracks
-        .filter(t => t.type === 'video' && !t.muted)
+        .filter(t => t.type === sourceTrackType && !t.muted)
         .flatMap(t => t.items)
         .filter(item => item.mediaId === videoItem.mediaId)
         .sort((a, b) => a.startTime - b.startTime);
@@ -1221,9 +1222,19 @@ const ViralCut = () => {
 
   // Clipe de vídeo para legendas: item selecionado (se for vídeo) ou primeiro da timeline
   const subtitleVideoItem = useMemo(() => {
+    // Item selecionado (vídeo ou áudio narrado)
     if (selectedItem?.type === 'video') return selectedItem;
+    if (selectedItem?.type === 'audio') return selectedItem;
+    // Primeiro vídeo disponível na timeline
     for (const t of project.tracks) {
       if (t.type === 'video' && !t.muted) {
+        const item = t.items[0];
+        if (item) return item;
+      }
+    }
+    // Fallback: primeiro áudio disponível na timeline (narração gravada)
+    for (const t of project.tracks) {
+      if (t.type === 'audio' && !t.muted) {
         const item = t.items[0];
         if (item) return item;
       }
