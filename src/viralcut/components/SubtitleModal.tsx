@@ -1,15 +1,26 @@
-import { useState, useEffect } from 'react';
-import { X, Captions, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Captions, Loader2, AlertCircle, CheckCircle2, Video, Music } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSubtitleGeneration, SubtitleSegment, SubtitleStyle } from '@/viralcut/hooks/useSubtitleGeneration';
-import type { TrackItem, MediaFile } from '@/viralcut/types';
+import type { Track, TrackItem, MediaFile } from '@/viralcut/types';
 
 interface SubtitleModalProps {
-  videoItem: TrackItem | null;       // clip de vídeo selecionado ou primeiro da timeline
-  mediaFile: MediaFile | null;        // arquivo correspondente ao videoItem
+  tracks: Track[];
+  media: MediaFile[];
   userId: string;
   onGenerate: (segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number, isWordLevel: boolean) => void;
   onClose: () => void;
+}
+
+/** Trilha com áudio disponível para legendas */
+interface AudioSource {
+  trackId: string;
+  label: string;
+  type: 'video' | 'audio';
+  /** Primeiro item da trilha (usado como fonte) */
+  item: TrackItem;
+  file: MediaFile;
+  duration: number;
 }
 
 const STYLE_OPTIONS: { id: SubtitleStyle; label: string; preview: React.CSSProperties }[] = [
@@ -37,15 +48,54 @@ const LANGUAGES = [
   { code: 'es', label: 'Español' },
 ];
 
-export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClose }: SubtitleModalProps) {
+export function SubtitleModal({ tracks, media, userId, onGenerate, onClose }: SubtitleModalProps) {
   const { generating, statusLabel, generate, getMonthlyUsed, MONTHLY_LIMIT_SECONDS } = useSubtitleGeneration();
   const [style, setStyle] = useState<SubtitleStyle>('classic');
   const [language, setLanguage] = useState('pt');
   const [maxWords, setMaxWords] = useState(3);
   const [error, setError] = useState('');
   const [monthlyUsed, setMonthlyUsed] = useState(0);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
 
-  const clipDuration = videoItem ? (videoItem.mediaEnd - videoItem.mediaStart) : 0;
+  // Montar lista de trilhas que contêm áudio (vídeo ou áudio)
+  const audioSources = useMemo(() => {
+    const sources: AudioSource[] = [];
+    let videoIdx = 0;
+    let audioIdx = 0;
+    for (const track of tracks) {
+      if (track.muted || track.items.length === 0) continue;
+      if (track.type !== 'video' && track.type !== 'audio') continue;
+      const firstItem = track.items[0];
+      const mf = media.find((m) => m.id === firstItem.mediaId);
+      if (!mf) continue;
+      const duration = firstItem.mediaEnd - firstItem.mediaStart;
+      if (duration <= 0) continue;
+
+      let label: string;
+      if (track.type === 'video') {
+        videoIdx++;
+        label = videoIdx === 1 ? `Vídeo principal` : `Vídeo camada ${videoIdx}`;
+      } else {
+        audioIdx++;
+        // Use the media file name for audio tracks (narrations etc.)
+        const name = mf.name.replace(/\.[^.]+$/, '');
+        label = audioIdx === 1 && name.startsWith('narração') ? `Narração` : name || `Áudio ${audioIdx}`;
+      }
+
+      sources.push({ trackId: track.id, label, type: track.type, item: firstItem, file: mf, duration });
+    }
+    return sources;
+  }, [tracks, media]);
+
+  // Auto-selecionar primeira trilha (vídeo principal como padrão)
+  useEffect(() => {
+    if (audioSources.length > 0 && !audioSources.find((s) => s.trackId === selectedTrackId)) {
+      setSelectedTrackId(audioSources[0].trackId);
+    }
+  }, [audioSources, selectedTrackId]);
+
+  const selected = audioSources.find((s) => s.trackId === selectedTrackId) ?? null;
+  const clipDuration = selected?.duration ?? 0;
   const remainingSec = MONTHLY_LIMIT_SECONDS - monthlyUsed;
   const remainingMin = Math.floor(remainingSec / 60);
   const usedMin = Math.floor(monthlyUsed / 60);
@@ -57,18 +107,18 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
   }, [userId, getMonthlyUsed]);
 
   const handleGenerate = async () => {
-    if (!videoItem || !mediaFile) return;
+    if (!selected) return;
     setError('');
-    const result = await generate({ videoFile: mediaFile.file, clipDurationSec: clipDuration, language, userId });
+    const result = await generate({ videoFile: selected.file.file, clipDurationSec: clipDuration, language, userId });
     if (result.error) {
       setError(result.error);
       return;
     }
-    onGenerate(result.segments, videoItem, style, maxWords, result.isWordLevel);
+    onGenerate(result.segments, selected.item, style, maxWords, result.isWordLevel);
     onClose();
   };
 
-  const canGenerate = !!videoItem && !!mediaFile && !generating && clipDuration > 0 && clipDuration <= remainingSec;
+  const canGenerate = !!selected && !generating && clipDuration > 0 && clipDuration <= remainingSec;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm pointer-events-auto" onClick={onClose}>
@@ -88,19 +138,49 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
         </div>
 
         <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
-          {/* Clipe selecionado */}
-          <div className="bg-muted rounded-xl p-3">
-            {videoItem && mediaFile ? (
+          {/* Fonte de áudio */}
+          {audioSources.length === 0 ? (
+            <div className="bg-muted rounded-xl p-3">
+              <p className="text-xs text-muted-foreground">Nenhum vídeo ou narração na timeline. Importe um vídeo ou grave uma narração primeiro.</p>
+            </div>
+          ) : audioSources.length === 1 ? (
+            /* Só uma trilha — mostrar info sem dropdown */
+            <div className="bg-muted rounded-xl p-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground truncate max-w-[180px]">{mediaFile.name}</span>
+                <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+                  {selected?.type === 'video' ? <Video className="w-3 h-3 text-muted-foreground shrink-0" /> : <Music className="w-3 h-3 text-muted-foreground shrink-0" />}
+                  <span className="text-muted-foreground truncate">{selected?.label}</span>
+                </div>
                 <span className="text-foreground font-medium ml-2 shrink-0">
                   {Math.floor(clipDuration / 60)}:{String(Math.floor(clipDuration % 60)).padStart(2, '0')} min
                 </span>
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">Nenhum vídeo ou narração na timeline. Importe um vídeo ou grave uma narração primeiro.</p>
-            )}
-          </div>
+            </div>
+          ) : (
+            /* Múltiplas trilhas — seletor */
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Fonte de áudio</label>
+              <div className="space-y-1.5">
+                {audioSources.map((src) => (
+                  <button
+                    key={src.trackId}
+                    onClick={() => setSelectedTrackId(src.trackId)}
+                    className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs transition-all ${
+                      selectedTrackId === src.trackId
+                        ? 'border-primary bg-primary/10 text-foreground'
+                        : 'border-border bg-muted text-muted-foreground hover:border-primary/50'
+                    }`}
+                  >
+                    {src.type === 'video' ? <Video className="w-3.5 h-3.5 shrink-0" /> : <Music className="w-3.5 h-3.5 shrink-0" />}
+                    <span className="truncate flex-1 text-left">{src.label}</span>
+                    <span className="shrink-0 font-medium">
+                      {Math.floor(src.duration / 60)}:{String(Math.floor(src.duration % 60)).padStart(2, '0')}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Uso mensal */}
           <div>
@@ -201,7 +281,7 @@ export function SubtitleModal({ videoItem, mediaFile, userId, onGenerate, onClos
           )}
 
           {/* Aviso de clipe muito longo */}
-          {videoItem && clipDuration > remainingSec && (
+          {selected && clipDuration > remainingSec && (
             <div className="flex items-start gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl p-3">
               <AlertCircle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
               <p className="text-xs text-orange-400">

@@ -1220,32 +1220,8 @@ const ViralCut = () => {
     }
   }, [isSelectedSubtitle]);
 
-  // Clipe de vídeo para legendas: item selecionado (se for vídeo) ou primeiro da timeline
-  const subtitleVideoItem = useMemo(() => {
-    // Item selecionado (vídeo ou áudio narrado)
-    if (selectedItem?.type === 'video') return selectedItem;
-    if (selectedItem?.type === 'audio') return selectedItem;
-    // Primeiro vídeo disponível na timeline
-    for (const t of project.tracks) {
-      if (t.type === 'video' && !t.muted) {
-        const item = t.items[0];
-        if (item) return item;
-      }
-    }
-    // Fallback: primeiro áudio disponível na timeline (narração gravada)
-    for (const t of project.tracks) {
-      if (t.type === 'audio' && !t.muted) {
-        const item = t.items[0];
-        if (item) return item;
-      }
-    }
-    return null;
-  }, [selectedItem, project.tracks]);
-
-  const subtitleMediaFile = useMemo(
-    () => subtitleVideoItem ? media.find((m) => m.id === subtitleVideoItem.mediaId) ?? null : null,
-    [subtitleVideoItem, media]
-  );
+  // subtitleVideoItem / subtitleMediaFile removidos — SubtitleModal agora recebe tracks + media
+  // e permite ao usuário escolher qual trilha usar como fonte de áudio
 
   // ── Projects screen ───────────────────────────────────────
   if (showProjects) {
@@ -1374,8 +1350,8 @@ const ViralCut = () => {
         <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
         {showSubtitleModal && (
           <SubtitleModal
-            videoItem={subtitleVideoItem}
-            mediaFile={subtitleMediaFile}
+            tracks={project.tracks}
+            media={media}
             userId={user?.id ?? ''}
             onGenerate={handleAddSubtitles}
             onClose={() => setShowSubtitleModal(false)}
@@ -1586,8 +1562,8 @@ const ViralCut = () => {
         <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={handleExport} exportState={exportState} project={project} />
         {showSubtitleModal && (
           <SubtitleModal
-            videoItem={subtitleVideoItem}
-            mediaFile={subtitleMediaFile}
+            tracks={project.tracks}
+            media={media}
             userId={user?.id ?? ''}
             onGenerate={handleAddSubtitles}
             onClose={() => setShowSubtitleModal(false)}
@@ -1810,8 +1786,8 @@ const ViralCut = () => {
 
       {showSubtitleModal && (
         <SubtitleModal
-          videoItem={subtitleVideoItem}
-          mediaFile={subtitleMediaFile}
+          tracks={project.tracks}
+          media={media}
           userId={user?.id ?? ''}
           onGenerate={handleAddSubtitles}
           onClose={() => setShowSubtitleModal(false)}
