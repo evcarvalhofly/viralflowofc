@@ -1012,7 +1012,12 @@ const ViralCut = () => {
     return out;
   };
 
-  const handleAddSubtitles = useCallback((segments: SubtitleSegment[], videoItem: TrackItem, style: SubtitleStyle, maxWords: number, isWordLevel: boolean) => {
+  const handleAddSubtitles = useCallback((
+    transcriptions: Array<{ segments: SubtitleSegment[]; mediaId: string; isWordLevel: boolean }>,
+    sourceTrackIds: string[],
+    style: SubtitleStyle,
+    maxWords: number,
+  ) => {
     updateProject((p) => {
       // Cria ou reutiliza trilha "Legendas"
       let subtitleTrack = p.tracks.find((t) => t.type === 'text' && t.items.some((i) => i.name.startsWith('Legenda')));
@@ -1022,26 +1027,29 @@ const ViralCut = () => {
         tracks = [...p.tracks, subtitleTrack];
       }
       const styleDetails = SUBTITLE_TEXT_DETAILS[style];
-      // Coleta todos os clips (vídeo ou áudio) do mesmo arquivo de mídia, em ordem de timeline
-      const sourceTrackType = videoItem.type === 'audio' ? 'audio' : 'video';
-      const videoClips = p.tracks
-        .filter(t => t.type === sourceTrackType && !t.muted)
+
+      // Coleta todos os clips das faixas-fonte selecionadas
+      const sourceClips = p.tracks
+        .filter(t => sourceTrackIds.includes(t.id) && !t.muted)
         .flatMap(t => t.items)
-        .filter(item => item.mediaId === videoItem.mediaId)
         .sort((a, b) => a.startTime - b.startTime);
 
-      // Para cada chunk, mapeia para o(s) clip(s) correto(s) na timeline
-      const newItems: TrackItem[] = buildSubtitleChunks(segments, maxWords, isWordLevel)
-        .flatMap((seg) => {
-          const results: TrackItem[] = [];
-          for (const clip of videoClips) {
+      const newItems: TrackItem[] = [];
+
+      for (const { segments, mediaId, isWordLevel } of transcriptions) {
+        const clips = sourceClips.filter(c => c.mediaId === mediaId);
+        if (clips.length === 0) continue;
+
+        const chunks = buildSubtitleChunks(segments, maxWords, isWordLevel);
+        for (const seg of chunks) {
+          for (const clip of clips) {
             const overlapStart = Math.max(seg.start, clip.mediaStart);
             const overlapEnd   = Math.min(seg.end,   clip.mediaEnd);
             if (overlapEnd - overlapStart < 0.1) continue;
             const timeStart = clip.startTime + (overlapStart - clip.mediaStart);
             const timeEnd   = clip.startTime + (overlapEnd   - clip.mediaStart);
             if (timeEnd - timeStart < 0.1) continue;
-            results.push({
+            newItems.push({
               id: createId(), mediaId: '', trackId: subtitleTrack!.id,
               startTime: timeStart, endTime: timeEnd,
               mediaStart: 0, mediaEnd: timeEnd - timeStart,
@@ -1051,8 +1059,8 @@ const ViralCut = () => {
               isSubtitle: true,
             } as TrackItem);
           }
-          return results;
-        });
+        }
+      }
 
       const updatedTracks = tracks.map((t) =>
         t.id === subtitleTrack!.id ? { ...t, items: [...t.items, ...newItems] } : t
