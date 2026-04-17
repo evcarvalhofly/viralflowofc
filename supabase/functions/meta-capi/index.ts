@@ -4,7 +4,7 @@
  * Não requer autenticação (chamado de páginas públicas de venda).
  */
 
-const PIXEL_ID = '1568008798663852';
+const PIXEL_ID = '2263810711027429';
 const ACCESS_TOKEN = Deno.env.get('META_CAPI_TOKEN') ?? '';
 const API_VERSION = 'v21.0';
 const ENDPOINT = `https://graph.facebook.com/${API_VERSION}/${PIXEL_ID}/events`;

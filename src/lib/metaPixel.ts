@@ -6,7 +6,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
-const PIXEL_ID = '1568008798663852';
+const PIXEL_ID = '2263810711027429';
 
 let initialized = false;
 
