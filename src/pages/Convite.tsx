@@ -4,6 +4,7 @@ import {
   Brain, Calendar, Trophy, Film, Layers, Scissors,
   Users, ShoppingBag, Handshake, ChevronDown, Play,
 } from 'lucide-react';
+import { trackPageView, trackViewContent } from '@/lib/metaPixel';
 
 type Plan = 'monthly' | 'annual';
 
@@ -407,6 +408,12 @@ export default function Convite() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (187 - 127 + 1)) + 127);
   const pricingRef = useRef<HTMLDivElement>(null);
+
+  // Meta Pixel — rastreia visita à página de vendas
+  useEffect(() => {
+    trackPageView();
+    trackViewContent({ content_name: 'Página Convite', value: 47.90 });
+  }, []);
 
   useEffect(() => {
     const onScroll = () => {

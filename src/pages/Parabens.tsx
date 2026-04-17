@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   Zap, CheckCircle2, Loader2, MessageCircle, Eye, EyeOff
 } from "lucide-react";
+import { trackPageView, trackPurchase } from "@/lib/metaPixel";
 
 const WA_NUMBER = "5512992275476";
 
@@ -23,6 +24,17 @@ const Parabens = () => {
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Meta Pixel — rastreia conversão na página de obrigado
+  useEffect(() => {
+    trackPageView();
+    const method = params.get("method") as "pix" | "card" | null;
+    trackPurchase({
+      value: 47.90,
+      plan: "monthly",
+      paymentMethod: method ?? undefined,
+    });
+  }, []);
 
   // Se já está logado, redireciona para home
   useEffect(() => {

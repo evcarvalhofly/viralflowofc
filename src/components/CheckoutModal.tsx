@@ -5,6 +5,7 @@ import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { trackInitiateCheckout, trackAddPaymentInfo, trackPurchase } from '@/lib/metaPixel';
 
 const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY ?? '';
 const PRICES = { monthly: 47.90, annual: 297.00 } as const;
@@ -64,6 +65,11 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
     if (MP_PUBLIC_KEY) initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' });
   }, []);
 
+  // Meta Pixel — rastreia abertura do checkout
+  useEffect(() => {
+    trackInitiateCheckout({ value: AMOUNT, plan });
+  }, []);
+
   // Polling: verifica status do PIX a cada 5s após geração
   useEffect(() => {
     if (!pixData || !waitingPix) return;
@@ -78,6 +84,7 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
           clearInterval(pollRef.current!);
           setWaitingPix(false);
           setApproved(true);
+          trackPurchase({ value: AMOUNT, plan, paymentMethod: 'pix', email: pixEmail });
           toast.success('Pagamento PIX confirmado! 🎉');
           sendWelcomeEmail(pixEmail);
           setTimeout(() => {
@@ -144,6 +151,7 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
 
       if (status === 'approved') {
         setApproved(true);
+        trackPurchase({ value: AMOUNT, plan, paymentMethod: tab, email: (body as any).payer?.email || user?.email });
         toast.success('Pagamento aprovado! Bem-vindo ao ViralFlow PRO 🎉');
         const cardEmail = (body as any).payer?.email || user?.email || '';
         sendWelcomeEmail(cardEmail);
@@ -192,6 +200,7 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
       setError('E-mail inválido. Use um e-mail real para receber seu acesso.');
       return;
     }
+    trackAddPaymentInfo({ value: AMOUNT, paymentMethod: 'pix', email: pixEmail });
     processPayment({
       payment_method_id: 'pix',
       payer: { email: pixEmail },
@@ -212,6 +221,7 @@ function CheckoutModalInner({ onClose, onSuccess, initialPlan = 'monthly' }: Che
       setError('E-mail inválido. Use um e-mail real para receber seu acesso.');
       return;
     }
+    trackAddPaymentInfo({ value: AMOUNT, paymentMethod: 'card', email: payerEmail });
     setPendingEmail(payerEmail);
     setSubmitting(true);
     await processPayment({

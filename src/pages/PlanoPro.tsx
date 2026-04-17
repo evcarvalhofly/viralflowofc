@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 type Plan = 'monthly' | 'annual';
 import { Zap, Check, ArrowRight, Sparkles, Type, Scissors, MessageSquare, BarChart2, Users, Video, Layers, Share2 } from 'lucide-react';
+import { trackPageView, trackViewContent } from '@/lib/metaPixel';
 
 const FEATURES = [
   { icon: Scissors,      label: 'ViralCut — Editor de vídeo com IA' },
@@ -16,6 +17,12 @@ const FEATURES = [
 
 export default function PlanoPro() {
   const [selectedPlan, setSelectedPlan] = useState<Plan>('monthly');
+
+  // Meta Pixel — rastreia visita à página de preços
+  useEffect(() => {
+    trackPageView();
+    trackViewContent({ content_name: 'Página PlanoPro', value: 47.90 });
+  }, []);
 
   useEffect(() => {
     const root = document.getElementById('root');
